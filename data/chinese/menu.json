@@ -1,0 +1,172 @@
+{
+  "meta": {
+    "currency": "GBP",
+    "notes_allowed": true
+  },
+  "categories": [
+    { "id": "starters", "name": "Starters" },
+    { "id": "soups", "name": "Soups" },
+    { "id": "mains", "name": "Mains" },
+    { "id": "rice_noodles", "name": "Rice & Noodles" },
+    { "id": "sides", "name": "Sides" },
+    { "id": "drinks", "name": "Drinks" }
+  ],
+  "items": [
+    {
+      "id": "spring_rolls",
+      "name": "Vegetable Spring Rolls (6)",
+      "category_id": "starters",
+      "base_price": 4.20,
+      "modifiers": [
+        {
+          "key": "dip",
+          "prompt": "Choose a dip:",
+          "required": true,
+          "multi": false,
+          "options": ["Sweet Chilli", "Plum Sauce", "No Dip"]
+        }
+      ],
+      "extras": [
+        { "name": "Extra Dip", "price": 0.70 }
+      ]
+    },
+    {
+      "id": "salt_pepper_chicken",
+      "name": "Salt & Pepper Chicken",
+      "category_id": "starters",
+      "base_price": 6.80,
+      "modifiers": [
+        {
+          "key": "spice",
+          "prompt": "Spice level:",
+          "required": true,
+          "multi": false,
+          "options": ["Mild", "Medium", "Hot"]
+        }
+      ],
+      "extras": [
+        { "name": "Add Curry Sauce", "price": 1.20 }
+      ]
+    },
+    {
+      "id": "hot_sour_soup",
+      "name": "Hot & Sour Soup",
+      "category_id": "soups",
+      "base_price": 4.50,
+      "modifiers": [
+        {
+          "key": "size",
+          "prompt": "Choose size:",
+          "required": true,
+          "multi": false,
+          "options": ["Small", "Large (+£2.00)"]
+        }
+      ],
+      "extras": []
+    },
+    {
+      "id": "sweet_sour_chicken",
+      "name": "Sweet & Sour Chicken (Hong Kong Style)",
+      "category_id": "mains",
+      "base_price": 8.90,
+      "modifiers": [
+        {
+          "key": "side",
+          "prompt": "Choose a side:",
+          "required": true,
+          "multi": false,
+          "options": ["Boiled Rice", "Egg Fried Rice (+£1.50)", "Chips (+£1.50)"]
+        }
+      ],
+      "extras": [
+        { "name": "Extra Sweet & Sour Sauce", "price": 1.00 }
+      ]
+    },
+    {
+      "id": "beef_black_bean",
+      "name": "Beef in Black Bean Sauce",
+      "category_id": "mains",
+      "base_price": 9.50,
+      "modifiers": [
+        {
+          "key": "side",
+          "prompt": "Choose a side:",
+          "required": true,
+          "multi": false,
+          "options": ["Boiled Rice", "Egg Fried Rice (+£1.50)", "Chow Mein (+£2.00)"]
+        }
+      ],
+      "extras": [
+        { "name": "Add Mixed Vegetables", "price": 1.80 }
+      ]
+    },
+    {
+      "id": "chicken_chow_mein",
+      "name": "Chicken Chow Mein",
+      "category_id": "rice_noodles",
+      "base_price": 8.20,
+      "modifiers": [
+        {
+          "key": "notes",
+          "prompt": "Any preference?",
+          "required": true,
+          "multi": false,
+          "options": ["No Beansprouts", "Extra Beansprouts", "No Preference"]
+        }
+      ],
+      "extras": [
+        { "name": "Extra Chicken", "price": 2.00 }
+      ]
+    },
+    {
+      "id": "egg_fried_rice",
+      "name": "Egg Fried Rice",
+      "category_id": "rice_noodles",
+      "base_price": 3.80,
+      "modifiers": [
+        {
+          "key": "size",
+          "prompt": "Choose size:",
+          "required": true,
+          "multi": false,
+          "options": ["Regular", "Large (+£1.50)"]
+        }
+      ],
+      "extras": [
+        { "name": "Add BBQ Sauce", "price": 0.90 }
+      ]
+    },
+    {
+      "id": "prawn_crackers",
+      "name": "Prawn Crackers",
+      "category_id": "sides",
+      "base_price": 2.50,
+      "modifiers": [
+        {
+          "key": "size",
+          "prompt": "Choose size:",
+          "required": true,
+          "multi": false,
+          "options": ["Small", "Large (+£1.50)"]
+        }
+      ],
+      "extras": []
+    },
+    {
+      "id": "coke_can",
+      "name": "Coca-Cola (330ml)",
+      "category_id": "drinks",
+      "base_price": 1.70,
+      "modifiers": [
+        {
+          "key": "type",
+          "prompt": "Choose:",
+          "required": true,
+          "multi": false,
+          "options": ["Coke", "Diet Coke", "Coke Zero"]
+        }
+      ],
+      "extras": []
+    }
+  ]
+}

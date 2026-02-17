@@ -1,0 +1,146 @@
+{
+  "meta": {
+    "currency": "GBP",
+    "notes_allowed": true
+  },
+  "categories": [
+    { "id": "starters", "name": "Starters" },
+    { "id": "mains", "name": "Mains" },
+    { "id": "pasta", "name": "Pasta" },
+    { "id": "desserts", "name": "Desserts" },
+    { "id": "drinks", "name": "Drinks" }
+  ],
+  "items": [
+    {
+      "id": "garlic_bread",
+      "name": "Garlic Bread",
+      "category_id": "starters",
+      "base_price": 4.50,
+      "modifiers": [
+        {
+          "key": "add_cheese",
+          "prompt": "Add cheese?",
+          "required": true,
+          "multi": false,
+          "options": ["No", "Yes (+£1.00)"]
+        }
+      ],
+      "extras": [
+        { "name": "Extra Garlic Dip", "price": 0.80 }
+      ]
+    },
+    {
+      "id": "bruschetta",
+      "name": "Tomato Bruschetta",
+      "category_id": "starters",
+      "base_price": 5.95,
+      "modifiers": [
+        {
+          "key": "bread",
+          "prompt": "Choose bread type:",
+          "required": true,
+          "multi": false,
+          "options": ["Sourdough", "Ciabatta"]
+        }
+      ],
+      "extras": [
+        { "name": "Add Mozzarella", "price": 1.50 }
+      ]
+    },
+    {
+      "id": "margherita_pizza",
+      "name": "Margherita Pizza",
+      "category_id": "mains",
+      "base_price": 10.95,
+      "modifiers": [
+        {
+          "key": "size",
+          "prompt": "What size?",
+          "required": true,
+          "multi": false,
+          "options": ["10 inch", "12 inch (+£2.50)"]
+        },
+        {
+          "key": "crust",
+          "prompt": "Choose crust:",
+          "required": true,
+          "multi": false,
+          "options": ["Classic", "Thin", "Stuffed (+£2.00)"]
+        }
+      ],
+      "extras": [
+        { "name": "Extra Cheese", "price": 1.50 },
+        { "name": "Chilli Oil", "price": 0.50 }
+      ]
+    },
+    {
+      "id": "chicken_parmigiana",
+      "name": "Chicken Parmigiana",
+      "category_id": "mains",
+      "base_price": 14.95,
+      "modifiers": [
+        {
+          "key": "side",
+          "prompt": "Choose a side:",
+          "required": true,
+          "multi": false,
+          "options": ["Chips", "Salad", "Roasted Potatoes"]
+        }
+      ],
+      "extras": [
+        { "name": "Add Garlic Bread", "price": 2.50 }
+      ]
+    },
+    {
+      "id": "spaghetti_carbonara",
+      "name": "Spaghetti Carbonara",
+      "category_id": "pasta",
+      "base_price": 12.50,
+      "modifiers": [
+        {
+          "key": "cheese",
+          "prompt": "Extra parmesan?",
+          "required": true,
+          "multi": false,
+          "options": ["No", "Yes (+£1.00)"]
+        }
+      ],
+      "extras": [
+        { "name": "Add Chicken", "price": 2.50 },
+        { "name": "Add Mushrooms", "price": 1.50 }
+      ]
+    },
+    {
+      "id": "tiramisu",
+      "name": "Tiramisu",
+      "category_id": "desserts",
+      "base_price": 6.50,
+      "modifiers": [
+        {
+          "key": "cream",
+          "prompt": "Add extra cream?",
+          "required": true,
+          "multi": false,
+          "options": ["No", "Yes (+£0.80)"]
+        }
+      ],
+      "extras": []
+    },
+    {
+      "id": "sparkling_water",
+      "name": "Sparkling Water",
+      "category_id": "drinks",
+      "base_price": 2.50,
+      "modifiers": [
+        {
+          "key": "size",
+          "prompt": "Choose size:",
+          "required": true,
+          "multi": false,
+          "options": ["330ml", "750ml (+£2.50)"]
+        }
+      ],
+      "extras": []
+    }
+  ]
+}

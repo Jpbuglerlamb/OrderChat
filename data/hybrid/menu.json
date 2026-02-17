@@ -1,0 +1,162 @@
+{
+  "meta": {
+    "currency": "GBP",
+    "notes_allowed": true
+  },
+  "categories": [
+    { "id": "kebabs", "name": "Kebabs" },
+    { "id": "wraps", "name": "Wraps" },
+    { "id": "pizzas", "name": "Pizzas" },
+    { "id": "burgers", "name": "Burgers" },
+    { "id": "sides", "name": "Sides" },
+    { "id": "drinks", "name": "Drinks" }
+  ],
+  "items": [
+    {
+      "id": "mixed_kebab",
+      "name": "Mixed Kebab",
+      "category_id": "kebabs",
+      "base_price": 11.99,
+      "modifiers": [
+        {
+          "key": "size",
+          "prompt": "What size do you want?",
+          "required": true,
+          "multi": false,
+          "options": ["Regular", "Large (+£3.00)"]
+        },
+        {
+          "key": "sauce",
+          "prompt": "Choose sauce(s):",
+          "required": true,
+          "multi": true,
+          "options": ["Garlic", "Chilli", "Burger Sauce", "No Sauce"]
+        },
+        {
+          "key": "salad",
+          "prompt": "Choose salad:",
+          "required": true,
+          "multi": false,
+          "options": ["All Salad", "No Onion", "No Salad"]
+        }
+      ],
+      "extras": [
+        { "name": "Extra Meat", "price": 2.00 },
+        { "name": "Cheese", "price": 1.00 }
+      ]
+    },
+    {
+      "id": "doner_wrap",
+      "name": "Doner Wrap",
+      "category_id": "wraps",
+      "base_price": 7.99,
+      "modifiers": [
+        {
+          "key": "sauce",
+          "prompt": "Choose sauce(s):",
+          "required": true,
+          "multi": true,
+          "options": ["Garlic", "Chilli", "Burger Sauce", "No Sauce"]
+        },
+        {
+          "key": "salad",
+          "prompt": "Choose salad:",
+          "required": true,
+          "multi": false,
+          "options": ["All Salad", "No Onion", "No Salad"]
+        }
+      ],
+      "extras": [
+        { "name": "Extra Meat", "price": 2.00 },
+        { "name": "Cheese", "price": 1.00 }
+      ]
+    },
+    {
+      "id": "pepperoni_pizza",
+      "name": "Pepperoni Pizza",
+      "category_id": "pizzas",
+      "base_price": 10.50,
+      "modifiers": [
+        {
+          "key": "size",
+          "prompt": "Pick a size:",
+          "required": true,
+          "multi": false,
+          "options": ["10 inch", "12 inch (+£2.50)", "16 inch (+£6.00)"]
+        },
+        {
+          "key": "crust",
+          "prompt": "Choose crust:",
+          "required": true,
+          "multi": false,
+          "options": ["Classic", "Thin", "Stuffed (+£2.00)"]
+        }
+      ],
+      "extras": [
+        { "name": "Extra Cheese", "price": 1.50 },
+        { "name": "Jalapeños", "price": 1.00 }
+      ]
+    },
+    {
+      "id": "cheeseburger",
+      "name": "Cheeseburger",
+      "category_id": "burgers",
+      "base_price": 6.99,
+      "modifiers": [
+        {
+          "key": "cooking",
+          "prompt": "How do you want it cooked?",
+          "required": true,
+          "multi": false,
+          "options": ["Well done", "Medium", "Rare"]
+        },
+        {
+          "key": "salad",
+          "prompt": "Choose salad:",
+          "required": true,
+          "multi": false,
+          "options": ["Lettuce & Onion", "No Onion", "No Salad"]
+        }
+      ],
+      "extras": [
+        { "name": "Add Bacon", "price": 1.50 },
+        { "name": "Add Extra Patty", "price": 2.50 }
+      ]
+    },
+    {
+      "id": "chips",
+      "name": "Chips",
+      "category_id": "sides",
+      "base_price": 2.99,
+      "modifiers": [
+        {
+          "key": "salt_vinegar",
+          "prompt": "Salt & vinegar?",
+          "required": true,
+          "multi": false,
+          "options": ["Salt only", "Vinegar only", "Salt & Vinegar", "No Salt/Vinegar"]
+        }
+      ],
+      "extras": [
+        { "name": "Cheese", "price": 1.00 },
+        { "name": "Curry Sauce", "price": 1.20 }
+      ]
+    },
+    {
+      "id": "still_water",
+      "name": "Still Water",
+      "category_id": "drinks",
+      "base_price": 1.50,
+      "modifiers": [
+        {
+          "key": "size",
+          "prompt": "Choose size:",
+          "required": true,
+          "multi": false,
+          "options": ["500ml", "1.5L (+£1.50)"]
+        }
+      ],
+      "extras": []
+    }
+  ]
+}

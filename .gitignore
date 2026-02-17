@@ -1,0 +1,29 @@
+__pycache__/
+*.pyc
+.env
+venv/
+.env.*
+.DS_Store
+.idea/
+*.sqlite3
+
+# Secrets
+.env
+.env
+.env
+
+# Secrets
+.env
+app/.env
+**/.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.idea/
+
+# Local DB / artifacts
+*.db

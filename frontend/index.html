@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Takeaway Chat</title>
+  <style>
+    body { font-family: Arial; max-width: 700px; margin: 40px auto; }
+    #chat { border: 1px solid #ccc; height: 420px; overflow-y: auto; padding: 10px; border-radius: 8px; }
+    .msg { margin: 10px 0; white-space: pre-wrap; }
+    .user { text-align: right; color: #1e4bff; }
+    .bot { text-align: left; color: #0a7a2a; }
+    .sys { text-align: center; color: #666; font-size: 12px; }
+    .row { display: flex; gap: 8px; margin-top: 10px; }
+    #input { flex: 1; padding: 10px; }
+    button { padding: 10px 14px; }
+    #top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    #status { font-size: 12px; color: #666; }
+  </style>
+</head>
+<body>
+
+<div id="top">
+  <h2 style="margin:0;">Order Food</h2>
+  <div id="status">Connecting...</div>
+</div>
+
+<div id="chat"></div>
+
+<div class="row">
+  <input id="input" placeholder="Type message..." disabled />
+  <button id="sendBtn" onclick="send()" disabled>Send</button>
+  <button id="confirmBtn" onclick="confirmOrder()" disabled>Confirm</button>
+</div>
+
+<script>
+const API = "http://127.0.0.1:8000";
+let token = "";
+
+function addMessage(text, cls){
+  const div = document.createElement("div");
+  div.className = "msg " + cls;
+  div.innerText = text;
+  const chat = document.getElementById("chat");
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function setReady(ready, statusText){
+  document.getElementById("input").disabled = !ready;
+  document.getElementById("sendBtn").disabled = !ready;
+  document.getElementById("confirmBtn").disabled = !ready;
+  document.getElementById("status").innerText = statusText;
+}
+
+async function login() {
+  try {
+    const res = await fetch(`${API}/auth/login`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ email:"jp@test.com", password:"test123" })
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      addMessage(`Login failed: ${res.status}\n${txt}`, "sys");
+      setReady(false, "Login failed");
+      return;
+    }
+
+    const data = await res.json();
+    token = data.token;
+
+    setReady(true, "Ready ✅");
+    addMessage("Hi! Say “menu” to start. You can also say “wraps”, “2x chicken wrap”, “basket”.", "sys");
+  } catch (e) {
+    addMessage(`Login error: ${e}`, "sys");
+    setReady(false, "Connection failed");
+  }
+}
+
+async function send(){
+  const input = document.getElementById("input");
+  const message = input.value.trim();
+  if (!message) return;
+  input.value = "";
+
+  addMessage(message, "user");
+
+  try {
+    const res = await fetch(`${API}/chat`, {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "Authorization":"Bearer " + token
+      },
+      body: JSON.stringify({ message })
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      addMessage(`Error ${res.status}:\n${txt}`, "sys");
+      return;
+    }
+
+    const data = await res.json();
+
+    // main reply
+    addMessage(data.reply ?? "(no reply)", "bot");
+
+    // optional: show running summary if your API returns it
+    if (data.summary) addMessage(data.summary, "bot");
+  } catch (e) {
+    addMessage(`Network error: ${e}`, "sys");
+  }
+}
+
+async function confirmOrder(){
+  addMessage("✅ Confirming order...", "sys");
+
+  try {
+    const res = await fetch(`${API}/order/confirm`, {
+      method:"POST",
+      headers:{ "Authorization":"Bearer " + token }
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      addMessage(`Confirm failed ${res.status}:\n${txt}`, "sys");
+      return;
+    }
+
+    const data = await res.json();
+    addMessage(`Order confirmed! Order #${data.order_id}`, "bot");
+  } catch (e) {
+    addMessage(`Network error: ${e}`, "sys");
+  }
+}
+
+// Enter key sends
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !document.getElementById("input").disabled) send();
+});
+
+login();
+</script>
+
+</body>
+</html>

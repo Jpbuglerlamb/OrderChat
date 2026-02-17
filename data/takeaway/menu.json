@@ -1,0 +1,159 @@
+{
+  "restaurant": {
+    "name": "Galaxy Grill",
+    "currency": "GBP",
+    "pickup_only": true
+  },
+
+  "categories": [
+    {
+      "id": "wraps",
+      "name": "Wraps",
+      "items": [
+        {
+          "id": "chicken_wrap",
+          "name": "Chicken Wrap",
+          "base_price": 8.99,
+          "options": {
+            "sauce": ["Garlic", "Chilli", "Mayo", "BBQ"],
+            "salad": ["All Salad", "No Onion", "No Tomato", "No Salad"]
+          },
+          "extras": [
+            {"name": "Extra Meat", "price": 2.00},
+            {"name": "Cheese", "price": 1.00},
+            {"name": "Halloumi", "price": 2.50}
+          ]
+        },
+        {
+          "id": "doner_wrap",
+          "name": "Doner Wrap",
+          "base_price": 7.99,
+          "options": {
+            "sauce": ["Garlic", "Chilli", "Burger Sauce"],
+            "salad": ["All Salad", "No Onion", "No Salad"]
+          },
+          "extras": [
+            {"name": "Extra Meat", "price": 2.00},
+            {"name": "Cheese", "price": 1.00}
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "kebabs",
+      "name": "Kebabs",
+      "items": [
+        {
+          "id": "mixed_kebab",
+          "name": "Mixed Kebab",
+          "base_price": 11.99,
+          "options": {
+            "size": ["Regular", "Large (+£3.00)"],
+            "sauce": ["Garlic", "Chilli", "Mayo"],
+            "salad": ["All Salad", "No Onion", "No Salad"]
+          },
+          "extras": [
+            {"name": "Extra Pitta", "price": 1.50},
+            {"name": "Extra Meat", "price": 3.00}
+          ]
+        },
+        {
+          "id": "chicken_shish",
+          "name": "Chicken Shish Kebab",
+          "base_price": 10.49,
+          "options": {
+            "sauce": ["Garlic", "Chilli", "BBQ"],
+            "salad": ["All Salad", "No Tomato", "No Salad"]
+          },
+          "extras": [
+            {"name": "Cheese", "price": 1.00},
+            {"name": "Halloumi", "price": 2.50}
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "burgers",
+      "name": "Burgers",
+      "items": [
+        {
+          "id": "classic_burger",
+          "name": "Classic Beef Burger",
+          "base_price": 6.99,
+          "options": {
+            "cheese": ["Yes", "No"],
+            "sauce": ["Ketchup", "Mayo", "Burger Sauce", "BBQ"]
+          },
+          "extras": [
+            {"name": "Bacon", "price": 1.50},
+            {"name": "Extra Patty", "price": 3.00}
+          ]
+        },
+        {
+          "id": "chicken_burger",
+          "name": "Chicken Fillet Burger",
+          "base_price": 7.49,
+          "options": {
+            "spice_level": ["Mild", "Spicy"],
+            "sauce": ["Mayo", "Garlic", "BBQ"]
+          },
+          "extras": [
+            {"name": "Cheese", "price": 1.00},
+            {"name": "Hash Brown", "price": 1.50}
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "sides",
+      "name": "Sides",
+      "items": [
+        {
+          "id": "fries",
+          "name": "Fries",
+          "base_price": 3.00,
+          "options": {
+            "size": ["Regular", "Large (+£1.50)"]
+          },
+          "extras": [
+            {"name": "Cheese", "price": 1.00},
+            {"name": "Chilli Sauce", "price": 0.50}
+          ]
+        },
+        {
+          "id": "onion_rings",
+          "name": "Onion Rings (8)",
+          "base_price": 3.49,
+          "options": {},
+          "extras": []
+        }
+      ]
+    },
+
+    {
+      "id": "drinks",
+      "name": "Drinks",
+      "items": [
+        {
+          "id": "coke",
+          "name": "Coca Cola",
+          "base_price": 1.80,
+          "options": {
+            "size": ["Can", "Bottle (+£0.70)"]
+          },
+          "extras": []
+        },
+        {
+          "id": "water",
+          "name": "Still Water",
+          "base_price": 1.20,
+          "options": {},
+          "extras": []
+        }
+      ]
+    }
+  ]
+}

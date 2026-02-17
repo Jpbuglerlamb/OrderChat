@@ -1,0 +1,139 @@
+{
+  "meta": {
+    "currency": "GBP",
+    "notes_allowed": true
+  },
+  "categories": [
+    { "id": "coffee", "name": "Coffee" },
+    { "id": "iced_drinks", "name": "Iced Drinks" },
+    { "id": "desserts", "name": "Desserts" },
+    { "id": "waffles", "name": "Waffles & Crepes" },
+    { "id": "milkshakes", "name": "Milkshakes" }
+  ],
+  "items": [
+    {
+      "id": "latte",
+      "name": "Caffè Latte",
+      "category_id": "coffee",
+      "base_price": 3.20,
+      "modifiers": [
+        {
+          "key": "size",
+          "prompt": "Choose size:",
+          "required": true,
+          "multi": false,
+          "options": ["Small", "Regular (+£0.50)", "Large (+£1.00)"]
+        },
+        {
+          "key": "milk",
+          "prompt": "Choose milk type:",
+          "required": true,
+          "multi": false,
+          "options": ["Whole Milk", "Semi-Skimmed", "Oat Milk (+£0.40)", "Soy Milk (+£0.40)"]
+        },
+        {
+          "key": "temperature",
+          "prompt": "Temperature:",
+          "required": true,
+          "multi": false,
+          "options": ["Extra Hot", "Normal", "Warm"]
+        }
+      ],
+      "extras": [
+        { "name": "Vanilla Syrup", "price": 0.60 },
+        { "name": "Caramel Syrup", "price": 0.60 },
+        { "name": "Extra Shot", "price": 0.90 }
+      ]
+    },
+    {
+      "id": "iced_latte",
+      "name": "Iced Latte",
+      "category_id": "iced_drinks",
+      "base_price": 3.80,
+      "modifiers": [
+        {
+          "key": "milk",
+          "prompt": "Choose milk type:",
+          "required": true,
+          "multi": false,
+          "options": ["Whole Milk", "Oat Milk (+£0.40)", "Soy Milk (+£0.40)"]
+        },
+        {
+          "key": "sweetness",
+          "prompt": "Sweetness level:",
+          "required": true,
+          "multi": false,
+          "options": ["No Sugar", "Normal", "Extra Sweet"]
+        }
+      ],
+      "extras": [
+        { "name": "Vanilla Foam", "price": 0.80 },
+        { "name": "Caramel Drizzle", "price": 0.70 }
+      ]
+    },
+    {
+      "id": "chocolate_brownie",
+      "name": "Chocolate Brownie",
+      "category_id": "desserts",
+      "base_price": 4.50,
+      "modifiers": [
+        {
+          "key": "heat",
+          "prompt": "Serve warm?",
+          "required": true,
+          "multi": false,
+          "options": ["Cold", "Warm"]
+        }
+      ],
+      "extras": [
+        { "name": "Add Vanilla Ice Cream", "price": 1.50 },
+        { "name": "Add Chocolate Sauce", "price": 0.80 }
+      ]
+    },
+    {
+      "id": "nutella_waffle",
+      "name": "Nutella Waffle",
+      "category_id": "waffles",
+      "base_price": 6.95,
+      "modifiers": [
+        {
+          "key": "fruit",
+          "prompt": "Choose fruit topping:",
+          "required": true,
+          "multi": false,
+          "options": ["Strawberries", "Banana", "Mixed Fruit", "No Fruit"]
+        },
+        {
+          "key": "cream",
+          "prompt": "Add cream?",
+          "required": true,
+          "multi": false,
+          "options": ["Yes", "No"]
+        }
+      ],
+      "extras": [
+        { "name": "Extra Nutella", "price": 1.20 },
+        { "name": "Kinder Pieces", "price": 1.50 }
+      ]
+    },
+    {
+      "id": "oreo_milkshake",
+      "name": "Oreo Milkshake",
+      "category_id": "milkshakes",
+      "base_price": 5.20,
+      "modifiers": [
+        {
+          "key": "size",
+          "prompt": "Choose size:",
+          "required": true,
+          "multi": false,
+          "options": ["Regular", "Large (+£1.50)"]
+        }
+      ],
+      "extras": [
+        { "name": "Whipped Cream", "price": 0.70 },
+        { "name": "Chocolate Drizzle", "price": 0.60 }
+      ]
+    }
+  ]
+}
