@@ -1,4 +1,4 @@
-# app/menu.py
+#app/menu.py
 from __future__ import annotations
 
 import json
@@ -11,22 +11,26 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 def load_menu() -> Dict[str, Any]:
     """
-    Loads menu.json from:
-      data/<MENU_KEY>/menu.json
-
-    MENU_KEY defaults to "hybrid".
+    Loads menu.json from: data/<MENU_KEY>/menu.json
+    MENU_KEY comes from env (default: "hybrid")
     """
     menu_key = os.getenv("MENU_KEY", "hybrid").strip()
     menu_path = DATA_DIR / menu_key / "menu.json"
 
     if not menu_path.exists():
         available = [p.name for p in DATA_DIR.iterdir() if p.is_dir()]
-        raise FileNotFoundError(f"Menu '{menu_key}' not found.\nAvailable menus: {available}")
+        raise FileNotFoundError(
+            f"Menu '{menu_key}' not found.\nAvailable menus: {available}"
+        )
 
     return json.loads(menu_path.read_text(encoding="utf-8"))
 
 
 def list_categories(menu: Dict[str, Any]) -> List[Dict[str, str]]:
+    """
+    Returns: [{id, name}, ...]
+    Works for both new + old schema.
+    """
     cats = menu.get("categories") or []
     out: List[Dict[str, str]] = []
     for c in cats:
@@ -41,29 +45,33 @@ def list_categories(menu: Dict[str, Any]) -> List[Dict[str, str]]:
 
 def find_item(menu: Dict[str, Any], item_id: str) -> Optional[Dict[str, Any]]:
     """
-    Supports BOTH schemas:
-      New: menu["items"] = [...]
-      Old: menu["categories"][...]["items"] = [...]
+    Finds an item by id.
+
+    New schema:
+      menu["items"] = [{id, name, category_id, base_price, modifiers, extras}, ...]
+
+    Back-compat:
+      menu["categories"] = [{..., items:[{id,...}, ...]}, ...]
     """
-    target = (item_id or "").strip()
-    if not target:
+    needle = (item_id or "").strip()
+    if not needle:
         return None
 
-    # New schema: top-level items
+    # New schema first
     items = menu.get("items") or []
     if isinstance(items, list):
         for it in items:
-            if isinstance(it, dict) and (it.get("id") or "").strip() == target:
+            if isinstance(it, dict) and str(it.get("id") or "").strip() == needle:
                 return it
 
-    # Back-compat: nested items inside categories
+    # Back-compat nested schema
     cats = menu.get("categories") or []
     if isinstance(cats, list):
         for c in cats:
             if not isinstance(c, dict):
                 continue
             for it in (c.get("items") or []):
-                if isinstance(it, dict) and (it.get("id") or "").strip() == target:
+                if isinstance(it, dict) and str(it.get("id") or "").strip() == needle:
                     return it
 
     return None
