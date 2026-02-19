@@ -326,64 +326,6 @@ def _items_in_category(menu: Dict[str, Any], category_id_or_name: str) -> List[D
 
 def _find_item_in_text(menu: Dict[str, Any], text: str, synonyms: Dict[str, str]) -> Optional[Dict[str, Any]]:
     idx = menu.get("_index") or {}
-    raw_q = (text or "").strip().lower()
-    norm_q = _normalize_text(text, {})
-    syn_q = _normalize_text(text, synonyms)
-
-    def _try(lookup: Dict[str, Dict[str, Any]], q: str, cutoff: float) -> Optional[Dict[str, Any]]:
-        if not q or not lookup:
-            return None
-        keys = list(lookup.keys())
-        best = _fuzzy_best_key(keys, q, cutoff=cutoff)
-        return lookup.get(best) if best else None
-
-    # raw: most strict
-    hit = _try(idx.get("items_by_name_raw") or {}, raw_q, cutoff=0.80)
-    if hit:
-        return hit
-
-    # normalized without synonyms
-    hit = _try(idx.get("items_by_name_norm") or {}, norm_q, cutoff=0.62)
-    if hit:
-        return hit
-
-    # normalized with synonyms
-    return _try(idx.get("items_by_name_norm_syn") or {}, syn_q, cutoff=0.62)
-
-
-def _find_items_by_keyword(menu: Dict[str, Any], text: str, synonyms: Dict[str, str]) -> List[Dict[str, Any]]:
-    idx = menu.get("_index") or {}
-
-    queries = []
-    raw_q = (text or "").strip().lower()
-    if raw_q:
-        queries.append(raw_q)
-
-    norm_q = _normalize_text(text, {})
-    if norm_q and norm_q not in queries:
-        queries.append(norm_q)
-
-    syn_q = _normalize_text(text, synonyms)
-    if syn_q and syn_q not in queries:
-        queries.append(syn_q)
-
-    lookups = [
-        idx.get("items_by_name_raw") or {},
-        idx.get("items_by_name_norm") or {},
-        idx.get("items_by_name_norm_syn") or {},
-    ]
-
-    out: List[Dict[str, Any]] = []
-    for q in queries:
-        for lookup in lookups:
-            for nm, it in lookup.items():
-                if q and q in nm and it not in out:
-                    out.append(it)
-    return out
-
-
-def _find_item_in_text(menu: Dict[str, Any], text: str, synonyms: Dict[str, str]) -> Optional[Dict[str, Any]]:
-    idx = menu.get("_index") or {}
 
     raw_q = (text or "").strip().lower()
     norm_q = _normalize_text(text, {})
@@ -436,6 +378,59 @@ def _find_item_in_text(menu: Dict[str, Any], text: str, synonyms: Dict[str, str]
 
     return None
 
+
+
+def _find_items_by_keyword(menu: Dict[str, Any], text: str, synonyms: Dict[str, str]) -> List[Dict[str, Any]]:
+    idx = menu.get("_index") or {}
+
+    queries = []
+    raw_q = (text or "").strip().lower()
+    if raw_q:
+        queries.append(raw_q)
+
+    norm_q = _normalize_text(text, {})
+    if norm_q and norm_q not in queries:
+        queries.append(norm_q)
+
+    syn_q = _normalize_text(text, synonyms)
+    if syn_q and syn_q not in queries:
+        queries.append(syn_q)
+
+    lookups = [
+        idx.get("items_by_name_raw") or {},
+        idx.get("items_by_name_norm") or {},
+        idx.get("items_by_name_norm_syn") or {},
+    ]
+
+    out: List[Dict[str, Any]] = []
+    for q in queries:
+        for lookup in lookups:
+            for nm, it in lookup.items():
+                if q and q in nm and it not in out:
+                    out.append(it)
+    return out
+
+
+def _find_category_in_text(menu: Dict[str, Any], text: str, synonyms: Dict[str, str]) -> Optional[Dict[str, Any]]:
+    t_raw = (text or "").strip()
+    if not t_raw:
+        return None
+
+    idx = menu.get("_index") or {}
+    candidates = [
+        (idx.get("cats_by_name_raw") or {}, t_raw.lower(), 0.70),
+        (idx.get("cats_by_name_norm") or {}, _normalize_text(t_raw, {}), 0.70),
+        (idx.get("cats_by_name_norm_syn") or {}, _normalize_text(t_raw, synonyms), 0.70),
+    ]
+
+    for lookup, q, cutoff in candidates:
+        if not q:
+            continue
+        keys = list(lookup.keys())
+        best = _fuzzy_best_key(keys, q, cutoff=cutoff)
+        if best:
+            return lookup.get(best)
+    return None
 
 
 # ----------------------------
