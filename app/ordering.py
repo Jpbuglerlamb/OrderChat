@@ -962,7 +962,9 @@ def handle_message(
     parts = _split_intents(msg_for_split)
     added_any = False
 
-    for p_i, part in enumerate(parts):
+    # We no longer use pending_parts here because we process ALL parts in one go.
+    # (pending_parts is still used in the modifier/extras modes.)
+    for part in parts:
         qty, text = _parse_qty_prefix(part)
         item = _find_item_in_text(menu, text, synonyms)
 
@@ -973,8 +975,13 @@ def handle_message(
                     f"- {m.get('name')} ({cur}{float(m.get('base_price', 0)):.2f})"
                     for m in matches[:8]
                 ]
-                return "Which one did you mean?\n" + "\n".join(options), _dump_cart(cart), _dump_state(state)
+                return (
+                    "Which one did you mean?\n" + "\n".join(options),
+                    _dump_cart(cart),
+                    _dump_state(state),
+                )
 
+            # If they typed a category (and we haven't added anything yet), show it
             cat2 = _find_category_in_text(menu, text, synonyms)
             if cat2 and not added_any:
                 return _render_category(menu, cat2, cur), _dump_cart(cart), _dump_state(state)
@@ -996,47 +1003,80 @@ def handle_message(
         _recalc_line_total(new_line)
         cart.append(new_line)
         added_any = True
-        line_index = len(cart) - 1
 
-        remaining = [x for x in parts[p_i + 1:] if x.strip()]
-        _queue_pending_parts(state, remaining)
-
+        # Mark what this line still needs (but DO NOT start configuration yet)
         mods = _get_item_modifiers(item)
         if mods:
             first_required = 0
             while first_required < len(mods) and not mods[first_required].get("required", True):
                 first_required += 1
-
             if first_required < len(mods):
-                state.update({"mode": "awaiting_modifier", "line_index": line_index, "mod_index": first_required})
-                mod = mods[first_required]
-                return (
-                    f"Nice. For your {item.get('name')}, {mod.get('prompt')}\nOptions: " + ", ".join(mod.get("options") or []),
-                    _dump_cart(cart),
-                    _dump_state(state),
-                )
+                new_line["_needs_modifiers"] = True
+                new_line["_first_mod_index"] = first_required
 
         extras = item.get("extras") or []
         if extras:
-            state.update({"mode": "awaiting_extras", "line_index": line_index})
-            extra_lines = [f"- {e['name']} ({cur}{float(e.get('price',0.0)):.2f})" for e in extras if e.get("name")]
-            return (
-                "Any extras?\n" + "\n".join(extra_lines) + "\n\nSay an extra name, or “no extras”.",
-                _dump_cart(cart),
-                _dump_state(state),
-            )
+            new_line["_needs_extras"] = True
 
-        nxt_part = _pop_pending_part(state)
-        if nxt_part:
-            summary, _ = build_summary(cart, currency_symbol=cur)
-            reply_prefix = "Got it.\n\n" + summary
-            r, items2, state2 = handle_message(nxt_part, _dump_cart(cart), menu_dict, _dump_state(state))
-            return reply_prefix + "\n\n" + r, items2, state2
-
-        summary, _ = build_summary(cart, currency_symbol=cur)
-        return "Got it.\n\n" + summary + "\n\n" + _next_prompt(menu), _dump_cart(cart), _dump_state(state)
-
+    # If we added anything, start configuring the FIRST incomplete line
     if added_any:
+        # 1) Modifiers take priority
+        for i, ln in enumerate(cart):
+            if ln.get("_needs_modifiers"):
+                item_id = ln.get("item_id")
+                item_obj = (menu.get("_index") or {}).get("items_by_id", {}).get(item_id)
+                if not item_obj:
+                    # can't configure, skip marker
+                    ln.pop("_needs_modifiers", None)
+                    ln.pop("_first_mod_index", None)
+                    continue
+
+                mods = _get_item_modifiers(item_obj)
+                mod_index = int(ln.get("_first_mod_index", 0) or 0)
+                if mods and 0 <= mod_index < len(mods):
+                    # clear markers once we enter config mode
+                    ln.pop("_needs_modifiers", None)
+                    ln.pop("_first_mod_index", None)
+
+                    state.update({"mode": "awaiting_modifier", "line_index": i, "mod_index": mod_index})
+                    mod = mods[mod_index]
+                    return (
+                        f"Nice. For your {item_obj.get('name')}, {mod.get('prompt')}\nOptions: "
+                        + ", ".join(mod.get("options") or []),
+                        _dump_cart(cart),
+                        _dump_state(state),
+                    )
+
+                # nothing valid to ask, clear marker and continue
+                ln.pop("_needs_modifiers", None)
+                ln.pop("_first_mod_index", None)
+
+        # 2) Then extras (for lines that have extras but no required modifiers left)
+        for i, ln in enumerate(cart):
+            if ln.get("_needs_extras"):
+                item_id = ln.get("item_id")
+                item_obj = (menu.get("_index") or {}).get("items_by_id", {}).get(item_id)
+                if not item_obj:
+                    ln.pop("_needs_extras", None)
+                    continue
+
+                extras = item_obj.get("extras") or []
+                if extras:
+                    ln.pop("_needs_extras", None)
+                    state.update({"mode": "awaiting_extras", "line_index": i})
+                    extra_lines = [
+                        f"- {e['name']} ({cur}{float(e.get('price', 0.0)):.2f})"
+                        for e in extras if e.get("name")
+                    ]
+                    return (
+                        "Any extras?\n" + "\n".join(extra_lines) + "\n\nSay an extra name, or “no extras”.",
+                        _dump_cart(cart),
+                        _dump_state(state),
+                    )
+
+                ln.pop("_needs_extras", None)
+
+        # 3) If nothing needs config, just summarize
         summary, _ = build_summary(cart, currency_symbol=cur)
         return "Got it.\n\n" + summary + "\n\n" + _next_prompt(menu), _dump_cart(cart), _dump_state(state)
 
