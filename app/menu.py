@@ -4,36 +4,31 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 
-def _sanitize_menu_key(raw: str) -> str:
-    k = (raw or "").strip().replace("\\", "/")
-    k = k.split("/")[-1].strip()
-    return k or "hybrid"
+def load_menu() -> Dict[str, Any]:
+    """
+    Loads menu.json from:
+      data/<MENU_KEY>/menu.json
 
-
-def load_menu() -> dict[str, Any]:
-    menu_key = _sanitize_menu_key(os.getenv("MENU_KEY", "hybrid"))
+    MENU_KEY defaults to "hybrid".
+    """
+    menu_key = os.getenv("MENU_KEY", "hybrid").strip()
     menu_path = DATA_DIR / menu_key / "menu.json"
 
     if not menu_path.exists():
-        available = sorted([p.name for p in DATA_DIR.iterdir() if p.is_dir()])
-        raise FileNotFoundError(
-            f"Menu '{menu_key}' not found.\nAvailable menus: {available}"
-        )
+        available = [p.name for p in DATA_DIR.iterdir() if p.is_dir()]
+        raise FileNotFoundError(f"Menu '{menu_key}' not found.\nAvailable menus: {available}")
 
-    try:
-        return json.loads(menu_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON in {menu_path}: {e}") from e
+    return json.loads(menu_path.read_text(encoding="utf-8"))
 
 
-def list_categories(menu: dict[str, Any]) -> list[dict[str, str]]:
+def list_categories(menu: Dict[str, Any]) -> List[Dict[str, str]]:
     cats = menu.get("categories") or []
-    out: list[dict[str, str]] = []
+    out: List[Dict[str, str]] = []
     for c in cats:
         if not isinstance(c, dict):
             continue
@@ -44,26 +39,31 @@ def list_categories(menu: dict[str, Any]) -> list[dict[str, str]]:
     return out
 
 
-def find_item(menu: dict[str, Any], item_id: str) -> dict[str, Any] | None:
-    """Supports both schemas:
-    - New: menu["items"] top-level
-    - Back-compat: nested categories[*]["items"]
+def find_item(menu: Dict[str, Any], item_id: str) -> Optional[Dict[str, Any]]:
     """
-    iid = (item_id or "").strip()
-    if not iid:
+    Supports BOTH schemas:
+      New: menu["items"] = [...]
+      Old: menu["categories"][...]["items"] = [...]
+    """
+    target = (item_id or "").strip()
+    if not target:
         return None
 
-    # New schema
-    for it in (menu.get("items") or []):
-        if isinstance(it, dict) and it.get("id") == iid:
-            return it
-
-    # Back-compat
-    for cat in (menu.get("categories") or []):
-        if not isinstance(cat, dict):
-            continue
-        for it in (cat.get("items") or []):
-            if isinstance(it, dict) and it.get("id") == iid:
+    # New schema: top-level items
+    items = menu.get("items") or []
+    if isinstance(items, list):
+        for it in items:
+            if isinstance(it, dict) and (it.get("id") or "").strip() == target:
                 return it
+
+    # Back-compat: nested items inside categories
+    cats = menu.get("categories") or []
+    if isinstance(cats, list):
+        for c in cats:
+            if not isinstance(c, dict):
+                continue
+            for it in (c.get("items") or []):
+                if isinstance(it, dict) and (it.get("id") or "").strip() == target:
+                    return it
 
     return None

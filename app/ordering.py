@@ -4,7 +4,7 @@ from __future__ import annotations
 import difflib
 import json
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 
 # ----------------------------
@@ -45,6 +45,7 @@ _CONTINUE_ORDER = {
     "yes", "yeah", "yep", "ok", "okay",
 }
 
+# Concept → dataset naming aliases
 CATEGORY_ALIASES = {
     "drinks": ["drinks", "beverages", "soft drinks", "hot drinks"],
     "sides": ["sides", "extras", "side dishes", "small plates"],
@@ -52,12 +53,13 @@ CATEGORY_ALIASES = {
 }
 
 # Split multi-intent like: "latte and brownie", "wrap, fries & coke"
-_SPLIT_RE = re.compile(r"\s*(?:,|&|\+| and )\s*", re.IGNORECASE)
+# NOTE: we split on " & " and " and " with spaces to reduce accidental splits.
+_SPLIT_RE = re.compile(r"\s*(?:,|\+|\s+\&\s+|\s+and\s+)\s*", re.IGNORECASE)
 
 # qty prefixes: "2x burger", "3× latte"
 _QTY_RE = re.compile(r"^\s*(\d+)\s*[x×]\s*(.+?)\s*$", re.IGNORECASE)
 
-# basic punctuation strip for matching
+# basic punctuation strip for matching (keep spaces)
 _PUNCT_RE = re.compile(r"[^a-z0-9\s]+")
 
 # token to protect "and/&" inside item phrases (so the splitter doesn't break them)
@@ -76,6 +78,10 @@ _PRICE_DELTA_RE = re.compile(
 
 def _normalize_text(s: str, synonyms: Dict[str, str]) -> str:
     s = (s or "").strip().lower()
+
+    # Normalize "&" to spaced form so our phrase protection + splitter behave
+    s = re.sub(r"\s*&\s*", " & ", s)
+
     s = _PUNCT_RE.sub(" ", s)
     s = re.sub(r"\s+", " ", s).strip()
 
@@ -89,7 +95,14 @@ def _normalize_text(s: str, synonyms: Dict[str, str]) -> str:
 
 
 def _strip_filler_prefix(raw: str) -> str:
+    """
+    Remove polite / chatty prefixes so the splitter sees clean order phrases.
+    Example:
+      "Hello, I'd like X, and Y please"
+       -> "X, and Y"
+    """
     s = (raw or "").strip()
+
     s = re.sub(r"^\s*(hi|hello|hey)\b[,\s]*", "", s, flags=re.IGNORECASE)
     s = re.sub(
         r"^\s*(i\s*would\s*like|i'?d\s*like|can\s*i\s*get|could\s*i\s*get|may\s*i\s*have)\b[,\s]*",
@@ -98,30 +111,65 @@ def _strip_filler_prefix(raw: str) -> str:
         flags=re.IGNORECASE,
     )
     s = re.sub(r"\bplease\b\s*$", "", s, flags=re.IGNORECASE)
+
     return s.strip()
 
 
-def _protect_and_phrases(raw_lower: str, phrases: List[str]) -> str:
+def _protect_phrases_with_and(msg: str, phrases: List[str]) -> str:
     """
-    Replaces "and" / "&" inside protected phrases with __AND__ token
-    so splitting on ' and ' or '&' doesn't break them.
+    Protects phrases that contain "and" / "&" so our splitter doesn't split them.
+    Works even if the user types: "sweet&sour", "sweet & sour", "sweet and sour".
     """
-    s = raw_lower
-    for ph in phrases:
+    if not msg or not phrases:
+        return msg
+
+    s = msg
+
+    def _phrase_regex(ph: str) -> Optional[re.Pattern]:
         ph = (ph or "").strip().lower()
         if not ph:
+            return None
+
+        # Normalize phrase to tokens, then allow connector to be "&" or "and"
+        # Example: "sweet & sour soup" -> ["sweet", "sour", "soup"]
+        ph_norm = re.sub(r"\s*&\s*", " & ", ph)
+        tokens = [t for t in re.split(r"\s+", ph_norm) if t and t != "&" and t != "and"]
+        if len(tokens) < 2:
+            return None
+
+        # Build: sweet\s*(?:&|and)\s*sour\s+soup   (connector allowed between any two tokens)
+        # We only need to allow connector where user may have used it; easiest: allow optional connector between tokens.
+        parts = []
+        for i, t in enumerate(tokens):
+            parts.append(re.escape(t))
+            if i != len(tokens) - 1:
+                parts.append(r"(?:\s*(?:&|and)\s*|\s+)")
+
+        pat = r"\b" + "".join(parts) + r"\b"
+        try:
+            return re.compile(pat, re.IGNORECASE)
+        except Exception:
+            return None
+
+    for ph in phrases:
+        rx = _phrase_regex(ph)
+        if not rx:
             continue
 
-        variants = {ph, ph.replace(" & ", " and "), ph.replace(" and ", " & ")}
-        for v in variants:
-            if " and " not in v and " & " not in v:
-                continue
-            protected = v.replace(" and ", _AND_TOKEN.strip()).replace(" & ", _AND_TOKEN.strip())
-            s = s.replace(v, protected)
+        def _repl(m: re.Match) -> str:
+            # Replace connector forms inside the matched phrase with token
+            chunk = m.group(0)
+            chunk = re.sub(r"\s*(?:&|and)\s*", f" {_AND_TOKEN.strip()} ", chunk, flags=re.IGNORECASE)
+            chunk = re.sub(r"\s+", " ", chunk).strip()
+            return chunk
+
+        s = rx.sub(_repl, s)
+
     return s
 
 
 def _unprotect_and(s: str) -> str:
+    # turn token back into "and" for downstream matching
     return (s or "").replace(_AND_TOKEN.strip(), "and")
 
 
@@ -191,6 +239,14 @@ def _menu_synonyms(menu: Dict[str, Any]) -> Dict[str, str]:
 
 
 def _build_menu_index(menu: Dict[str, Any], synonyms: Dict[str, str]) -> Dict[str, Any]:
+    """
+    New schema:
+      - categories: [{id, name}]
+      - items: [{id, name, category_id, base_price, modifiers[], extras[] }]
+
+    Back-compat:
+      - categories: [{name, items:[{id,name,base_price, options{}, extras[] }]}]
+    """
     idx: Dict[str, Any] = {}
 
     cats_by_id: Dict[str, Dict[str, Any]] = {}
@@ -228,12 +284,13 @@ def _build_menu_index(menu: Dict[str, Any], synonyms: Dict[str, str]) -> Dict[st
                 cats_by_name_norm[_normalize_text(cname, {})] = c
                 cats_by_name_norm_syn[_normalize_text(cname, synonyms)] = c
 
+            # back-compat nested items
             for it in (c.get("items") or []):
                 if isinstance(it, dict):
                     _index_item(it)
 
     items = menu.get("items") or []
-    if isinstance(items, list) and items:
+    if isinstance(items, list):
         for it in items:
             if isinstance(it, dict):
                 _index_item(it)
@@ -248,6 +305,7 @@ def _build_menu_index(menu: Dict[str, Any], synonyms: Dict[str, str]) -> Dict[st
     idx["items_by_name_norm"] = items_by_name_norm
     idx["items_by_name_norm_syn"] = items_by_name_norm_syn
 
+    # Phrases to protect against splitting
     idx["and_phrases"] = [nm for nm in items_by_name_raw.keys() if (" and " in nm) or (" & " in nm)]
 
     menu["_index"] = idx
@@ -270,29 +328,32 @@ def _items_in_category(menu: Dict[str, Any], category_id_or_name: str) -> List[D
     idx = (menu.get("_index") or {})
     items = list((idx.get("items_by_id") or {}).values())
 
-    cid = (category_id_or_name or "").strip()
-    if not cid:
+    cid_or_name = (category_id_or_name or "").strip()
+    if not cid_or_name:
         return []
 
     cats_by_id = idx.get("cats_by_id") or {}
-    cats_by_name_raw = idx.get("cats_by_name_raw") or {}
-    cats_by_name_norm = idx.get("cats_by_name_norm") or {}
-    cats_by_name_norm_syn = idx.get("cats_by_name_norm_syn") or {}
+    cats_raw = idx.get("cats_by_name_raw") or {}
+    cats_norm = idx.get("cats_by_name_norm") or {}
+    cats_syn = idx.get("cats_by_name_norm_syn") or {}
 
     cat_obj = (
-        cats_by_id.get(cid)
-        or cats_by_name_raw.get(cid.lower())
-        or cats_by_name_norm.get(_normalize_text(cid, {}))
-        or cats_by_name_norm_syn.get(_normalize_text(cid, _menu_synonyms(menu)))
+        cats_by_id.get(cid_or_name)
+        or cats_raw.get(cid_or_name.lower())
+        or cats_norm.get(_normalize_text(cid_or_name, {}))
+        or cats_syn.get(_normalize_text(cid_or_name, _menu_synonyms(menu)))
     )
+
+    cid = cid_or_name
     if cat_obj:
-        cid = (cat_obj.get("id") or "").strip() or cid
+        cid = (cat_obj.get("id") or "").strip() or cid_or_name
 
     out: List[Dict[str, Any]] = []
     for it in items:
         if (it.get("category_id") or "").strip() == cid:
             out.append(it)
 
+    # back-compat nested items
     if not out and cat_obj and cat_obj.get("items"):
         out = list(cat_obj.get("items") or [])
 
@@ -300,11 +361,23 @@ def _items_in_category(menu: Dict[str, Any], category_id_or_name: str) -> List[D
 
 
 def _find_item_in_text(menu: Dict[str, Any], text: str, synonyms: Dict[str, str]) -> Optional[Dict[str, Any]]:
+    """
+    Important: avoid matching modifier option text like "Egg Fried Rice (+£1.50)" as an item.
+    We do:
+      - strong token overlap (best for "sweet sour chicken" etc)
+      - then fuzzy fallback
+    """
     idx = menu.get("_index") or {}
 
     raw_q = (text or "").strip().lower()
-    norm_q = _normalize_text(text, {})
-    syn_q = _normalize_text(text, synonyms)
+    if not raw_q:
+        return None
+
+    # Strip price-delta decorations from queries
+    raw_q = re.sub(r"\(\s*\+\s*(?:£\s*)?[0-9]+(?:\.[0-9]+)?\s*\)", "", raw_q).strip()
+
+    norm_q = _normalize_text(raw_q, {})
+    syn_q = _normalize_text(raw_q, synonyms)
 
     queries = [q for q in [raw_q, norm_q, syn_q] if q]
 
@@ -314,15 +387,44 @@ def _find_item_in_text(menu: Dict[str, Any], text: str, synonyms: Dict[str, str]
         idx.get("items_by_name_norm_syn") or {},
     ]
 
-    # STEP 1: token containment (prevents fuzzy collisions)
+    # STEP 1: token overlap (robust for partial / reordered)
     for q in queries:
-        q_tokens = set(q.split())
+        q_tokens = [t for t in q.split() if t]
+        if not q_tokens:
+            continue
+        q_set = set(q_tokens)
+
+        best_item = None
+        best_score = 0.0
+
         for lookup in lookups:
             for name, item in lookup.items():
-                name_tokens = set(name.split())
-                overlap = q_tokens.intersection(name_tokens)
-                if overlap and len(overlap) >= max(1, len(q_tokens) // 2):
-                    return item
+                # ignore option-like names (shouldn't exist in item index anyway, but safe)
+                if "(+" in name or "+£" in name:
+                    continue
+                name_tokens = [t for t in name.split() if t]
+                if not name_tokens:
+                    continue
+                name_set = set(name_tokens)
+
+                overlap = q_set.intersection(name_set)
+                if not overlap:
+                    continue
+
+                # score: overlap ratio vs query length (prefer more complete matches)
+                score = len(overlap) / max(1, len(q_set))
+
+                # small bonus if query is contained as substring
+                if q in name:
+                    score += 0.15
+
+                if score > best_score:
+                    best_score = score
+                    best_item = item
+
+        # Require decent overlap to prevent "rice" matching random things
+        if best_item and best_score >= 0.55:
+            return best_item
 
     # STEP 2: fuzzy fallback
     def _try(lookup: Dict[str, Dict[str, Any]], q: str, cutoff: float):
@@ -333,13 +435,13 @@ def _find_item_in_text(menu: Dict[str, Any], text: str, synonyms: Dict[str, str]
         return lookup.get(best) if best else None
 
     for q in queries:
-        hit = _try(idx.get("items_by_name_raw") or {}, q, 0.80)
+        hit = _try(idx.get("items_by_name_raw") or {}, q, 0.82)
         if hit:
             return hit
-        hit = _try(idx.get("items_by_name_norm") or {}, q, 0.65)
+        hit = _try(idx.get("items_by_name_norm") or {}, q, 0.70)
         if hit:
             return hit
-        hit = _try(idx.get("items_by_name_norm_syn") or {}, q, 0.65)
+        hit = _try(idx.get("items_by_name_norm_syn") or {}, q, 0.70)
         if hit:
             return hit
 
@@ -349,7 +451,7 @@ def _find_item_in_text(menu: Dict[str, Any], text: str, synonyms: Dict[str, str]
 def _find_items_by_keyword(menu: Dict[str, Any], text: str, synonyms: Dict[str, str]) -> List[Dict[str, Any]]:
     idx = menu.get("_index") or {}
 
-    queries = []
+    queries: List[str] = []
     raw_q = (text or "").strip().lower()
     if raw_q:
         queries.append(raw_q)
@@ -384,9 +486,9 @@ def _find_category_in_text(menu: Dict[str, Any], text: str, synonyms: Dict[str, 
 
     idx = menu.get("_index") or {}
     candidates = [
-        (idx.get("cats_by_name_raw") or {}, t_raw.lower(), 0.70),
-        (idx.get("cats_by_name_norm") or {}, _normalize_text(t_raw, {}), 0.70),
-        (idx.get("cats_by_name_norm_syn") or {}, _normalize_text(t_raw, synonyms), 0.70),
+        (idx.get("cats_by_name_raw") or {}, t_raw.lower(), 0.72),
+        (idx.get("cats_by_name_norm") or {}, _normalize_text(t_raw, {}), 0.72),
+        (idx.get("cats_by_name_norm_syn") or {}, _normalize_text(t_raw, synonyms), 0.72),
     ]
 
     for lookup, q, cutoff in candidates:
@@ -400,7 +502,7 @@ def _find_category_in_text(menu: Dict[str, Any], text: str, synonyms: Dict[str, 
 
 
 # ----------------------------
-# Conversation intent helpers
+# Conversation intent helpers (menu-only)
 # ----------------------------
 
 def _is_continue_order(msg_norm: str) -> bool:
@@ -535,7 +637,6 @@ def build_summary(cart: List[Dict[str, Any]], currency_symbol: str = "£") -> Tu
                 if isinstance(v, list):
                     return ", ".join([str(x) for x in v if x])
                 return str(v)
-
             bits.append(" | ".join([f"{k}: {_fmt(v)}" for k, v in choices.items() if v]))
 
         if extras:
@@ -570,7 +671,7 @@ def _match_choice(options: List[str], msg: str, synonyms: Dict[str, str]) -> Opt
             return opt
 
     opts_norm = [_normalize_text(o or "", synonyms) for o in options if o]
-    best = _fuzzy_best_key(opts_norm, m, cutoff=0.65)
+    best = _fuzzy_best_key(opts_norm, m, cutoff=0.68)
     if not best:
         return None
 
@@ -601,7 +702,7 @@ def _match_extra(extras: List[Dict[str, Any]], msg: str, synonyms: Dict[str, str
     names = [(e.get("name") or "").strip() for e in extras]
     names_l = [_normalize_text(n, synonyms) for n in names if n]
 
-    best = _fuzzy_best_key(names_l, m, cutoff=0.66)
+    best = _fuzzy_best_key(names_l, m, cutoff=0.68)
     if not best:
         return None
     for e in extras:
@@ -629,6 +730,7 @@ def _get_item_modifiers(item: Dict[str, Any]) -> List[Dict[str, Any]]:
             })
         return out
 
+    # Back-compat "options" dict
     opts = item.get("options")
     if isinstance(opts, dict) and opts:
         out = []
@@ -643,86 +745,6 @@ def _get_item_modifiers(item: Dict[str, Any]) -> List[Dict[str, Any]]:
         return out
 
     return []
-
-
-# ----------------------------
-# Helpers: determine next question
-# ----------------------------
-
-def _first_missing_required_modifier_index(line: Dict[str, Any], item: Dict[str, Any]) -> Optional[int]:
-    """
-    Returns the mod index of the first required modifier missing from line["choices"].
-    """
-    mods = _get_item_modifiers(item)
-    if not mods:
-        return None
-
-    choices = line.get("choices") or {}
-    for i, m in enumerate(mods):
-        if not m.get("required", True):
-            continue
-        key = m.get("key")
-        if key and not choices.get(key):
-            return i
-    return None
-
-
-def _needs_extras_prompt(line: Dict[str, Any], item: Dict[str, Any]) -> bool:
-    """
-    We store extras_done as persistent state on the line.
-    If item has extras and extras_done is False, we should ask.
-    """
-    extras = item.get("extras") or []
-    if not extras:
-        return False
-    return not bool(line.get("extras_done", False))
-
-
-def _advance_to_next_step(
-    menu: Dict[str, Any],
-    cart: List[Dict[str, Any]],
-    state: Dict[str, Any],
-) -> Optional[Tuple[str, str]]:
-    """
-    Determines next prompt and updates state accordingly.
-    Returns (reply, mode) or None if nothing pending.
-    """
-    items_by_id = (menu.get("_index") or {}).get("items_by_id", {}) or {}
-
-    # 1) required modifiers first
-    for i, ln in enumerate(cart):
-        item_id = ln.get("item_id")
-        item = items_by_id.get(item_id)
-        if not item:
-            continue
-
-        mi = _first_missing_required_modifier_index(ln, item)
-        if mi is not None:
-            mods = _get_item_modifiers(item)
-            mod = mods[mi]
-            state.update({"mode": "awaiting_modifier", "line_index": i, "mod_index": mi})
-            return (
-                f"Nice. For your {item.get('name')}, {mod.get('prompt')}\nOptions: " + ", ".join(mod.get("options") or []),
-                "awaiting_modifier",
-            )
-
-    # 2) extras prompts
-    for i, ln in enumerate(cart):
-        item_id = ln.get("item_id")
-        item = items_by_id.get(item_id)
-        if not item:
-            continue
-
-        if _needs_extras_prompt(ln, item):
-            extras = item.get("extras") or []
-            extra_lines = [f"- {e['name']} ({_currency_symbol(menu)}{float(e.get('price',0.0)):.2f})" for e in extras if e.get("name")]
-            state.update({"mode": "awaiting_extras", "line_index": i})
-            return (
-                "Any extras?\n" + "\n".join(extra_lines) + "\n\nSay an extra name, or “no extras”.",
-                "awaiting_extras",
-            )
-
-    return None
 
 
 # ----------------------------
@@ -782,17 +804,12 @@ def handle_message(
     state = _load_state(state_json)
 
     # ----------------------------
-    # Commands
+    # Global commands (must be BEFORE other branches)
     # ----------------------------
     if msg_norm in {"reset", "clear", "start over", "new order"}:
-        # IMPORTANT: This only clears the draft payload. main.py will persist it.
         cart = []
         state = {}
-        return (
-            "Cleared ✅ Starting a fresh order.",
-            _dump_cart(cart),
-            _dump_state(state),
-        )
+        return ("Cleared ✅ Starting a fresh order.", _dump_cart(cart), _dump_state(state))
 
     if msg_norm in {"basket", "cart", "summary", "my order", "whats my order", "what s my order", "what's my order"}:
         summary, _ = build_summary(cart, currency_symbol=cur)
@@ -812,8 +829,8 @@ def handle_message(
 
         target_id = target.get("id")
         removed_any = False
-
         new_cart: List[Dict[str, Any]] = []
+
         for ln in cart:
             if not removed_any and target_id and ln.get("item_id") == target_id:
                 qty = int(ln.get("qty", 1) or 1)
@@ -821,6 +838,7 @@ def handle_message(
                     ln["qty"] = qty - 1
                     _recalc_line_total(ln)
                     new_cart.append(ln)
+                # if qty == 1, drop the line
                 removed_any = True
                 continue
             new_cart.append(ln)
@@ -844,7 +862,9 @@ def handle_message(
             return ("Hey! What can I get you?\nWe’ve got: " + ", ".join(cats) + "."), _dump_cart(cart), _dump_state(state)
         return ("Hey! What can I get you?"), _dump_cart(cart), _dump_state(state)
 
+    # ----------------------------
     # Natural question: "what <category> do you have?"
+    # ----------------------------
     m = re.search(r"\bwhat\s+(.+?)\s+(?:do you have|have you got|are there|is there)\??\b", msg_norm)
     if m:
         wanted = m.group(1).strip()
@@ -856,7 +876,9 @@ def handle_message(
         if cats:
             return ("We have: " + ", ".join(cats) + ".\nWhich category do you want?"), _dump_cart(cart), _dump_state(state)
 
+    # ----------------------------
     # If user typed a category name
+    # ----------------------------
     cat = _find_category_in_text(menu, msg_norm, synonyms)
     if cat:
         return _render_category(menu, cat, cur), _dump_cart(cart), _dump_state(state)
@@ -880,11 +902,7 @@ def handle_message(
                     if mod.get("multi"):
                         picked = _match_multi_choices(options, msg_raw, synonyms)
                         if not picked:
-                            return (
-                                "I need one or more of these options: " + ", ".join(options),
-                                _dump_cart(cart),
-                                _dump_state(state),
-                            )
+                            return ("I need one or more of these options: " + ", ".join(options), _dump_cart(cart), _dump_state(state))
                         cart[line_index].setdefault("choices", {})
                         cart[line_index]["choices"][mod["key"]] = picked
                         cart[line_index].setdefault("choice_price_deltas", {})
@@ -892,11 +910,7 @@ def handle_message(
                     else:
                         chosen = _match_choice(options, msg_raw, synonyms)
                         if not chosen:
-                            return (
-                                "I need one of these options: " + ", ".join(options),
-                                _dump_cart(cart),
-                                _dump_state(state),
-                            )
+                            return ("I need one of these options: " + ", ".join(options), _dump_cart(cart), _dump_state(state))
                         cart[line_index].setdefault("choices", {})
                         cart[line_index]["choices"][mod["key"]] = chosen
                         cart[line_index].setdefault("choice_price_deltas", {})
@@ -904,20 +918,28 @@ def handle_message(
 
                     _recalc_line_total(cart[line_index])
 
-                    # clear modifier mode and move on
-                    state.pop("mode", None)
-                    state.pop("line_index", None)
-                    state.pop("mod_index", None)
+                    # Move to next required modifier
+                    next_idx = mod_index + 1
+                    while next_idx < len(mods) and not mods[next_idx].get("required", True):
+                        next_idx += 1
 
-                    nxt = _advance_to_next_step(menu, cart, state)
-                    if nxt:
-                        reply, _mode = nxt
-                        return reply, _dump_cart(cart), _dump_state(state)
+                    if next_idx < len(mods):
+                        state.update({"mode": "awaiting_modifier", "line_index": line_index, "mod_index": next_idx})
+                        nxt = mods[next_idx]
+                        return (f"Got it. {nxt.get('prompt')}\nOptions: " + ", ".join(nxt.get("options") or []), _dump_cart(cart), _dump_state(state))
 
-                    summary, _ = build_summary(cart, currency_symbol=cur)
-                    return "Nice.\n\n" + summary + "\n\n" + _next_prompt(menu), _dump_cart(cart), _dump_state(state)
+                    # Finished modifiers -> extras?
+                    extras = item.get("extras") or []
+                    if extras:
+                        state.update({"mode": "awaiting_extras", "line_index": line_index})
+                        extra_lines = [f"- {e['name']} ({cur}{float(e.get('price',0.0)):.2f})" for e in extras if e.get("name")]
+                        return ("Any extras?\n" + "\n".join(extra_lines) + "\n\nSay an extra name, or “no extras”.", _dump_cart(cart), _dump_state(state))
 
-        # if state was invalid, drop it
+                    # Done with this line. Clear mode and auto-advance to next incomplete line.
+                    state = {}
+                    # fallthrough to the auto-advance block at end
+
+        # invalid state -> wipe
         state = {}
 
     # ----------------------------
@@ -926,81 +948,64 @@ def handle_message(
     if state.get("mode") == "awaiting_extras":
         line_index = int(state.get("line_index", -1))
 
-        if 0 <= line_index < len(cart):
-            item_id = cart[line_index].get("item_id")
-            item = (menu.get("_index") or {}).get("items_by_id", {}).get(item_id)
+        if msg_norm in _NO_EXTRAS:
+            # Do NOT wipe the whole state; just exit extras mode then auto-advance
+            state = {}
+            # fallthrough to auto-advance block at end
+        else:
+            if 0 <= line_index < len(cart):
+                item_id = cart[line_index].get("item_id")
+                item = (menu.get("_index") or {}).get("items_by_id", {}).get(item_id)
+                if item:
+                    extras = item.get("extras") or []
+                    chosen_extra = _match_extra(extras, msg_raw, synonyms)
+                    if chosen_extra:
+                        cart[line_index].setdefault("extras", [])
+                        cart[line_index]["extras"].append(chosen_extra)
+                        _recalc_line_total(cart[line_index])
+                        return (f"Added extra: {chosen_extra.get('name')}. Add another extra, or say “no extras”.", _dump_cart(cart), _dump_state(state))
 
-            if msg_norm in _NO_EXTRAS:
-                # mark extras complete for this line
-                cart[line_index]["extras_done"] = True
+                    names = [e.get("name") for e in extras if e.get("name")]
+                    return ("Extras available: " + ", ".join(names) + ". Or say “no extras”.", _dump_cart(cart), _dump_state(state))
 
-                state.pop("mode", None)
-                state.pop("line_index", None)
-
-                nxt = _advance_to_next_step(menu, cart, state)
-                if nxt:
-                    reply, _mode = nxt
-                    summary, _ = build_summary(cart, currency_symbol=cur)
-                    return "All good. No extras.\n\n" + summary + "\n\n" + reply, _dump_cart(cart), _dump_state(state)
-
-                summary, _ = build_summary(cart, currency_symbol=cur)
-                return "All good. No extras.\n\n" + summary + "\n\n" + _next_prompt(menu), _dump_cart(cart), _dump_state(state)
-
-            if item:
-                extras = item.get("extras") or []
-                chosen_extra = _match_extra(extras, msg_raw, synonyms)
-                if chosen_extra:
-                    cart[line_index].setdefault("extras", [])
-                    cart[line_index]["extras"].append(chosen_extra)
-                    _recalc_line_total(cart[line_index])
-                    return (
-                        f"Added extra: {chosen_extra.get('name')}. Add another extra, or say “no extras”.",
-                        _dump_cart(cart),
-                        _dump_state(state),
-                    )
-
-                names = [e.get("name") for e in extras if e.get("name")]
-                return (
-                    "Extras available: " + ", ".join(names) + ". Or say “no extras”.",
-                    _dump_cart(cart),
-                    _dump_state(state),
-                )
-
-        state = {}
+            state = {}
 
     # ----------------------------
     # Add item flow (supports multi-part input)
+    # Key rule: add ALL items first, THEN ask questions in cart order.
     # ----------------------------
-
     cleaned_raw = _strip_filler_prefix(msg_raw)
-    cleaned_lower = cleaned_raw.lower()
 
+    # Protect menu phrases that contain and/& plus common combos
     idx = menu.get("_index") or {}
     menu_and_phrases = list(idx.get("and_phrases") or [])
     common_combos = [
-        "salt and pepper", "salt & pepper",
-        "sweet and sour", "sweet & sour",
-        "hot and sour", "hot & sour",
+        "salt & pepper",
+        "sweet & sour",
+        "hot & sour",
+        "salt and pepper",
+        "sweet and sour",
+        "hot and sour",
     ]
-    protected = _protect_and_phrases(cleaned_lower, menu_and_phrases + common_combos)
+
+    protected = _protect_phrases_with_and(cleaned_raw.lower(), menu_and_phrases + common_combos)
+
     msg_for_split = _normalize_text(protected, synonyms)
-
     parts = _split_intents(msg_for_split)
-    added_any = False
 
+    added_any = False
     for part in parts:
         qty, text = _parse_qty_prefix(part)
         item = _find_item_in_text(menu, text, synonyms)
 
         if not item:
+            # disambiguation
             matches = _find_items_by_keyword(menu, text, synonyms)
             if len(matches) > 1:
-                options = [
-                    f"- {m.get('name')} ({cur}{float(m.get('base_price', 0)):.2f})"
-                    for m in matches[:8]
-                ]
-                return "Which one did you mean?\n" + "\n".join(options), _dump_cart(cart), _dump_state(state)
+                options = [f"- {m.get('name')} ({cur}{float(m.get('base_price', 0)):.2f})" for m in matches[:8]]
+                return ("Which one did you mean?\n" + "\n".join(options), _dump_cart(cart), _dump_state(state))
 
+            # category typed
             cat2 = _find_category_in_text(menu, text, synonyms)
             if cat2 and not added_any:
                 return _render_category(menu, cat2, cur), _dump_cart(cart), _dump_state(state)
@@ -1008,8 +1013,7 @@ def handle_message(
             continue
 
         base_price = float(item.get("base_price", 0.0) or 0.0)
-        extras_done = not bool(item.get("extras") or [])
-        new_line = {
+        new_line: Dict[str, Any] = {
             "item_id": item.get("id"),
             "name": item.get("name"),
             "qty": qty,
@@ -1017,7 +1021,6 @@ def handle_message(
             "choices": {},
             "choice_price_deltas": {},
             "extras": [],
-            "extras_done": extras_done,  # persistent: whether we finished the extras prompt for this line
             "notes": "",
             "line_total": 0.0,
         }
@@ -1025,18 +1028,68 @@ def handle_message(
         cart.append(new_line)
         added_any = True
 
-    if added_any:
-        nxt = _advance_to_next_step(menu, cart, state)
-        if nxt:
-            reply, _mode = nxt
-            return reply, _dump_cart(cart), _dump_state(state)
+    # Auto-advance: find the first cart line that still needs required modifiers/extras
+    def _first_incomplete_line() -> Optional[Tuple[int, Dict[str, Any], Dict[str, Any], List[Dict[str, Any]]]]:
+        mi = (menu.get("_index") or {}).get("items_by_id", {}) or {}
+        for i, ln in enumerate(cart):
+            item_obj = mi.get(ln.get("item_id"))
+            if not item_obj:
+                continue
 
-        summary, _ = build_summary(cart, currency_symbol=cur)
-        return "Got it.\n\n" + summary + "\n\n" + _next_prompt(menu), _dump_cart(cart), _dump_state(state)
+            mods = _get_item_modifiers(item_obj)
+            # required modifiers not answered?
+            for mod_index, mod in enumerate(mods):
+                if not mod.get("required", True):
+                    continue
+                key = mod.get("key")
+                if key and not (ln.get("choices") or {}).get(key):
+                    return (i, ln, item_obj, mods)
 
-    # ----------------------------
-    # Continuation phrases
-    # ----------------------------
+            # extras prompt only if item has extras and user hasn't responded yet:
+            # We keep it simple: if extras exist and they haven't said "no extras" or chosen any,
+            # we ask once, but only AFTER modifiers are complete.
+            extras = item_obj.get("extras") or []
+            if extras and not ln.get("_extras_done"):
+                return (i, ln, item_obj, mods)
+
+        return None
+
+    if added_any or state == {}:
+        inc = _first_incomplete_line()
+        if inc:
+            i, ln, item_obj, mods = inc
+
+            # if missing required modifiers
+            for mod_index, mod in enumerate(mods):
+                if not mod.get("required", True):
+                    continue
+                key = mod.get("key")
+                if key and not (ln.get("choices") or {}).get(key):
+                    state = {"mode": "awaiting_modifier", "line_index": i, "mod_index": mod_index}
+                    return (
+                        f"Nice. For your {item_obj.get('name')}, {mod.get('prompt')}\nOptions: "
+                        + ", ".join(mod.get("options") or []),
+                        _dump_cart(cart),
+                        _dump_state(state),
+                    )
+
+            # else extras
+            extras = item_obj.get("extras") or []
+            if extras and not ln.get("_extras_done"):
+                state = {"mode": "awaiting_extras", "line_index": i}
+                extra_lines = [f"- {e['name']} ({cur}{float(e.get('price',0.0)):.2f})" for e in extras if e.get("name")]
+                return (
+                    "Any extras?\n" + "\n".join(extra_lines) + "\n\nSay an extra name, or “no extras”.",
+                    _dump_cart(cart),
+                    _dump_state(state),
+                )
+
+        # nothing incomplete, summary
+        if added_any:
+            summary, _ = build_summary(cart, currency_symbol=cur)
+            return ("Got it.\n\n" + summary + "\n\n" + _next_prompt(menu), _dump_cart(cart), _dump_state(state))
+
+    # If user is continuing
     if _is_continue_order(msg_norm):
         concept = _concept_from_message(msg_norm)
         if concept:
@@ -1046,11 +1099,7 @@ def handle_message(
 
         cats = _all_category_names(menu)
         if cats:
-            return (
-                "No problem. What would you like to add?\nCategories: " + ", ".join(cats),
-                _dump_cart(cart),
-                _dump_state(state),
-            )
-        return "No problem. Tell me what item you want to add.", _dump_cart(cart), _dump_state(state)
+            return ("No problem. What would you like to add?\nCategories: " + ", ".join(cats), _dump_cart(cart), _dump_state(state))
+        return ("No problem. Tell me what item you want to add.", _dump_cart(cart), _dump_state(state))
 
     return _dynamic_help(menu), _dump_cart(cart), _dump_state(state)
