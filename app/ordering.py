@@ -22,6 +22,9 @@ _DEFAULT_SYNONYMS: Dict[str, str] = {
     "donner": "doner",
     "pepperonni": "pepperoni",
     "margarita": "margherita",
+    # common drink variants
+    "coca-cola": "coca cola",
+    "cocacola": "coca cola",
 }
 
 _GREETINGS = {
@@ -58,8 +61,14 @@ _QTY_RE = re.compile(r"^\s*(\d+)\s*[x×]\s*(.+?)\s*$", re.IGNORECASE)
 # basic punctuation strip for matching
 _PUNCT_RE = re.compile(r"[^a-z0-9\s]+")
 
-# token to protect "and" inside item phrases (so the splitter doesn't break them)
+# token to protect "and/&" inside item phrases (so the splitter doesn't break them)
 _AND_TOKEN = " __AND__ "
+
+# Modifier option price deltas like "Large (+£2.00)" or "(+2.00)"
+_PRICE_DELTA_RE = re.compile(
+    r"\(\s*\+\s*(?:£\s*)?([0-9]+(?:\.[0-9]+)?)\s*\)",
+    re.IGNORECASE,
+)
 
 
 # ----------------------------
@@ -91,7 +100,12 @@ def _strip_filler_prefix(raw: str) -> str:
 
     # common "order intent" fluff
     s = re.sub(r"^\s*(hi|hello|hey)\b[,\s]*", "", s, flags=re.IGNORECASE)
-    s = re.sub(r"^\s*(i\s*would\s*like|i'?d\s*like|can\s*i\s*get|could\s*i\s*get|may\s*i\s*have)\b[,\s]*", "", s, flags=re.IGNORECASE)
+    s = re.sub(
+        r"^\s*(i\s*would\s*like|i'?d\s*like|can\s*i\s*get|could\s*i\s*get|may\s*i\s*have)\b[,\s]*",
+        "",
+        s,
+        flags=re.IGNORECASE,
+    )
 
     # trailing please (keeps inside item names safe)
     s = re.sub(r"\bplease\b\s*$", "", s, flags=re.IGNORECASE)
@@ -101,18 +115,21 @@ def _strip_filler_prefix(raw: str) -> str:
 
 def _protect_and_phrases(raw_lower: str, phrases: List[str]) -> str:
     """
-    Replaces "and" inside protected phrases with __AND__ token
-    so splitting on ' and ' doesn't break them.
+    Replaces "and" / "&" inside protected phrases with __AND__ token
+    so splitting on ' and ' or '&' doesn't break them.
     """
     s = raw_lower
     for ph in phrases:
         ph = (ph or "").strip().lower()
         if not ph:
             continue
-        if " and " not in ph:
-            continue
-        protected = ph.replace(" and ", _AND_TOKEN.strip())
-        s = s.replace(ph, protected)
+
+        variants = {ph, ph.replace(" & ", " and "), ph.replace(" and ", " & ")}
+        for v in variants:
+            if " and " not in v and " & " not in v:
+                continue
+            protected = v.replace(" and ", _AND_TOKEN.strip()).replace(" & ", _AND_TOKEN.strip())
+            s = s.replace(v, protected)
     return s
 
 
@@ -155,6 +172,18 @@ def _fuzzy_best_key(keys: List[str], query: str, cutoff: float = 0.72) -> Option
     return matches[0] if matches else None
 
 
+def _extract_price_delta(choice_text: str) -> float:
+    if not choice_text:
+        return 0.0
+    m = _PRICE_DELTA_RE.search(choice_text)
+    if not m:
+        return 0.0
+    try:
+        return float(m.group(1))
+    except Exception:
+        return 0.0
+
+
 # ----------------------------
 # Menu indexing (new schema + back-compat)
 # ----------------------------
@@ -185,7 +214,9 @@ def _build_menu_index(menu: Dict[str, Any], synonyms: Dict[str, str]) -> Dict[st
     idx: Dict[str, Any] = {}
 
     cats_by_id: Dict[str, Dict[str, Any]] = {}
-    cats_by_name: Dict[str, Dict[str, Any]] = {}
+    cats_by_name_raw: Dict[str, Dict[str, Any]] = {}
+    cats_by_name_norm: Dict[str, Dict[str, Any]] = {}
+    cats_by_name_norm_syn: Dict[str, Dict[str, Any]] = {}
 
     items_by_id: Dict[str, Dict[str, Any]] = {}
 
@@ -207,12 +238,16 @@ def _build_menu_index(menu: Dict[str, Any], synonyms: Dict[str, str]) -> Dict[st
     categories = menu.get("categories") or []
     if isinstance(categories, list):
         for c in categories:
+            if not isinstance(c, dict):
+                continue
             cid = (c.get("id") or "").strip()
             cname = (c.get("name") or "").strip()
             if cid:
                 cats_by_id[cid] = c
             if cname:
-                cats_by_name[cname.lower()] = c
+                cats_by_name_raw[cname.lower()] = c
+                cats_by_name_norm[_normalize_text(cname, {})] = c
+                cats_by_name_norm_syn[_normalize_text(cname, synonyms)] = c
 
             # back-compat nested items
             for it in (c.get("items") or []):
@@ -226,15 +261,17 @@ def _build_menu_index(menu: Dict[str, Any], synonyms: Dict[str, str]) -> Dict[st
                 _index_item(it)
 
     idx["cats_by_id"] = cats_by_id
-    idx["cats_by_name"] = cats_by_name
+    idx["cats_by_name_raw"] = cats_by_name_raw
+    idx["cats_by_name_norm"] = cats_by_name_norm
+    idx["cats_by_name_norm_syn"] = cats_by_name_norm_syn
 
     idx["items_by_id"] = items_by_id
     idx["items_by_name_raw"] = items_by_name_raw
     idx["items_by_name_norm"] = items_by_name_norm
     idx["items_by_name_norm_syn"] = items_by_name_norm_syn
 
-    # For splitting protection: collect item names that contain " and "
-    idx["and_phrases"] = [nm for nm in items_by_name_raw.keys() if " and " in nm]
+    # For splitting protection: collect item names that contain " and " or " & "
+    idx["and_phrases"] = [nm for nm in items_by_name_raw.keys() if (" and " in nm) or (" & " in nm)]
 
     menu["_index"] = idx
     return menu
@@ -244,6 +281,8 @@ def _all_category_names(menu: Dict[str, Any]) -> List[str]:
     cats = menu.get("categories") or []
     out: List[str] = []
     for c in cats:
+        if not isinstance(c, dict):
+            continue
         n = (c.get("name") or "").strip()
         if n:
             out.append(n)
@@ -258,19 +297,27 @@ def _items_in_category(menu: Dict[str, Any], category_id_or_name: str) -> List[D
     if not cid:
         return []
 
-    cats_by_name = idx.get("cats_by_name") or {}
     cats_by_id = idx.get("cats_by_id") or {}
+    cats_by_name_raw = idx.get("cats_by_name_raw") or {}
+    cats_by_name_norm = idx.get("cats_by_name_norm") or {}
+    cats_by_name_norm_syn = idx.get("cats_by_name_norm_syn") or {}
 
-    cat_obj = cats_by_id.get(cid) or cats_by_name.get(cid.lower())
+    # resolve category
+    cat_obj = (
+        cats_by_id.get(cid)
+        or cats_by_name_raw.get(cid.lower())
+        or cats_by_name_norm.get(_normalize_text(cid, {}))
+        or cats_by_name_norm_syn.get(_normalize_text(cid, _menu_synonyms(menu)))
+    )
     if cat_obj:
         cid = (cat_obj.get("id") or "").strip() or cid
 
     out: List[Dict[str, Any]] = []
-
     for it in items:
         if (it.get("category_id") or "").strip() == cid:
             out.append(it)
 
+    # back-compat nested items
     if not out and cat_obj and cat_obj.get("items"):
         out = list(cat_obj.get("items") or [])
 
@@ -336,15 +383,25 @@ def _find_items_by_keyword(menu: Dict[str, Any], text: str, synonyms: Dict[str, 
 
 
 def _find_category_in_text(menu: Dict[str, Any], text: str, synonyms: Dict[str, str]) -> Optional[Dict[str, Any]]:
-    t = _normalize_text(text, synonyms)
-    if not t:
+    t_raw = (text or "").strip()
+    if not t_raw:
         return None
 
     idx = menu.get("_index") or {}
-    cats_by_name: Dict[str, Dict[str, Any]] = idx.get("cats_by_name") or {}
-    keys = list(cats_by_name.keys())
-    best = _fuzzy_best_key(keys, t, cutoff=0.70)
-    return cats_by_name.get(best) if best else None
+    candidates = [
+        (idx.get("cats_by_name_raw") or {}, t_raw.lower(), 0.70),
+        (idx.get("cats_by_name_norm") or {}, _normalize_text(t_raw, {}), 0.70),
+        (idx.get("cats_by_name_norm_syn") or {}, _normalize_text(t_raw, synonyms), 0.70),
+    ]
+
+    for lookup, q, cutoff in candidates:
+        if not q:
+            continue
+        keys = list(lookup.keys())
+        best = _fuzzy_best_key(keys, q, cutoff=cutoff)
+        if best:
+            return lookup.get(best)
+    return None
 
 
 # ----------------------------
@@ -442,7 +499,16 @@ def _recalc_line_total(line: Dict[str, Any]) -> None:
         except Exception:
             pass
 
-    line["line_total"] = round(qty * (base + extras_total), 2)
+    mods_total = 0.0
+    deltas = line.get("choice_price_deltas") or {}
+    if isinstance(deltas, dict):
+        for v in deltas.values():
+            try:
+                mods_total += float(v or 0.0)
+            except Exception:
+                pass
+
+    line["line_total"] = round(qty * (base + mods_total + extras_total), 2)
 
 
 def _cart_total(cart: List[Dict[str, Any]]) -> float:
@@ -474,6 +540,7 @@ def build_summary(cart: List[Dict[str, Any]], currency_symbol: str = "£") -> Tu
                 if isinstance(v, list):
                     return ", ".join([str(x) for x in v if x])
                 return str(v)
+
             bits.append(" | ".join([f"{k}: {_fmt(v)}" for k, v in choices.items() if v]))
 
         if extras:
@@ -567,6 +634,7 @@ def _get_item_modifiers(item: Dict[str, Any]) -> List[Dict[str, Any]]:
             })
         return out
 
+    # Back-compat "options" dict
     opts = item.get("options")
     if isinstance(opts, dict) and opts:
         out = []
@@ -680,13 +748,28 @@ def handle_message(
         target_text = msg_norm.split(" ", 1)[1].strip()
         target = _find_item_in_text(menu, target_text, synonyms)
         if not target:
-            return ("Tell me which item to remove (e.g. “remove Margherita Pizza”)."), _dump_cart(cart), _dump_state(state)
+            return ("Tell me which item to remove (e.g. “remove Egg Fried Rice”)."), _dump_cart(cart), _dump_state(state)
 
-        before = len(cart)
-        cart = [ln for ln in cart if (ln.get("item_id") != target.get("id"))]
-        if len(cart) == before:
+        target_id = target.get("id")
+        removed_any = False
+
+        new_cart: List[Dict[str, Any]] = []
+        for ln in cart:
+            if not removed_any and target_id and ln.get("item_id") == target_id:
+                qty = int(ln.get("qty", 1) or 1)
+                if qty > 1:
+                    ln["qty"] = qty - 1
+                    _recalc_line_total(ln)
+                    new_cart.append(ln)
+                # if qty == 1, drop the line
+                removed_any = True
+                continue
+            new_cart.append(ln)
+
+        if not removed_any:
             return ("That item isn’t in your basket."), _dump_cart(cart), _dump_state(state)
 
+        cart = new_cart
         summary, _ = build_summary(cart, currency_symbol=cur)
         return ("Removed it.\n\n" + summary + "\n\n" + _next_prompt(menu)), _dump_cart(cart), _dump_state(state)
 
@@ -749,6 +832,8 @@ def handle_message(
                             )
                         cart[line_index].setdefault("choices", {})
                         cart[line_index]["choices"][mod["key"]] = picked
+                        cart[line_index].setdefault("choice_price_deltas", {})
+                        cart[line_index]["choice_price_deltas"][mod["key"]] = sum(_extract_price_delta(x) for x in picked)
                     else:
                         chosen = _match_choice(options, msg_raw, synonyms)
                         if not chosen:
@@ -759,6 +844,8 @@ def handle_message(
                             )
                         cart[line_index].setdefault("choices", {})
                         cart[line_index]["choices"][mod["key"]] = chosen
+                        cart[line_index].setdefault("choice_price_deltas", {})
+                        cart[line_index]["choice_price_deltas"][mod["key"]] = _extract_price_delta(chosen)
 
                     _recalc_line_total(cart[line_index])
 
@@ -812,7 +899,10 @@ def handle_message(
         line_index = int(state.get("line_index", -1))
 
         if msg_norm in _NO_EXTRAS:
-            state = {}
+            # IMPORTANT: do not wipe the whole state or we lose pending_parts
+            state.pop("mode", None)
+            state.pop("line_index", None)
+
             nxt_part = _pop_pending_part(state)
             if nxt_part:
                 summary, _ = build_summary(cart, currency_symbol=cur)
@@ -856,10 +946,14 @@ def handle_message(
     cleaned_raw = _strip_filler_prefix(msg_raw)
     cleaned_lower = cleaned_raw.lower()
 
-    # 2) protect "and" inside known phrases + common UK Chinese/takeaway combos
+    # 2) protect "and/&" inside known phrases + common UK Chinese/takeaway combos
     idx = menu.get("_index") or {}
     menu_and_phrases = list(idx.get("and_phrases") or [])
-    common_combos = ["salt and pepper", "sweet and sour"]
+    common_combos = [
+        "salt and pepper", "salt & pepper",
+        "sweet and sour", "sweet & sour",
+        "hot and sour", "hot & sour",
+    ]
     protected = _protect_and_phrases(cleaned_lower, menu_and_phrases + common_combos)
 
     # 3) normalize AFTER protection (so splitting works)
@@ -894,6 +988,7 @@ def handle_message(
             "qty": qty,
             "base_price": base_price,
             "choices": {},
+            "choice_price_deltas": {},
             "extras": [],
             "notes": "",
             "line_total": 0.0,

@@ -99,7 +99,8 @@ def _safe_json_list(raw: str | None) -> list:
 
 
 def _currency_symbol(menu_dict: Dict[str, Any]) -> str:
-    cur = (menu_dict.get("restaurant", {}) or {}).get("currency", settings.currency_default)
+    # Accurate for your menu.json schema
+    cur = ((menu_dict.get("meta") or {}).get("currency") or settings.currency_default).upper()
     return "£" if cur == "GBP" else ""
 
 
@@ -145,6 +146,11 @@ def get_or_create_draft(db: Session, user_id: int) -> Order:
 # -------------------
 @app.get("/")
 def root():
+    return {"ok": True, "service": "takeaway-api"}
+
+
+@app.get("/health")
+def health():
     return {"ok": True, "service": "takeaway-api"}
 
 
@@ -287,4 +293,3 @@ def confirm(user_id: int = Depends(require_user_id), db: Session = Depends(get_d
     )
 
     return {"ok": True, "order_id": order.id, "status": order.status}
-
