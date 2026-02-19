@@ -98,8 +98,7 @@ def _safe_json_list(raw: str | None) -> list:
         return []
 
 
-def _currency_symbol(menu_dict: Dict[str, Any]) -> str:
-    # Accurate for your menu.json schema
+def _currency_symbol_from_menu(menu_dict: Dict[str, Any]) -> str:
     cur = ((menu_dict.get("meta") or {}).get("currency") or settings.currency_default).upper()
     return "£" if cur == "GBP" else ""
 
@@ -149,11 +148,6 @@ def root():
     return {"ok": True, "service": "takeaway-api"}
 
 
-@app.get("/health")
-def health():
-    return {"ok": True, "service": "takeaway-api"}
-
-
 # -------------------
 # Auth
 # -------------------
@@ -191,6 +185,33 @@ def menu():
 
 
 # -------------------
+# Order reset (DB-level)  ✅ this fixes your "Reset still shows old items"
+# -------------------
+@app.post("/order/reset")
+def reset_order(user_id: int = Depends(require_user_id), db: Session = Depends(get_db)):
+    order = (
+        db.query(Order)
+        .filter(Order.user_id == user_id, Order.status == "draft")
+        .order_by(Order.id.desc())
+        .first()
+    )
+    if not order:
+        # no draft = already clean
+        return {"ok": True, "message": "No draft to reset"}
+
+    order.items_json = "[]"
+    order.state_json = "{}"
+    order.summary_text = ""
+    order.updated_at = datetime.utcnow()
+
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+
+    return {"ok": True, "message": "Draft reset"}
+
+
+# -------------------
 # Chat ordering
 # -------------------
 @app.post("/chat")
@@ -225,7 +246,7 @@ async def chat(payload: ChatIn, user_id: int = Depends(require_user_id), db: Ses
     order.state_json = updated_state_json
 
     items = _safe_json_list(order.items_json)
-    symbol = _currency_symbol(menu_dict)
+    symbol = _currency_symbol_from_menu(menu_dict)
     summary, _total = build_summary(items, currency_symbol=symbol)
 
     order.summary_text = summary
@@ -242,42 +263,6 @@ async def chat(payload: ChatIn, user_id: int = Depends(require_user_id), db: Ses
         "items": items,
     }
 
-# ----------
-# New Order
-# ----------
-@app.post("/order/new")
-def new_order(user_id: int = Depends(require_user_id),
-              db: Session = Depends(get_db)):
-
-    # close existing draft (if any)
-    draft = (
-        db.query(Order)
-        .filter(Order.user_id == user_id, Order.status == "draft")
-        .order_by(Order.id.desc())
-        .first()
-    )
-
-    if draft:
-        draft.status = "abandoned"
-        draft.updated_at = datetime.utcnow()
-        db.add(draft)
-        db.commit()
-
-    # create fresh draft
-    order = Order(
-        user_id=user_id,
-        status="draft",
-        items_json="[]",
-        state_json="{}",
-        summary_text="",
-        updated_at=datetime.utcnow(),
-    )
-
-    db.add(order)
-    db.commit()
-    db.refresh(order)
-
-    return {"ok": True, "order_id": order.id}
 
 # -------------------
 # Confirm order
@@ -298,7 +283,7 @@ def confirm(user_id: int = Depends(require_user_id), db: Session = Depends(get_d
         raise HTTPException(status_code=400, detail="Order is empty")
 
     menu_dict = load_menu()
-    symbol = _currency_symbol(menu_dict)
+    symbol = _currency_symbol_from_menu(menu_dict)
     summary, _total = build_summary(items, currency_symbol=symbol)
 
     order.summary_text = summary
