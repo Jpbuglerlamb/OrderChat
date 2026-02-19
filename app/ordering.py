@@ -779,6 +779,15 @@ def handle_message(
         if not target:
             return ("Tell me which item to remove (e.g. “remove Egg Fried Rice”)."), _dump_cart(cart), _dump_state(state)
 
+        if msg_norm in {"reset", "clear", "start over", "new order"}:
+            cart = []
+            state = {}
+            return (
+                "Cleared ✅ Starting a fresh order.",
+                _dump_cart(cart),
+                _dump_state(state),
+            )
+
         target_id = target.get("id")
         removed_any = False
 

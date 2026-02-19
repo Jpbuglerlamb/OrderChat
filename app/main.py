@@ -242,6 +242,42 @@ async def chat(payload: ChatIn, user_id: int = Depends(require_user_id), db: Ses
         "items": items,
     }
 
+# ----------
+# New Order
+# ----------
+@app.post("/order/new")
+def new_order(user_id: int = Depends(require_user_id),
+              db: Session = Depends(get_db)):
+
+    # close existing draft (if any)
+    draft = (
+        db.query(Order)
+        .filter(Order.user_id == user_id, Order.status == "draft")
+        .order_by(Order.id.desc())
+        .first()
+    )
+
+    if draft:
+        draft.status = "abandoned"
+        draft.updated_at = datetime.utcnow()
+        db.add(draft)
+        db.commit()
+
+    # create fresh draft
+    order = Order(
+        user_id=user_id,
+        status="draft",
+        items_json="[]",
+        state_json="{}",
+        summary_text="",
+        updated_at=datetime.utcnow(),
+    )
+
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+
+    return {"ok": True, "order_id": order.id}
 
 # -------------------
 # Confirm order
