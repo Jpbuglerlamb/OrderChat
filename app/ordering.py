@@ -382,26 +382,60 @@ def _find_items_by_keyword(menu: Dict[str, Any], text: str, synonyms: Dict[str, 
     return out
 
 
-def _find_category_in_text(menu: Dict[str, Any], text: str, synonyms: Dict[str, str]) -> Optional[Dict[str, Any]]:
-    t_raw = (text or "").strip()
-    if not t_raw:
-        return None
-
+def _find_item_in_text(menu: Dict[str, Any], text: str, synonyms: Dict[str, str]) -> Optional[Dict[str, Any]]:
     idx = menu.get("_index") or {}
-    candidates = [
-        (idx.get("cats_by_name_raw") or {}, t_raw.lower(), 0.70),
-        (idx.get("cats_by_name_norm") or {}, _normalize_text(t_raw, {}), 0.70),
-        (idx.get("cats_by_name_norm_syn") or {}, _normalize_text(t_raw, synonyms), 0.70),
+
+    raw_q = (text or "").strip().lower()
+    norm_q = _normalize_text(text, {})
+    syn_q = _normalize_text(text, synonyms)
+
+    queries = [q for q in [raw_q, norm_q, syn_q] if q]
+
+    lookups = [
+        idx.get("items_by_name_raw") or {},
+        idx.get("items_by_name_norm") or {},
+        idx.get("items_by_name_norm_syn") or {},
     ]
 
-    for lookup, q, cutoff in candidates:
-        if not q:
-            continue
+    # -----------------------------
+    # STEP 1: token containment (NEW)
+    # -----------------------------
+    for q in queries:
+        q_tokens = set(q.split())
+        for lookup in lookups:
+            for name, item in lookup.items():
+                name_tokens = set(name.split())
+
+                # require strong token overlap
+                overlap = q_tokens.intersection(name_tokens)
+                if overlap and len(overlap) >= max(1, len(q_tokens) // 2):
+                    return item
+
+    # -----------------------------
+    # STEP 2: fuzzy fallback
+    # -----------------------------
+    def _try(lookup: Dict[str, Dict[str, Any]], q: str, cutoff: float):
+        if not q or not lookup:
+            return None
         keys = list(lookup.keys())
         best = _fuzzy_best_key(keys, q, cutoff=cutoff)
-        if best:
-            return lookup.get(best)
+        return lookup.get(best) if best else None
+
+    for q in queries:
+        hit = _try(idx.get("items_by_name_raw") or {}, q, 0.80)
+        if hit:
+            return hit
+
+        hit = _try(idx.get("items_by_name_norm") or {}, q, 0.65)
+        if hit:
+            return hit
+
+        hit = _try(idx.get("items_by_name_norm_syn") or {}, q, 0.65)
+        if hit:
+            return hit
+
     return None
+
 
 
 # ----------------------------
