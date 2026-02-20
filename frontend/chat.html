@@ -2,8 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta
+    name="viewport"
+    content="width=device-width,initial-scale=1,viewport-fit=cover"
+  />
   <title>Order</title>
+
   <style>
     :root{
       --bg: #ffffff;
@@ -19,8 +23,15 @@
       --botText: #111111;
 
       --primary: #2b6cff;
-      --shadow: 0 6px 18px rgba(0,0,0,.06);
+      --shadow: 0 10px 30px rgba(0,0,0,.08);
       --radius: 16px;
+
+      /* keyboard offset (JS sets this) */
+      --kb: 0px;
+
+      /* spacing */
+      --padX: 12px;
+      --composerPad: 12px;
     }
 
     @media (prefers-color-scheme: dark){
@@ -37,45 +48,50 @@
         --botBg: rgba(255,255,255,.10);
         --botText: #f9fafb;
 
-        --shadow: 0 8px 24px rgba(0,0,0,.35);
+        --shadow: 0 12px 40px rgba(0,0,0,.35);
       }
     }
 
-    * { box-sizing: border-box; }
-    html, body { height: 100%; }
+    *{ box-sizing: border-box; }
+    html, body{ height: 100%; }
     body{
-      margin:0;
+      margin: 0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
       background: var(--bg);
       color: var(--text);
       overscroll-behavior: none;
+      -webkit-text-size-adjust: 100%;
     }
 
-    /* App layout */
+    /* --- App shell --- */
     .app{
-      height: 100dvh;
+      height: 100svh; /* stable viewport */
+      height: 100dvh; /* dynamic viewport */
       display: flex;
       flex-direction: column;
+      position: relative;
     }
 
     header{
       padding: 14px 16px;
       border-bottom: 1px solid var(--line);
+      background: var(--bg);
       position: sticky;
       top: 0;
-      background: var(--bg);
       z-index: 10;
     }
-    .title{
+
+    .titleRow{
       display:flex;
       align-items:flex-start;
       justify-content:space-between;
       gap: 12px;
     }
+
     h1{
       margin:0;
       font-size: 18px;
-      line-height: 1.2;
+      line-height: 1.15;
       letter-spacing: -0.2px;
     }
     .sub{
@@ -91,23 +107,18 @@
       border-radius: 999px;
       white-space: nowrap;
       align-self: flex-start;
+      user-select:none;
     }
 
-    /* Chat area */
-    .content{
-      flex: 1;
-      overflow: hidden;
-      display:flex;
-      flex-direction: column;
-    }
-
+    /* --- Chips --- */
     .chips{
-      padding: 10px 12px;
+      padding: 10px var(--padX);
       border-bottom: 1px solid var(--line);
       display:flex;
       gap: 8px;
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
+      background: var(--bg);
     }
     .chip{
       border: 1px solid var(--line);
@@ -119,14 +130,28 @@
       cursor: pointer;
       user-select:none;
       flex: 0 0 auto;
+      transition: transform .08s ease;
+    }
+    .chip:active{ transform: scale(.98); }
+
+    /* --- Content area (chat scroll lives here) --- */
+    .content{
+      flex: 1;
+      min-height: 0; /* CRUCIAL: allows inner scroll */
+      display: flex;
+      flex-direction: column;
     }
 
     .chat{
       flex: 1;
+      min-height: 0;
       overflow-y: auto;
-      padding: 14px 12px 10px;
       -webkit-overflow-scrolling: touch;
+      padding: 14px var(--padX) 18px;
+      /* leave room for fixed composer (JS will fine-tune) */
+      padding-bottom: calc(18px + var(--kb));
     }
+
     .row{
       display:flex;
       margin: 10px 0;
@@ -134,11 +159,16 @@
     .row.user{ justify-content:flex-end; }
     .row.bot{ justify-content:flex-start; }
 
+    .stack{
+      max-width: 86%;
+      display:flex;
+      flex-direction:column;
+      gap: 6px;
+    }
+
     .bubble{
-      max-width: 82%;
       padding: 10px 12px;
       border-radius: var(--radius);
-      box-shadow: none;
       line-height: 1.35;
       font-size: 15px;
       white-space: pre-wrap;
@@ -158,13 +188,12 @@
     .meta{
       font-size: 11px;
       color: var(--muted);
-      margin-top: 6px;
       padding: 0 4px;
     }
 
-    /* Summary card */
+    /* --- Summary card --- */
     .summaryCard{
-      margin: 10px 0 0;
+      margin-top: 10px;
       border: 1px solid var(--line);
       background: var(--bg);
       border-radius: 14px;
@@ -183,11 +212,23 @@
       white-space: pre-wrap;
     }
 
-    /* Composer */
+    /* --- Composer (fixed to visible viewport bottom) --- */
     .composer{
-      border-top: 1px solid var(--line);
-      padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      transform: translateY(calc(-1 * var(--kb)));
       background: var(--bg);
+      border-top: 1px solid var(--line);
+      padding: var(--composerPad) var(--composerPad) calc(var(--composerPad) + env(safe-area-inset-bottom));
+      z-index: 50;
+    }
+
+    .composerInner{
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 0 0;
     }
 
     .inputRow{
@@ -195,6 +236,7 @@
       gap: 10px;
       align-items:center;
     }
+
     input{
       flex:1;
       padding: 12px 12px;
@@ -202,12 +244,16 @@
       border: 1px solid var(--line);
       background: transparent;
       color: var(--text);
+      font-size: 16px; /* prevents iOS zoom */
       outline: none;
-      font-size: 16px;
+
+      -webkit-appearance: none;
+      appearance: none;
+      box-shadow: none;
     }
     input:focus{
       border-color: rgba(43,108,255,.55);
-      box-shadow: 0 0 0 4px rgba(43,108,255,.12);
+      box-shadow: 0 0 0 3px rgba(43,108,255,.14);
     }
 
     button{
@@ -216,7 +262,7 @@
       border: 0;
       background: var(--primary);
       color: white;
-      font-weight: 600;
+      font-weight: 700;
       font-size: 15px;
       cursor:pointer;
       min-width: 92px;
@@ -224,10 +270,13 @@
       align-items:center;
       justify-content:center;
       gap:8px;
+      transition: transform .08s ease, opacity .15s ease;
     }
+    button:active{ transform: scale(.98); }
     button:disabled{
       opacity: .55;
       cursor:not-allowed;
+      transform: none;
     }
 
     .spinner{
@@ -241,8 +290,12 @@
     }
     .sending .spinner{ display:inline-block; }
 
-    @keyframes spin{
-      to{ transform: rotate(360deg); }
+    @keyframes spin{ to{ transform: rotate(360deg); } }
+
+    /* Safe spacing so the last message isn't hidden behind fixed composer */
+    .bottomSpacer{
+      height: 120px; /* JS will adjust */
+      flex: 0 0 auto;
     }
   </style>
 </head>
@@ -250,7 +303,7 @@
 <body>
   <div class="app">
     <header>
-      <div class="title">
+      <div class="titleRow">
         <div>
           <h1 id="title">Ordering</h1>
           <div class="sub" id="subtitle"></div>
@@ -259,20 +312,28 @@
       </div>
     </header>
 
+    <div class="chips" id="chips">
+      <div class="chip" data-msg="menu">Menu</div>
+      <div class="chip" data-msg="salt and pepper chicken">Salt & Pepper Chicken</div>
+      <div class="chip" data-msg="egg fried rice">Egg Fried Rice</div>
+      <div class="chip" data-msg="spring rolls">Spring Rolls</div>
+      <div class="chip" data-action="reset">Reset</div>
+    </div>
+
     <div class="content">
-      <div class="chips">
-        <div class="chip" data-msg="menu">Menu</div>
-        <div class="chip" data-msg="salt and pepper chicken">Salt & Pepper Chicken</div>
-        <div class="chip" data-msg="egg fried rice">Egg Fried Rice</div>
-        <div class="chip" data-msg="spring rolls">Spring Rolls</div>
-        <div class="chip" data-msg="reset">Reset</div>
-      </div>
-
       <div class="chat" id="chat"></div>
+      <div class="bottomSpacer" id="bottomSpacer"></div>
+    </div>
 
-      <div class="composer">
+    <div class="composer" id="composer">
+      <div class="composerInner">
         <div class="inputRow">
-          <input id="input" autocomplete="off" placeholder="Type your order... e.g. salt & pepper chicken + egg fried rice" />
+          <input
+            id="input"
+            autocomplete="off"
+            inputmode="text"
+            placeholder="Type your order… e.g. salt & pepper chicken + egg fried rice"
+          />
           <button id="send">
             <span class="spinner"></span>
             <span class="btnText">Send</span>
@@ -300,6 +361,8 @@
   const subtitleEl = document.getElementById("subtitle");
   const summaryEl = document.getElementById("summary");
   const summaryCard = document.getElementById("summaryCard");
+  const composerEl = document.getElementById("composer");
+  const bottomSpacer = document.getElementById("bottomSpacer");
 
   titleEl.textContent = `Order: ${slug}`;
   subtitleEl.textContent = `Chat endpoint: /r/${slug}/chat`;
@@ -309,9 +372,16 @@
     return d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
   }
 
+  function scrollToBottom(){
+    chatEl.scrollTop = chatEl.scrollHeight;
+  }
+
   function addMsg(text, who){
     const row = document.createElement("div");
     row.className = "row " + who;
+
+    const stack = document.createElement("div");
+    stack.className = "stack";
 
     const bubble = document.createElement("div");
     bubble.className = "bubble " + who;
@@ -321,15 +391,12 @@
     meta.className = "meta";
     meta.textContent = nowTime();
 
-    const wrap = document.createElement("div");
-    wrap.appendChild(bubble);
-    wrap.appendChild(meta);
+    stack.appendChild(bubble);
+    stack.appendChild(meta);
+    row.appendChild(stack);
 
-    row.appendChild(wrap);
     chatEl.appendChild(row);
-
-    // scroll chat container, not window
-    chatEl.scrollTop = chatEl.scrollHeight;
+    scrollToBottom();
   }
 
   function isGreeting(s){
@@ -351,13 +418,35 @@
 
   function updateSummary(summary){
     if(summary && String(summary).trim()){
-      // remove any duplicated prefix if your backend includes "Order summary:"
       const cleaned = String(summary).replace(/^Order summary:\s*/i, "");
       summaryEl.textContent = cleaned;
       summaryCard.style.display = "block";
     }else{
       summaryEl.textContent = "";
       summaryCard.style.display = "none";
+    }
+  }
+
+  async function apiChat(message){
+    const res = await fetch(`/r/${slug}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message })
+    });
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(data.detail || "Request failed");
+    return data;
+  }
+
+  async function apiReset(){
+    // If you later wire auth/guest, you can call your real endpoint here.
+    // For now: try calling a restaurant-scoped "reset" message OR do local reset.
+    try{
+      // If your backend supports "reset" via chat, this is enough:
+      await apiChat("reset");
+      return true;
+    }catch(e){
+      return false;
     }
   }
 
@@ -368,55 +457,94 @@
     inputEl.value = "";
     addMsg(text, "user");
 
-    // Friendly waiter behaviour for greetings (don’t hit backend)
     if(isGreeting(text)){
       addMsg("Hey! 👋 What can I get you today? You can say “menu” or just type items like “salt & pepper chicken + egg fried rice”.", "bot");
       inputEl.focus();
       return;
     }
 
-    // Optional: reset keyword handled client-side (still call backend later if you want)
-    if(text.toLowerCase() === "reset"){
-      addMsg("Resetting your draft…", "bot");
-      updateSummary("");
-      inputEl.focus();
-      return;
-    }
-
     setSending(true);
-
     try{
-      const res = await fetch(`/r/${slug}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text })
-      });
-
-      const data = await res.json();
-      if(!res.ok) throw new Error(data.detail || "Request failed");
-
+      const data = await apiChat(text);
       addMsg(data.reply || "(no reply)", "bot");
       updateSummary(data.summary || "");
-
     }catch(e){
       addMsg("Sorry, something went wrong. Try again in a second.", "bot");
       console.error(e);
     }finally{
       setSending(false);
       inputEl.focus();
-      chatEl.scrollTop = chatEl.scrollHeight;
+      scrollToBottom();
     }
   }
 
+  async function handleReset(){
+    addMsg("Resetting your draft…", "bot");
+    const ok = await apiReset();
+    if(ok){
+      updateSummary("");
+      addMsg("Done ✅ Start a fresh order whenever you're ready.", "bot");
+    }else{
+      // graceful fallback if reset endpoint isn't available
+      updateSummary("");
+      addMsg("Done ✅ (local reset). If the backend still remembers items, we’ll wire /order/reset next.", "bot");
+    }
+    inputEl.focus();
+    scrollToBottom();
+  }
+
   // Chips
-  document.querySelectorAll(".chip").forEach(chip => {
-    chip.addEventListener("click", () => sendMessage(chip.dataset.msg));
+  document.getElementById("chips").addEventListener("click", (e) => {
+    const chip = e.target.closest(".chip");
+    if(!chip) return;
+
+    const action = chip.dataset.action;
+    if(action === "reset"){
+      handleReset();
+      return;
+    }
+    const msg = chip.dataset.msg;
+    if(msg) sendMessage(msg);
   });
 
   sendBtn.addEventListener("click", () => sendMessage());
   inputEl.addEventListener("keydown", (e) => {
     if(e.key === "Enter") sendMessage();
   });
+
+  // --- iOS keyboard handling: keep composer visible + prevent white gap ---
+  (function keyboardFix(){
+    const root = document.documentElement;
+
+    function update(){
+      const vv = window.visualViewport;
+
+      // Adjust spacer to match composer height (so last msg isn't hidden)
+      const composerH = composerEl.getBoundingClientRect().height;
+      bottomSpacer.style.height = (composerH + 10) + "px";
+
+      if(!vv){
+        root.style.setProperty("--kb", "0px");
+        return;
+      }
+
+      // keyboard height approx
+      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      root.style.setProperty("--kb", kb + "px");
+
+      // keep the bottom visible after resize
+      scrollToBottom();
+    }
+
+    if(window.visualViewport){
+      visualViewport.addEventListener("resize", update);
+      visualViewport.addEventListener("scroll", update);
+    }
+    window.addEventListener("resize", update);
+
+    // initial
+    update();
+  })();
 
   // Initial greeting
   addMsg("Hi! What can I get you today?", "bot");
