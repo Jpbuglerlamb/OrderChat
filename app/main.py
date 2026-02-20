@@ -21,7 +21,8 @@ from .db import Base, engine, get_db
 from .models import Order, User
 from .auth import create_token, decode_token, hash_password, verify_password
 from .menu import load_menu
-from .ordering import build_summary, handle_message
+from .ordering.brain import handle_message
+from .ordering.cart import build_summary
 from .emailer import send_order_email
 
 # Optional AI layer
