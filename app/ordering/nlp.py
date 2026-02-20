@@ -34,6 +34,7 @@ _DEFAULT_SYNONYMS: Dict[str, str] = {
     # pizza names (common UK misspells)
     "margarita": "margherita",
     "margherita": "margherita",
+
 }
 
 # ----------------------------
