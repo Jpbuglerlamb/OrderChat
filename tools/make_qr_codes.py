@@ -6,7 +6,7 @@ from pathlib import Path
 import qrcode
 
 # Change this to your current base URL
-BASE_URL = "http://192.168.0.105:8000"
+BASE_URL = "https://orderchat-eidt.onrender.com"
 
 # Your menus live here (based on your project tree)
 MENUS_DIR = Path(__file__).resolve().parents[1] / "data"

@@ -4,9 +4,12 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List
+from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
@@ -18,19 +21,14 @@ try:
 except Exception:
     pass
 
-from .db import Base, engine, get_db
-from .models import Order, User
 from .auth import create_token, decode_token, hash_password, verify_password
-
-# Legacy single-menu loader (keep for backwards compatibility)
-from .menu import load_menu
-
-# Multi-restaurant loader (YOU add this file)
-from .ordering.menu_store import load_menu_by_slug
-
+from .db import Base, engine, get_db
+from .emailer import send_order_email
+from .menu import load_menu  # legacy single-menu loader
+from .models import Order, User
 from .ordering.brain import handle_message
 from .ordering.cart import build_summary
-from .emailer import send_order_email
+from .ordering.menu_store import load_menu_by_slug  # multi-restaurant loader
 
 # Optional AI layer
 from .command_router import command_to_userlike_text
@@ -62,6 +60,11 @@ app = FastAPI(
 )
 
 Base.metadata.create_all(bind=engine)
+
+# Project paths
+PROJECT_ROOT = Path(__file__).resolve().parents[1]  # TakeawayDemo/
+FRONTEND_DIR = PROJECT_ROOT / "frontend"
+CHAT_HTML_PATH = FRONTEND_DIR / "chat.html"
 
 
 # -------------------
@@ -111,6 +114,10 @@ def _currency_symbol_from_menu(menu_dict: Dict[str, Any]) -> str:
     return "£" if cur == "GBP" else ""
 
 
+def _normalize_slug(slug: str) -> str:
+    return (slug or "").strip().lower()
+
+
 def require_user_id(authorization: str | None = Header(default=None)) -> int:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Missing Bearer token")
@@ -120,6 +127,55 @@ def require_user_id(authorization: str | None = Header(default=None)) -> int:
     if not uid:
         raise HTTPException(status_code=401, detail="Invalid token")
     return uid
+
+
+def require_user_id_or_guest(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    authorization: str | None = Header(default=None),
+    guest_id: str | None = Cookie(default=None, alias="guest_id"),
+) -> int:
+    """
+    For QR/web users:
+      - If Bearer token present and valid -> use that user_id.
+      - Else -> create/reuse a Guest user backed by a cookie.
+    """
+    # 1) Prefer authenticated user if token exists
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+        uid = decode_token(token)
+        if uid:
+            return uid
+
+    # 2) Otherwise, cookie-based guest identity
+    if not guest_id:
+        guest_id = uuid4().hex
+
+    guest_email = f"guest+{guest_id}@demo.local"
+
+    u = db.query(User).filter(User.email == guest_email).first()
+    if not u:
+        u = User(
+            name="Guest",
+            email=guest_email,
+            phone=None,
+            password_hash=hash_password(uuid4().hex),  # random, not used
+        )
+        db.add(u)
+        db.commit()
+        db.refresh(u)
+
+    # Refresh cookie (30 days)
+    response.set_cookie(
+        key="guest_id",
+        value=guest_id,
+        httponly=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30,
+    )
+
+    return u.id
 
 
 def get_or_create_draft(db: Session, user_id: int) -> Order:
@@ -146,10 +202,6 @@ def get_or_create_draft(db: Session, user_id: int) -> Order:
     db.commit()
     db.refresh(order)
     return order
-
-
-def _normalize_slug(slug: str) -> str:
-    return (slug or "").strip().lower()
 
 
 def _ensure_order_scoped_to_restaurant(order: Order, slug: str) -> None:
@@ -229,7 +281,24 @@ def login(payload: LoginIn, db: Session = Depends(get_db)):
 # -------------------
 # Restaurant routing (slug)
 # -------------------
-@app.get("/r/{slug}")
+@app.get("/r/{slug}", response_class=HTMLResponse)
+def restaurant_page(slug: str):
+    """
+    QR opens this.
+    If restaurant exists -> serve chat UI.
+    """
+    slug = _normalize_slug(slug)
+    menu = load_menu_by_slug(slug)
+    if not menu:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    if not CHAT_HTML_PATH.exists():
+        raise HTTPException(status_code=500, detail=f"Missing frontend file: {CHAT_HTML_PATH}")
+
+    return CHAT_HTML_PATH.read_text(encoding="utf-8")
+
+
+@app.get("/r/{slug}/health")
 def restaurant_health(slug: str):
     slug = _normalize_slug(slug)
     menu = load_menu_by_slug(slug)
@@ -321,13 +390,13 @@ async def chat(payload: ChatIn, user_id: int = Depends(require_user_id), db: Ses
 
 
 # -------------------
-# Chat ordering (restaurant-scoped)
+# Chat ordering (restaurant-scoped)  ✅ guest-ready
 # -------------------
 @app.post("/r/{slug}/chat")
 async def chat_for_restaurant(
     slug: str,
     payload: ChatIn,
-    user_id: int = Depends(require_user_id),
+    user_id: int = Depends(require_user_id_or_guest),
     db: Session = Depends(get_db),
 ):
     slug = _normalize_slug(slug)
