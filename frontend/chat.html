@@ -2,254 +2,245 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta
-    name="viewport"
-    content="width=device-width,initial-scale=1,viewport-fit=cover"
-  />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Order</title>
 
   <style>
     :root{
-      --bg: #ffffff;
-      --text: #0b0b0b;
-      --muted: #6b7280;
-      --line: #e5e7eb;
-      --chip: #f3f4f6;
+      --bg:#ffffff;
+      --text:#0b0b0b;
+      --muted:#6b7280;
+      --line:#e5e7eb;
 
-      --userBg: #111111;
-      --userText: #ffffff;
+      --chipBg:#f3f4f6;
 
-      --botBg: #f3f4f6;
-      --botText: #111111;
+      /* bubbles */
+      --userBg:#111111;
+      --userText:#ffffff;
 
-      --primary: #2b6cff;
-      --shadow: 0 10px 30px rgba(0,0,0,.08);
-      --radius: 16px;
+      --botBg:#f3f4f6;
+      --botText:#111111;
 
-      /* keyboard offset (JS sets this) */
-      --kb: 0px;
+      --primary:#2b6cff;
 
-      /* spacing */
-      --padX: 12px;
-      --composerPad: 12px;
+      --radius:18px;
+      --shadow:0 10px 30px rgba(0,0,0,.08);
+
+      --padX:14px;
+
+      /* keyboard offset set by JS */
+      --kb:0px;
     }
 
     @media (prefers-color-scheme: dark){
       :root{
-        --bg: #0b0c0f;
-        --text: #f9fafb;
-        --muted: #a1a1aa;
-        --line: rgba(255,255,255,.10);
-        --chip: rgba(255,255,255,.08);
+        --bg:#0b0c0f;
+        --text:#f9fafb;
+        --muted:#a1a1aa;
+        --line:rgba(255,255,255,.10);
 
-        --userBg: #f9fafb;
-        --userText: #0b0b0b;
+        --chipBg:rgba(255,255,255,.08);
 
-        --botBg: rgba(255,255,255,.10);
-        --botText: #f9fafb;
+        /* IMPORTANT: avoid “white sticker” look */
+        --userBg:#2a2a2e;     /* softer than pure white */
+        --userText:#ffffff;
 
-        --shadow: 0 12px 40px rgba(0,0,0,.35);
+        --botBg:rgba(255,255,255,.10);
+        --botText:#f9fafb;
+
+        --shadow:0 12px 40px rgba(0,0,0,.35);
       }
     }
 
-    *{ box-sizing: border-box; }
-    html, body{ height: 100%; }
+    *{ box-sizing:border-box; }
+    html, body{ height:100%; }
     body{
-      margin: 0;
+      margin:0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
-      background: var(--bg);
-      color: var(--text);
-      overscroll-behavior: none;
-      -webkit-text-size-adjust: 100%;
+      background:var(--bg);
+      color:var(--text);
+      overscroll-behavior:none;
+      -webkit-text-size-adjust:100%;
     }
 
-    /* --- App shell --- */
+    /* app shell */
     .app{
-      height: 100svh; /* stable viewport */
-      height: 100dvh; /* dynamic viewport */
-      display: flex;
-      flex-direction: column;
-      position: relative;
+      height:100svh;
+      height:100dvh;
+      display:flex;
+      flex-direction:column;
+      min-height:0;
     }
 
     header{
-      padding: 14px 16px;
-      border-bottom: 1px solid var(--line);
-      background: var(--bg);
-      position: sticky;
-      top: 0;
-      z-index: 10;
+      padding:14px 16px;
+      border-bottom:1px solid var(--line);
+      background:var(--bg);
+      position:sticky;
+      top:0;
+      z-index:10;
     }
 
     .titleRow{
       display:flex;
       align-items:flex-start;
       justify-content:space-between;
-      gap: 12px;
+      gap:12px;
     }
 
     h1{
       margin:0;
-      font-size: 18px;
-      line-height: 1.15;
-      letter-spacing: -0.2px;
+      font-size:18px;
+      line-height:1.15;
+      letter-spacing:-0.2px;
     }
     .sub{
-      margin-top: 4px;
-      font-size: 12px;
-      color: var(--muted);
+      margin-top:4px;
+      font-size:12px;
+      color:var(--muted);
     }
     .badge{
-      font-size: 12px;
-      color: var(--muted);
-      border: 1px solid var(--line);
-      padding: 6px 10px;
-      border-radius: 999px;
-      white-space: nowrap;
-      align-self: flex-start;
+      font-size:12px;
+      color:var(--muted);
+      border:1px solid var(--line);
+      padding:6px 10px;
+      border-radius:999px;
+      white-space:nowrap;
       user-select:none;
+      align-self:flex-start;
     }
 
-    /* --- Chips --- */
+    /* chips */
     .chips{
-      padding: 10px var(--padX);
-      border-bottom: 1px solid var(--line);
+      padding:10px var(--padX);
+      border-bottom:1px solid var(--line);
       display:flex;
-      gap: 8px;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      background: var(--bg);
+      gap:8px;
+      overflow-x:auto;
+      -webkit-overflow-scrolling:touch;
+      background:var(--bg);
     }
     .chip{
-      border: 1px solid var(--line);
-      background: var(--chip);
-      color: var(--text);
-      padding: 8px 10px;
-      border-radius: 999px;
-      font-size: 13px;
-      cursor: pointer;
+      border:1px solid var(--line);
+      background:var(--chipBg);
+      color:var(--text);
+      padding:8px 10px;
+      border-radius:999px;
+      font-size:13px;
+      cursor:pointer;
       user-select:none;
-      flex: 0 0 auto;
-      transition: transform .08s ease;
+      flex:0 0 auto;
+      transition:transform .08s ease, opacity .15s ease;
     }
-    .chip:active{ transform: scale(.98); }
+    .chip:active{ transform:scale(.98); }
 
-    /* --- Content area (chat scroll lives here) --- */
+    /* content */
     .content{
-      flex: 1;
-      min-height: 0; /* CRUCIAL: allows inner scroll */
-      display: flex;
-      flex-direction: column;
+      flex:1;
+      min-height:0;
+      display:flex;
+      flex-direction:column;
     }
 
     .chat{
-      flex: 1;
-      min-height: 0;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-      padding: 14px var(--padX) 18px;
-      /* leave room for fixed composer (JS will fine-tune) */
-      padding-bottom: calc(18px + var(--kb));
+      flex:1;
+      min-height:0;
+      overflow-y:auto;
+      -webkit-overflow-scrolling:touch;
+
+      /* breathing room + room for composer */
+      padding:22px var(--padX) calc(16px + var(--kb));
     }
 
-    .row{
-      display:flex;
-      margin: 10px 0;
-    }
+    .row{ display:flex; margin:10px 0; }
     .row.user{ justify-content:flex-end; }
     .row.bot{ justify-content:flex-start; }
 
     .stack{
-      max-width: 86%;
+      max-width:86%;
       display:flex;
       flex-direction:column;
-      gap: 6px;
+      gap:6px;
     }
 
     .bubble{
-      padding: 10px 12px;
-      border-radius: var(--radius);
-      line-height: 1.35;
-      font-size: 15px;
-      white-space: pre-wrap;
-      word-wrap: break-word;
+      padding:11px 12px;
+      border-radius:var(--radius);
+      line-height:1.35;
+      font-size:15px;
+      white-space:pre-wrap;
+      word-wrap:break-word;
     }
     .bubble.user{
-      background: var(--userBg);
-      color: var(--userText);
-      border-top-right-radius: 10px;
+      background:var(--userBg);
+      color:var(--userText);
+      border-top-right-radius:10px;
     }
     .bubble.bot{
-      background: var(--botBg);
-      color: var(--botText);
-      border-top-left-radius: 10px;
+      background:var(--botBg);
+      color:var(--botText);
+      border-top-left-radius:10px;
     }
 
     .meta{
-      font-size: 11px;
-      color: var(--muted);
-      padding: 0 4px;
+      font-size:11px;
+      color:var(--muted);
+      padding:0 4px;
     }
 
-    /* --- Summary card --- */
-    .summaryCard{
-      margin-top: 10px;
-      border: 1px solid var(--line);
-      background: var(--bg);
-      border-radius: 14px;
-      padding: 10px 12px;
-      box-shadow: var(--shadow);
-    }
-    .summaryCard .label{
-      font-size: 12px;
-      color: var(--muted);
-      margin-bottom: 6px;
-    }
-    .summaryCard pre{
-      margin:0;
+    /* summary shown as a bot bubble inside chat (not in composer) */
+    .summaryBubble{
+      border:1px solid var(--line);
+      background:transparent;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 12px;
-      white-space: pre-wrap;
+      font-size:13px;
+      box-shadow:var(--shadow);
     }
 
-    /* --- Composer (fixed to visible viewport bottom) --- */
+    /* composer: floating + light */
     .composer{
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
+      position:fixed;
+      left:0;
+      right:0;
+      bottom:0;
       transform: translateY(calc(-1 * var(--kb)));
-      background: var(--bg);
-      border-top: 1px solid var(--line);
-      padding: var(--composerPad) var(--composerPad) calc(var(--composerPad) + env(safe-area-inset-bottom));
-      z-index: 50;
+      border-top:1px solid var(--line);
+      background: rgba(255,255,255,.75);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      padding:12px 12px calc(12px + env(safe-area-inset-bottom));
+      z-index:50;
+    }
+    @media (prefers-color-scheme: dark){
+      .composer{
+        background: rgba(15,15,18,.72);
+      }
     }
 
     .composerInner{
-      max-width: 880px;
-      margin: 0 auto;
-      padding: 0 0;
+      max-width:880px;
+      margin:0 auto;
     }
 
     .inputRow{
       display:flex;
-      gap: 10px;
+      gap:10px;
       align-items:center;
     }
 
     input{
       flex:1;
-      padding: 12px 12px;
-      border-radius: 12px;
-      border: 1px solid var(--line);
-      background: transparent;
-      color: var(--text);
-      font-size: 16px; /* prevents iOS zoom */
-      outline: none;
+      padding:12px 12px;
+      border-radius:14px;
+      border:1px solid var(--line);
+      background:transparent;
+      color:var(--text);
+      font-size:16px; /* prevents iOS zoom */
+      outline:none;
 
-      -webkit-appearance: none;
-      appearance: none;
-      box-shadow: none;
+      -webkit-appearance:none;
+      appearance:none;
+      box-shadow:none;
     }
     input:focus{
       border-color: rgba(43,108,255,.55);
@@ -257,46 +248,35 @@
     }
 
     button{
-      padding: 12px 14px;
-      border-radius: 12px;
-      border: 0;
-      background: var(--primary);
-      color: white;
-      font-weight: 700;
-      font-size: 15px;
+      padding:12px 14px;
+      border-radius:14px;
+      border:0;
+      background:var(--primary);
+      color:#fff;
+      font-weight:700;
+      font-size:15px;
       cursor:pointer;
-      min-width: 92px;
+      min-width:92px;
       display:flex;
       align-items:center;
       justify-content:center;
       gap:8px;
-      transition: transform .08s ease, opacity .15s ease;
+      transition:transform .08s ease, opacity .15s ease;
     }
-    button:active{ transform: scale(.98); }
-    button:disabled{
-      opacity: .55;
-      cursor:not-allowed;
-      transform: none;
-    }
+    button:active{ transform:scale(.98); }
+    button:disabled{ opacity:.55; cursor:not-allowed; transform:none; }
 
     .spinner{
-      width: 14px;
-      height: 14px;
-      border-radius: 999px;
-      border: 2px solid rgba(255,255,255,.45);
-      border-top-color: rgba(255,255,255,1);
-      animation: spin 1s linear infinite;
+      width:14px;
+      height:14px;
+      border-radius:999px;
+      border:2px solid rgba(255,255,255,.45);
+      border-top-color:#fff;
+      animation:spin 1s linear infinite;
       display:none;
     }
     .sending .spinner{ display:inline-block; }
-
-    @keyframes spin{ to{ transform: rotate(360deg); } }
-
-    /* Safe spacing so the last message isn't hidden behind fixed composer */
-    .bottomSpacer{
-      height: 120px; /* JS will adjust */
-      flex: 0 0 auto;
-    }
+    @keyframes spin{ to{ transform:rotate(360deg); } }
   </style>
 </head>
 
@@ -314,7 +294,7 @@
 
     <div class="chips" id="chips">
       <div class="chip" data-msg="menu">Menu</div>
-      <div class="chip" data-msg="salt and pepper chicken">Salt & Pepper Chicken</div>
+      <div class="chip" data-msg="salt and pepper chicken">Salt &amp; Pepper Chicken</div>
       <div class="chip" data-msg="egg fried rice">Egg Fried Rice</div>
       <div class="chip" data-msg="spring rolls">Spring Rolls</div>
       <div class="chip" data-action="reset">Reset</div>
@@ -322,7 +302,6 @@
 
     <div class="content">
       <div class="chat" id="chat"></div>
-      <div class="bottomSpacer" id="bottomSpacer"></div>
     </div>
 
     <div class="composer" id="composer">
@@ -339,11 +318,6 @@
             <span class="btnText">Send</span>
           </button>
         </div>
-
-        <div class="summaryCard" id="summaryCard" style="display:none;">
-          <div class="label">Order so far</div>
-          <pre id="summary"></pre>
-        </div>
       </div>
     </div>
   </div>
@@ -359,10 +333,7 @@
   const btnText = document.querySelector(".btnText");
   const titleEl = document.getElementById("title");
   const subtitleEl = document.getElementById("subtitle");
-  const summaryEl = document.getElementById("summary");
-  const summaryCard = document.getElementById("summaryCard");
   const composerEl = document.getElementById("composer");
-  const bottomSpacer = document.getElementById("bottomSpacer");
 
   titleEl.textContent = `Order: ${slug}`;
   subtitleEl.textContent = `Chat endpoint: /r/${slug}/chat`;
@@ -399,6 +370,42 @@
     scrollToBottom();
   }
 
+  // Summary shown as a single bot bubble in the chat
+  let summaryRow = null;
+  function renderSummary(summary){
+    if(!summary || !String(summary).trim()){
+      if(summaryRow) summaryRow.remove();
+      summaryRow = null;
+      return;
+    }
+
+    const cleaned = String(summary).replace(/^Order summary:\s*/i, "");
+
+    if(!summaryRow){
+      summaryRow = document.createElement("div");
+      summaryRow.className = "row bot";
+
+      const stack = document.createElement("div");
+      stack.className = "stack";
+
+      const bubble = document.createElement("div");
+      bubble.className = "bubble bot summaryBubble";
+
+      const meta = document.createElement("div");
+      meta.className = "meta";
+
+      stack.appendChild(bubble);
+      stack.appendChild(meta);
+      summaryRow.appendChild(stack);
+
+      chatEl.appendChild(summaryRow);
+    }
+
+    summaryRow.querySelector(".summaryBubble").textContent = cleaned;
+    summaryRow.querySelector(".meta").textContent = "Updated " + nowTime();
+    scrollToBottom();
+  }
+
   function isGreeting(s){
     const t = (s || "").trim().toLowerCase();
     return ["hi","hello","hey","hiya","yo","alright","alright mate","morning","evening"].includes(t);
@@ -416,17 +423,6 @@
     }
   }
 
-  function updateSummary(summary){
-    if(summary && String(summary).trim()){
-      const cleaned = String(summary).replace(/^Order summary:\s*/i, "");
-      summaryEl.textContent = cleaned;
-      summaryCard.style.display = "block";
-    }else{
-      summaryEl.textContent = "";
-      summaryCard.style.display = "none";
-    }
-  }
-
   async function apiChat(message){
     const res = await fetch(`/r/${slug}/chat`, {
       method: "POST",
@@ -438,18 +434,6 @@
     return data;
   }
 
-  async function apiReset(){
-    // If you later wire auth/guest, you can call your real endpoint here.
-    // For now: try calling a restaurant-scoped "reset" message OR do local reset.
-    try{
-      // If your backend supports "reset" via chat, this is enough:
-      await apiChat("reset");
-      return true;
-    }catch(e){
-      return false;
-    }
-  }
-
   async function sendMessage(raw){
     const text = (raw ?? inputEl.value ?? "").trim();
     if(!text) return;
@@ -458,7 +442,7 @@
     addMsg(text, "user");
 
     if(isGreeting(text)){
-      addMsg("Hey! 👋 What can I get you today? You can say “menu” or just type items like “salt & pepper chicken + egg fried rice”.", "bot");
+      addMsg("Hey! 👋 What can I get you today? You can say “menu” or type items like “salt & pepper chicken + egg fried rice”.", "bot");
       inputEl.focus();
       return;
     }
@@ -467,7 +451,7 @@
     try{
       const data = await apiChat(text);
       addMsg(data.reply || "(no reply)", "bot");
-      updateSummary(data.summary || "");
+      renderSummary(data.summary || "");
     }catch(e){
       addMsg("Sorry, something went wrong. Try again in a second.", "bot");
       console.error(e);
@@ -480,17 +464,20 @@
 
   async function handleReset(){
     addMsg("Resetting your draft…", "bot");
-    const ok = await apiReset();
-    if(ok){
-      updateSummary("");
-      addMsg("Done ✅ Start a fresh order whenever you're ready.", "bot");
-    }else{
-      // graceful fallback if reset endpoint isn't available
-      updateSummary("");
-      addMsg("Done ✅ (local reset). If the backend still remembers items, we’ll wire /order/reset next.", "bot");
+    setSending(true);
+    try{
+      const data = await apiChat("reset");
+      addMsg(data.reply || "Done ✅ Start a fresh order whenever you're ready.", "bot");
+      renderSummary("");
+    }catch(e){
+      renderSummary("");
+      addMsg("Done ✅ (local reset). If the backend still remembers items, we’ll wire a proper reset endpoint next.", "bot");
+      console.error(e);
+    }finally{
+      setSending(false);
+      inputEl.focus();
+      scrollToBottom();
     }
-    inputEl.focus();
-    scrollToBottom();
   }
 
   // Chips
@@ -498,8 +485,7 @@
     const chip = e.target.closest(".chip");
     if(!chip) return;
 
-    const action = chip.dataset.action;
-    if(action === "reset"){
+    if(chip.dataset.action === "reset"){
       handleReset();
       return;
     }
@@ -512,27 +498,20 @@
     if(e.key === "Enter") sendMessage();
   });
 
-  // --- iOS keyboard handling: keep composer visible + prevent white gap ---
+  // iOS keyboard handling (keeps composer visible + avoids weird gaps)
   (function keyboardFix(){
     const root = document.documentElement;
 
     function update(){
       const vv = window.visualViewport;
-
-      // Adjust spacer to match composer height (so last msg isn't hidden)
-      const composerH = composerEl.getBoundingClientRect().height;
-      bottomSpacer.style.height = (composerH + 10) + "px";
-
       if(!vv){
         root.style.setProperty("--kb", "0px");
         return;
       }
-
-      // keyboard height approx
       const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
       root.style.setProperty("--kb", kb + "px");
 
-      // keep the bottom visible after resize
+      // after keyboard shifts, keep the newest message visible
       scrollToBottom();
     }
 
@@ -541,8 +520,6 @@
       visualViewport.addEventListener("scroll", update);
     }
     window.addEventListener("resize", update);
-
-    // initial
     update();
   })();
 
