@@ -1,6 +1,7 @@
 # app/ordering/menu.py
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
 
 from .nlp import normalize_text, fuzzy_best_key, default_synonyms
@@ -25,18 +26,15 @@ def build_menu_index(menu: Dict[str, Any], synonyms: Dict[str, str]) -> Dict[str
     items_by_id: Dict[str, Dict[str, Any]] = {}
     name_to_item_syn: Dict[str, Dict[str, Any]] = {}
 
-    # categories (optional)
     categories = menu.get("categories") or []
     if isinstance(categories, list):
         for c in categories:
             if not isinstance(c, dict):
                 continue
-            # back-compat nested items
             for it in (c.get("items") or []):
                 if isinstance(it, dict):
                     _index_item(it, items_by_id, name_to_item_syn, synonyms)
 
-    # flat items
     items = menu.get("items") or []
     if isinstance(items, list):
         for it in items:
@@ -77,16 +75,64 @@ def all_category_names(menu: Dict[str, Any]) -> List[str]:
     return out
 
 
+_LEADING_JOINERS_RE = re.compile(r"^(?:and|with)\s+", re.I)
+_LEADING_ARTICLES_RE = re.compile(r"^(?:a|an|the)\s+", re.I)
+
+
+def _query_variants(text: str, synonyms: Dict[str, str]) -> List[str]:
+    """
+    Generate tolerant query variants so phrases like:
+      - "and a coke"
+      - "with egg fried rice"
+    still match menu items.
+    """
+    raw = (text or "").strip()
+    if not raw:
+        return []
+
+    q0 = normalize_text(raw, synonyms)
+    if not q0:
+        return []
+
+    variants = [q0]
+
+    q1 = _LEADING_JOINERS_RE.sub("", q0).strip()
+    if q1 and q1 not in variants:
+        variants.append(q1)
+
+    q2 = _LEADING_ARTICLES_RE.sub("", q1).strip()
+    if q2 and q2 not in variants:
+        variants.append(q2)
+
+    # Extra: sometimes you get "and a coca cola" after synonym expansion
+    q3 = _LEADING_ARTICLES_RE.sub("", _LEADING_JOINERS_RE.sub("", q0).strip()).strip()
+    if q3 and q3 not in variants:
+        variants.append(q3)
+
+    return variants
+
+
 def find_item(menu: Dict[str, Any], text: str, synonyms: Dict[str, str]) -> Optional[Dict[str, Any]]:
     idx = menu.get("_index") or {}
-    lookup = idx.get("name_to_item_syn") or {}
+    lookup: Dict[str, Dict[str, Any]] = idx.get("name_to_item_syn") or {}
     if not text:
         return None
 
-    q = normalize_text(text, synonyms)
-    if q in lookup:
-        return lookup[q]
+    variants = _query_variants(text, synonyms)
+    if not variants:
+        return None
 
+    # 1) exact match any variant
+    for q in variants:
+        if q in lookup:
+            return lookup[q]
+
+    # 2) fuzzy match any variant (start strict, then slightly looser)
     keys = list(lookup.keys())
-    best = fuzzy_best_key(keys, q, cutoff=0.78)
-    return lookup.get(best) if best else None
+    for cutoff in (0.80, 0.78, 0.75):
+        for q in variants:
+            best = fuzzy_best_key(keys, q, cutoff=cutoff)
+            if best:
+                return lookup.get(best)
+
+    return None

@@ -41,6 +41,33 @@ def handle_message(
             return "We have: " + ", ".join(cats), dump_cart(cart), dump_state(state)
         return "Tell me what you'd like.", dump_cart(cart), dump_state(state)
 
+    # --- remove (MUST be before add flow) ---
+    if msg_norm.startswith("remove ") or msg_norm.startswith("delete "):
+        target_text = msg_norm.split(" ", 1)[1].strip()
+        target = find_item(menu, target_text, synonyms)  # or _find_item_in_text / your function
+        if not target:
+            return "Tell me which item to remove (e.g. “remove Egg Fried Rice”).", dump_cart(cart), dump_state(state)
+
+        target_id = target.get("id")
+        removed = False
+        new_cart = []
+        for ln in cart:
+            if (not removed) and target_id and ln.get("item_id") == target_id:
+                qty = int(ln.get("qty", 1) or 1)
+                if qty > 1:
+                    ln["qty"] = qty - 1
+                    recalc_line_total(ln)
+                    new_cart.append(ln)
+                removed = True
+                continue
+            new_cart.append(ln)
+
+        if not removed:
+            return "That item isn’t in your basket.", dump_cart(cart), dump_state(state)
+
+        cart = new_cart
+        summary, _ = build_summary(cart, currency_symbol=cur)
+        return "Removed ✅\n\n" + summary, dump_cart(cart), dump_state(state)
     # --- add items (supports multiple) ---
     parts = split_intents(normalize_text(msg_raw, synonyms))
 

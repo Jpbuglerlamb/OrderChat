@@ -1,5 +1,6 @@
 {
   "restaurant": {
+    "slug": "Galaxy-demo",
     "name": "Galaxy Grill",
     "currency": "GBP",
     "pickup_only": true

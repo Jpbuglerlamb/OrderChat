@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, EmailStr
@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 # Load .env locally (safe in prod too)
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except Exception:
     pass
@@ -20,7 +21,13 @@ except Exception:
 from .db import Base, engine, get_db
 from .models import Order, User
 from .auth import create_token, decode_token, hash_password, verify_password
+
+# Legacy single-menu loader (keep for backwards compatibility)
 from .menu import load_menu
+
+# Multi-restaurant loader (YOU add this file)
+from .ordering.menu_store import load_menu_by_slug
+
 from .ordering.brain import handle_message
 from .ordering.cart import build_summary
 from .emailer import send_order_email
@@ -89,7 +96,7 @@ def _safe_json_dict(raw: str | None) -> Dict[str, Any]:
         return {}
 
 
-def _safe_json_list(raw: str | None) -> list:
+def _safe_json_list(raw: str | None) -> List[Any]:
     if not raw:
         return []
     try:
@@ -141,6 +148,48 @@ def get_or_create_draft(db: Session, user_id: int) -> Order:
     return order
 
 
+def _normalize_slug(slug: str) -> str:
+    return (slug or "").strip().lower()
+
+
+def _ensure_order_scoped_to_restaurant(order: Order, slug: str) -> None:
+    """
+    Prevent a user's draft order mixing across restaurants.
+    We store restaurant_slug in state_json. If it changes, we reset the draft.
+    """
+    curr_slug = _normalize_slug(slug)
+    state = _safe_json_dict(order.state_json)
+    prev_slug = _normalize_slug(str(state.get("restaurant_slug") or ""))
+
+    if prev_slug and prev_slug != curr_slug:
+        # New restaurant: wipe draft clean
+        order.items_json = "[]"
+        state = {}
+
+    state["restaurant_slug"] = curr_slug
+    order.state_json = json.dumps(state)
+
+
+async def _apply_optional_llm_rewrite(text: str, menu_dict: Dict[str, Any], state_json: str) -> str:
+    """
+    Optional LLM layer to convert messy user text into deterministic, user-like commands.
+    Silent fallback on any error.
+    """
+    if not (settings.llm_enabled and settings.openai_api_key and interpret_message_llm):
+        return text
+
+    try:
+        cmd = await interpret_message_llm(
+            message=text,
+            menu=menu_dict,
+            state=_safe_json_dict(state_json),
+        )
+        candidate = command_to_userlike_text(cmd)
+        return candidate or text
+    except Exception:
+        return text
+
+
 # -------------------
 # Health
 # -------------------
@@ -178,7 +227,28 @@ def login(payload: LoginIn, db: Session = Depends(get_db)):
 
 
 # -------------------
-# Menu
+# Restaurant routing (slug)
+# -------------------
+@app.get("/r/{slug}")
+def restaurant_health(slug: str):
+    slug = _normalize_slug(slug)
+    menu = load_menu_by_slug(slug)
+    if not menu:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+    return {"ok": True, "restaurant": (menu.get("meta") or {}).get("slug") or slug}
+
+
+@app.get("/r/{slug}/menu")
+def restaurant_menu(slug: str):
+    slug = _normalize_slug(slug)
+    menu = load_menu_by_slug(slug)
+    if not menu:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+    return menu
+
+
+# -------------------
+# Menu (legacy single-menu)
 # -------------------
 @app.get("/menu")
 def menu():
@@ -186,7 +256,7 @@ def menu():
 
 
 # -------------------
-# Order reset (DB-level)  ✅ this fixes your "Reset still shows old items"
+# Order reset (DB-level) ✅ fixes "Reset still shows old items"
 # -------------------
 @app.post("/order/reset")
 def reset_order(user_id: int = Depends(require_user_id), db: Session = Depends(get_db)):
@@ -197,7 +267,6 @@ def reset_order(user_id: int = Depends(require_user_id), db: Session = Depends(g
         .first()
     )
     if not order:
-        # no draft = already clean
         return {"ok": True, "message": "No draft to reset"}
 
     order.items_json = "[]"
@@ -213,28 +282,14 @@ def reset_order(user_id: int = Depends(require_user_id), db: Session = Depends(g
 
 
 # -------------------
-# Chat ordering
+# Chat ordering (legacy single-menu)
 # -------------------
 @app.post("/chat")
 async def chat(payload: ChatIn, user_id: int = Depends(require_user_id), db: Session = Depends(get_db)):
     order = get_or_create_draft(db, user_id)
     menu_dict = load_menu()
 
-    text = payload.message
-
-    # LLM → turn messy user text into deterministic “user-like” command
-    if settings.llm_enabled and settings.openai_api_key and interpret_message_llm:
-        try:
-            cmd = await interpret_message_llm(
-                message=payload.message,
-                menu=menu_dict,
-                state=_safe_json_dict(order.state_json),
-            )
-            candidate = command_to_userlike_text(cmd)
-            if candidate:
-                text = candidate
-        except Exception:
-            text = payload.message  # silent fallback
+    text = await _apply_optional_llm_rewrite(payload.message, menu_dict, order.state_json)
 
     reply, updated_items_json, updated_state_json = handle_message(
         message=text,
@@ -266,7 +321,60 @@ async def chat(payload: ChatIn, user_id: int = Depends(require_user_id), db: Ses
 
 
 # -------------------
-# Confirm order
+# Chat ordering (restaurant-scoped)
+# -------------------
+@app.post("/r/{slug}/chat")
+async def chat_for_restaurant(
+    slug: str,
+    payload: ChatIn,
+    user_id: int = Depends(require_user_id),
+    db: Session = Depends(get_db),
+):
+    slug = _normalize_slug(slug)
+
+    menu_dict = load_menu_by_slug(slug)
+    if not menu_dict:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    order = get_or_create_draft(db, user_id)
+
+    # Prevent mixing draft orders across restaurants
+    _ensure_order_scoped_to_restaurant(order, slug)
+
+    text = await _apply_optional_llm_rewrite(payload.message, menu_dict, order.state_json)
+
+    reply, updated_items_json, updated_state_json = handle_message(
+        message=text,
+        items_json=order.items_json,
+        menu_dict=menu_dict,
+        state_json=order.state_json,
+    )
+
+    order.items_json = updated_items_json
+    order.state_json = updated_state_json
+
+    items = _safe_json_list(order.items_json)
+    symbol = _currency_symbol_from_menu(menu_dict)
+    summary, _total = build_summary(items, currency_symbol=symbol)
+
+    order.summary_text = summary
+    order.updated_at = datetime.utcnow()
+
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+
+    return {
+        "reply": reply,
+        "order_id": order.id,
+        "summary": order.summary_text,
+        "items": items,
+        "restaurant_slug": slug,
+    }
+
+
+# -------------------
+# Confirm order (legacy single-menu)
 # -------------------
 @app.post("/order/confirm")
 def confirm(user_id: int = Depends(require_user_id), db: Session = Depends(get_db)):

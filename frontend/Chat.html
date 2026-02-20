@@ -1,0 +1,103 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Order</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Arial; margin: 0; padding: 0; }
+    header { padding: 14px 16px; border-bottom: 1px solid #ddd; }
+    #wrap { max-width: 720px; margin: 0 auto; }
+    #chat { padding: 16px; min-height: 60vh; }
+    .msg { margin: 10px 0; padding: 10px 12px; border-radius: 12px; display: inline-block; max-width: 90%; }
+    .user { background: #111; color: #fff; margin-left: auto; }
+    .bot { background: #f2f2f2; color: #111; }
+    #composer { position: sticky; bottom: 0; background: white; border-top: 1px solid #ddd; padding: 10px; }
+    #row { display: flex; gap: 8px; }
+    input { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #ccc; }
+    button { padding: 12px 14px; border-radius: 10px; border: 0; background: #2b6cff; color: white; }
+    small { color: #666; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <header>
+    <div id="wrap">
+      <h3 style="margin:0" id="title">Ordering</h3>
+      <small id="subtitle"></small>
+    </div>
+  </header>
+
+  <div id="wrap">
+    <div id="chat"></div>
+
+    <div id="composer">
+      <div id="row">
+        <input id="input" placeholder="Type your order... e.g. spring rolls and a coke" />
+        <button id="send">Send</button>
+      </div>
+      <small id="summary"></small>
+    </div>
+  </div>
+
+<script>
+  const slug = location.pathname.split("/").filter(Boolean)[1]; // /r/{slug}
+  const chatEl = document.getElementById("chat");
+  const inputEl = document.getElementById("input");
+  const sendBtn = document.getElementById("send");
+  const titleEl = document.getElementById("title");
+  const subtitleEl = document.getElementById("subtitle");
+  const summaryEl = document.getElementById("summary");
+
+  titleEl.textContent = `Order: ${slug}`;
+  subtitleEl.textContent = `Chat endpoint: /r/${slug}/chat`;
+
+  function addMsg(text, who) {
+    const div = document.createElement("div");
+    div.className = "msg " + who;
+    div.textContent = text;
+    const row = document.createElement("div");
+    row.style.display = "flex";
+    row.appendChild(div);
+    chatEl.appendChild(row);
+    window.scrollTo(0, document.body.scrollHeight);
+  }
+
+  async function send() {
+    const text = (inputEl.value || "").trim();
+    if (!text) return;
+    inputEl.value = "";
+    addMsg(text, "user");
+    sendBtn.disabled = true;
+
+    try {
+      const res = await fetch(`/r/${slug}/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          // NOTE: auth/guest comes next (see below)
+        },
+        body: JSON.stringify({ message: text })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Request failed");
+      addMsg(data.reply || "(no reply)", "bot");
+      summaryEl.textContent = data.summary ? `Summary: ${data.summary}` : "";
+    } catch (e) {
+      addMsg("Error: " + e.message, "bot");
+    } finally {
+      sendBtn.disabled = false;
+      inputEl.focus();
+    }
+  }
+
+  sendBtn.addEventListener("click", send);
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") send();
+  });
+
+  addMsg("Hi! What can I get you today?", "bot");
+</script>
+</body>
+</html>

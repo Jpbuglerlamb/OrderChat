@@ -1,5 +1,6 @@
 {
   "meta": {
+    "slug": "hybrid-demo",
     "currency": "GBP",
     "notes_allowed": true
   },
