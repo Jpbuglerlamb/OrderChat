@@ -1,103 +1,426 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Order</title>
   <style>
-    body { font-family: system-ui, -apple-system, Arial; margin: 0; padding: 0; }
-    header { padding: 14px 16px; border-bottom: 1px solid #ddd; }
-    #wrap { max-width: 720px; margin: 0 auto; }
-    #chat { padding: 16px; min-height: 60vh; }
-    .msg { margin: 10px 0; padding: 10px 12px; border-radius: 12px; display: inline-block; max-width: 90%; }
-    .user { background: #111; color: #fff; margin-left: auto; }
-    .bot { background: #f2f2f2; color: #111; }
-    #composer { position: sticky; bottom: 0; background: white; border-top: 1px solid #ddd; padding: 10px; }
-    #row { display: flex; gap: 8px; }
-    input { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #ccc; }
-    button { padding: 12px 14px; border-radius: 10px; border: 0; background: #2b6cff; color: white; }
-    small { color: #666; }
-    pre { white-space: pre-wrap; }
+    :root{
+      --bg: #ffffff;
+      --text: #0b0b0b;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --chip: #f3f4f6;
+
+      --userBg: #111111;
+      --userText: #ffffff;
+
+      --botBg: #f3f4f6;
+      --botText: #111111;
+
+      --primary: #2b6cff;
+      --shadow: 0 6px 18px rgba(0,0,0,.06);
+      --radius: 16px;
+    }
+
+    @media (prefers-color-scheme: dark){
+      :root{
+        --bg: #0b0c0f;
+        --text: #f9fafb;
+        --muted: #a1a1aa;
+        --line: rgba(255,255,255,.10);
+        --chip: rgba(255,255,255,.08);
+
+        --userBg: #f9fafb;
+        --userText: #0b0b0b;
+
+        --botBg: rgba(255,255,255,.10);
+        --botText: #f9fafb;
+
+        --shadow: 0 8px 24px rgba(0,0,0,.35);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: var(--bg);
+      color: var(--text);
+      overscroll-behavior: none;
+    }
+
+    /* App layout */
+    .app{
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header{
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      z-index: 10;
+    }
+    .title{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap: 12px;
+    }
+    h1{
+      margin:0;
+      font-size: 18px;
+      line-height: 1.2;
+      letter-spacing: -0.2px;
+    }
+    .sub{
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .badge{
+      font-size: 12px;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      padding: 6px 10px;
+      border-radius: 999px;
+      white-space: nowrap;
+      align-self: flex-start;
+    }
+
+    /* Chat area */
+    .content{
+      flex: 1;
+      overflow: hidden;
+      display:flex;
+      flex-direction: column;
+    }
+
+    .chips{
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      display:flex;
+      gap: 8px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .chip{
+      border: 1px solid var(--line);
+      background: var(--chip);
+      color: var(--text);
+      padding: 8px 10px;
+      border-radius: 999px;
+      font-size: 13px;
+      cursor: pointer;
+      user-select:none;
+      flex: 0 0 auto;
+    }
+
+    .chat{
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px 12px 10px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .row{
+      display:flex;
+      margin: 10px 0;
+    }
+    .row.user{ justify-content:flex-end; }
+    .row.bot{ justify-content:flex-start; }
+
+    .bubble{
+      max-width: 82%;
+      padding: 10px 12px;
+      border-radius: var(--radius);
+      box-shadow: none;
+      line-height: 1.35;
+      font-size: 15px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .bubble.user{
+      background: var(--userBg);
+      color: var(--userText);
+      border-top-right-radius: 10px;
+    }
+    .bubble.bot{
+      background: var(--botBg);
+      color: var(--botText);
+      border-top-left-radius: 10px;
+    }
+
+    .meta{
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 6px;
+      padding: 0 4px;
+    }
+
+    /* Summary card */
+    .summaryCard{
+      margin: 10px 0 0;
+      border: 1px solid var(--line);
+      background: var(--bg);
+      border-radius: 14px;
+      padding: 10px 12px;
+      box-shadow: var(--shadow);
+    }
+    .summaryCard .label{
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .summaryCard pre{
+      margin:0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+
+    /* Composer */
+    .composer{
+      border-top: 1px solid var(--line);
+      padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+      background: var(--bg);
+    }
+
+    .inputRow{
+      display:flex;
+      gap: 10px;
+      align-items:center;
+    }
+    input{
+      flex:1;
+      padding: 12px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--text);
+      outline: none;
+      font-size: 16px;
+    }
+    input:focus{
+      border-color: rgba(43,108,255,.55);
+      box-shadow: 0 0 0 4px rgba(43,108,255,.12);
+    }
+
+    button{
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 0;
+      background: var(--primary);
+      color: white;
+      font-weight: 600;
+      font-size: 15px;
+      cursor:pointer;
+      min-width: 92px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+    }
+    button:disabled{
+      opacity: .55;
+      cursor:not-allowed;
+    }
+
+    .spinner{
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      border: 2px solid rgba(255,255,255,.45);
+      border-top-color: rgba(255,255,255,1);
+      animation: spin 1s linear infinite;
+      display:none;
+    }
+    .sending .spinner{ display:inline-block; }
+
+    @keyframes spin{
+      to{ transform: rotate(360deg); }
+    }
   </style>
 </head>
+
 <body>
-  <header>
-    <div id="wrap">
-      <h3 style="margin:0" id="title">Ordering</h3>
-      <small id="subtitle"></small>
-    </div>
-  </header>
-
-  <div id="wrap">
-    <div id="chat"></div>
-
-    <div id="composer">
-      <div id="row">
-        <input id="input" placeholder="Type your order... e.g. spring rolls and a coke" />
-        <button id="send">Send</button>
+  <div class="app">
+    <header>
+      <div class="title">
+        <div>
+          <h1 id="title">Ordering</h1>
+          <div class="sub" id="subtitle"></div>
+        </div>
+        <div class="badge" id="badge">Online</div>
       </div>
-      <small id="summary"></small>
+    </header>
+
+    <div class="content">
+      <div class="chips">
+        <div class="chip" data-msg="menu">Menu</div>
+        <div class="chip" data-msg="salt and pepper chicken">Salt & Pepper Chicken</div>
+        <div class="chip" data-msg="egg fried rice">Egg Fried Rice</div>
+        <div class="chip" data-msg="spring rolls">Spring Rolls</div>
+        <div class="chip" data-msg="reset">Reset</div>
+      </div>
+
+      <div class="chat" id="chat"></div>
+
+      <div class="composer">
+        <div class="inputRow">
+          <input id="input" autocomplete="off" placeholder="Type your order... e.g. salt & pepper chicken + egg fried rice" />
+          <button id="send">
+            <span class="spinner"></span>
+            <span class="btnText">Send</span>
+          </button>
+        </div>
+
+        <div class="summaryCard" id="summaryCard" style="display:none;">
+          <div class="label">Order so far</div>
+          <pre id="summary"></pre>
+        </div>
+      </div>
     </div>
   </div>
 
 <script>
-  const slug = location.pathname.split("/").filter(Boolean)[1]; // /r/{slug}
+  // /r/{slug}
+  const parts = location.pathname.split("/").filter(Boolean);
+  const slug = (parts.length >= 2 && parts[0] === "r") ? parts[1] : "unknown";
+
   const chatEl = document.getElementById("chat");
   const inputEl = document.getElementById("input");
   const sendBtn = document.getElementById("send");
+  const btnText = document.querySelector(".btnText");
   const titleEl = document.getElementById("title");
   const subtitleEl = document.getElementById("subtitle");
   const summaryEl = document.getElementById("summary");
+  const summaryCard = document.getElementById("summaryCard");
 
   titleEl.textContent = `Order: ${slug}`;
   subtitleEl.textContent = `Chat endpoint: /r/${slug}/chat`;
 
-  function addMsg(text, who) {
-    const div = document.createElement("div");
-    div.className = "msg " + who;
-    div.textContent = text;
-    const row = document.createElement("div");
-    row.style.display = "flex";
-    row.appendChild(div);
-    chatEl.appendChild(row);
-    window.scrollTo(0, document.body.scrollHeight);
+  function nowTime(){
+    const d = new Date();
+    return d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
   }
 
-  async function send() {
-    const text = (inputEl.value || "").trim();
-    if (!text) return;
+  function addMsg(text, who){
+    const row = document.createElement("div");
+    row.className = "row " + who;
+
+    const bubble = document.createElement("div");
+    bubble.className = "bubble " + who;
+    bubble.textContent = text;
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = nowTime();
+
+    const wrap = document.createElement("div");
+    wrap.appendChild(bubble);
+    wrap.appendChild(meta);
+
+    row.appendChild(wrap);
+    chatEl.appendChild(row);
+
+    // scroll chat container, not window
+    chatEl.scrollTop = chatEl.scrollHeight;
+  }
+
+  function isGreeting(s){
+    const t = (s || "").trim().toLowerCase();
+    return ["hi","hello","hey","hiya","yo","alright","alright mate","morning","evening"].includes(t);
+  }
+
+  function setSending(on){
+    if(on){
+      sendBtn.disabled = true;
+      sendBtn.classList.add("sending");
+      btnText.textContent = "Sending";
+    }else{
+      sendBtn.disabled = false;
+      sendBtn.classList.remove("sending");
+      btnText.textContent = "Send";
+    }
+  }
+
+  function updateSummary(summary){
+    if(summary && String(summary).trim()){
+      // remove any duplicated prefix if your backend includes "Order summary:"
+      const cleaned = String(summary).replace(/^Order summary:\s*/i, "");
+      summaryEl.textContent = cleaned;
+      summaryCard.style.display = "block";
+    }else{
+      summaryEl.textContent = "";
+      summaryCard.style.display = "none";
+    }
+  }
+
+  async function sendMessage(raw){
+    const text = (raw ?? inputEl.value ?? "").trim();
+    if(!text) return;
+
     inputEl.value = "";
     addMsg(text, "user");
-    sendBtn.disabled = true;
 
-    try {
+    // Friendly waiter behaviour for greetings (don’t hit backend)
+    if(isGreeting(text)){
+      addMsg("Hey! 👋 What can I get you today? You can say “menu” or just type items like “salt & pepper chicken + egg fried rice”.", "bot");
+      inputEl.focus();
+      return;
+    }
+
+    // Optional: reset keyword handled client-side (still call backend later if you want)
+    if(text.toLowerCase() === "reset"){
+      addMsg("Resetting your draft…", "bot");
+      updateSummary("");
+      inputEl.focus();
+      return;
+    }
+
+    setSending(true);
+
+    try{
       const res = await fetch(`/r/${slug}/chat`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          // NOTE: auth/guest comes next (see below)
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text })
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Request failed");
+      if(!res.ok) throw new Error(data.detail || "Request failed");
+
       addMsg(data.reply || "(no reply)", "bot");
-      summaryEl.textContent = data.summary ? `Summary: ${data.summary}` : "";
-    } catch (e) {
-      addMsg("Error: " + e.message, "bot");
-    } finally {
-      sendBtn.disabled = false;
+      updateSummary(data.summary || "");
+
+    }catch(e){
+      addMsg("Sorry, something went wrong. Try again in a second.", "bot");
+      console.error(e);
+    }finally{
+      setSending(false);
       inputEl.focus();
+      chatEl.scrollTop = chatEl.scrollHeight;
     }
   }
 
-  sendBtn.addEventListener("click", send);
-  inputEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") send();
+  // Chips
+  document.querySelectorAll(".chip").forEach(chip => {
+    chip.addEventListener("click", () => sendMessage(chip.dataset.msg));
   });
 
+  sendBtn.addEventListener("click", () => sendMessage());
+  inputEl.addEventListener("keydown", (e) => {
+    if(e.key === "Enter") sendMessage();
+  });
+
+  // Initial greeting
   addMsg("Hi! What can I get you today?", "bot");
+  inputEl.focus();
 </script>
 </body>
 </html>
