@@ -67,7 +67,7 @@
       min-height:0;
     }
 
-    /* --- Brand header --- */
+    /* --- Top header --- */
     header{
       padding:12px 16px 10px;
       border-bottom:1px solid var(--line);
@@ -76,21 +76,42 @@
       top:0;
       z-index:10;
     }
-    .brandRow{
-      display:flex;
+
+    /* grid keeps title perfectly centered even with different button widths */
+    .topbar{
+      display:grid;
+      grid-template-columns: 1fr auto 1fr;
       align-items:center;
-      justify-content:space-between;
       gap:12px;
     }
-    .brand{
-      display:flex;
-      flex-direction:column;
-      gap:3px;
+
+    .iconBtn{
+      justify-self:start;
+      font-size:13px;
+      color:var(--text);
+      border:1px solid var(--line);
+      background:var(--chipBg);
+      padding:8px 12px;
+      border-radius:999px;
+      user-select:none;
+      cursor:pointer;
+      width:fit-content;
+      transition:transform .08s ease, opacity .15s ease;
+    }
+    #basketBtn{ justify-self:end; }
+    .iconBtn:active{ transform:scale(.98); }
+    .iconBtn:disabled{ opacity:.55; cursor:not-allowed; transform:none; }
+
+    .brandCenter{
+      justify-self:center;
+      text-align:center;
       min-width:0;
     }
+
     .brandTitle{
       display:flex;
       align-items:center;
+      justify-content:center;
       gap:8px;
       font-weight:800;
       letter-spacing:-0.3px;
@@ -106,45 +127,13 @@
       flex:0 0 auto;
     }
     .brandSub{
+      margin-top:3px;
       font-size:12px;
       color:var(--muted);
       white-space:nowrap;
       overflow:hidden;
       text-overflow:ellipsis;
     }
-    .pill{
-      font-size:12px;
-      color:var(--muted);
-      border:1px solid var(--line);
-      padding:6px 10px;
-      border-radius:999px;
-      user-select:none;
-      flex:0 0 auto;
-    }
-
-    /* chips */
-    .chips{
-      padding:10px var(--padX);
-      border-bottom:1px solid var(--line);
-      display:flex;
-      gap:8px;
-      overflow-x:auto;
-      -webkit-overflow-scrolling:touch;
-      background:var(--bg);
-    }
-    .chip{
-      border:1px solid var(--line);
-      background:var(--chipBg);
-      color:var(--text);
-      padding:8px 10px;
-      border-radius:999px;
-      font-size:13px;
-      cursor:pointer;
-      user-select:none;
-      flex:0 0 auto;
-      transition:transform .08s ease, opacity .15s ease;
-    }
-    .chip:active{ transform:scale(.98); }
 
     /* content */
     .content{
@@ -174,9 +163,9 @@
 
     /* --- Bubble fixes (prevents “Co / ke”) --- */
     .bubble{
-      flex: 0 1 auto;                 /* allow shrink but not weird collapsing */
-      width: fit-content;             /* size to content */
-      min-width: fit-content;         /* prevents ultra-narrow */
+      flex: 0 1 auto;
+      width: fit-content;
+      min-width: fit-content;
       max-width: 100%;
       padding: 11px 12px;
       border-radius: 18px;
@@ -184,7 +173,7 @@
       font-size: 15px;
 
       white-space: pre-wrap;
-      overflow-wrap: anywhere;        /* better wrap rules */
+      overflow-wrap: anywhere;
       word-break: normal;
     }
 
@@ -255,7 +244,7 @@
       box-shadow: 0 0 0 3px rgba(43,108,255,.14);
     }
 
-    button{
+    button#send{
       padding:12px 14px;
       border-radius:14px;
       border:0;
@@ -271,8 +260,8 @@
       gap:8px;
       transition:transform .08s ease, opacity .15s ease;
     }
-    button:active{ transform:scale(.98); }
-    button:disabled{ opacity:.55; cursor:not-allowed; transform:none; }
+    button#send:active{ transform:scale(.98); }
+    button#send:disabled{ opacity:.55; cursor:not-allowed; transform:none; }
 
     .spinner{
       width:14px; height:14px;
@@ -290,8 +279,10 @@
 <body>
   <div class="app">
     <header>
-      <div class="brandRow">
-        <div class="brand">
+      <div class="topbar">
+        <button class="iconBtn" id="menuBtn" type="button">Menu</button>
+
+        <div class="brandCenter">
           <div class="brandTitle">
             <span>JP</span>
             <span style="opacity:.45;">·</span>
@@ -300,17 +291,10 @@
           </div>
           <div class="brandSub" id="restaurantLine">Ordering</div>
         </div>
-        <div class="pill">Order Chat</div>
+
+        <button class="iconBtn" id="basketBtn" type="button">Basket</button>
       </div>
     </header>
-
-    <div class="chips" id="chips">
-      <div class="chip" data-msg="menu">Menu</div>
-      <div class="chip" data-msg="salt and pepper chicken">Salt &amp; Pepper Chicken</div>
-      <div class="chip" data-msg="egg fried rice">Egg Fried Rice</div>
-      <div class="chip" data-msg="spring rolls">Spring Rolls</div>
-      <div class="chip" data-action="reset">Reset</div>
-    </div>
 
     <div class="content">
       <div class="chat" id="chat"></div>
@@ -321,7 +305,7 @@
         <div class="inputRow">
           <input id="input" autocomplete="off" inputmode="text"
                  placeholder="Type your order… e.g. coke + spring rolls" />
-          <button id="send">
+          <button id="send" type="button">
             <span class="spinner"></span>
             <span class="btnText">Send</span>
           </button>
@@ -459,31 +443,9 @@
     }
   }
 
-  async function handleReset(){
-    addMsg("Resetting your draft…", "bot");
-    setSending(true);
-    try{
-      const data = await apiChat("reset");
-      addMsg(data.reply || "Done ✅ Start a fresh order whenever you're ready.", "bot");
-      renderSummary("");
-    }catch(e){
-      renderSummary("");
-      addMsg("Done ✅ (local reset). If the backend still remembers items, we’ll wire a proper reset endpoint next.", "bot");
-      console.error(e);
-    }finally{
-      setSending(false);
-      inputEl.focus();
-      scrollToBottom();
-    }
-  }
-
-  document.getElementById("chips").addEventListener("click", (e) => {
-    const chip = e.target.closest(".chip");
-    if(!chip) return;
-    if(chip.dataset.action === "reset"){ handleReset(); return; }
-    const msg = chip.dataset.msg;
-    if(msg) sendMessage(msg);
-  });
+  // Topbar actions
+  document.getElementById("menuBtn").addEventListener("click", () => sendMessage("menu"));
+  document.getElementById("basketBtn").addEventListener("click", () => sendMessage("basket"));
 
   sendBtn.addEventListener("click", () => sendMessage());
   inputEl.addEventListener("keydown", (e) => {
