@@ -115,16 +115,44 @@ def find_category_name(menu: Dict[str, Any], text: str, synonyms: Dict[str, str]
     best = fuzzy_best_key(list(cat_norm_to_display.keys()), q, cutoff=0.78)
     return cat_norm_to_display.get(best) if best else None
 
+def extract_category_from_text(menu: Dict[str, Any], text: str, synonyms: Dict[str, str]) -> Optional[str]:
+    """
+    Find a category mentioned anywhere in the message.
+    e.g. "what's in the starters" -> "Starters"
+    """
+    cats = all_category_names(menu)
+    if not text or not cats:
+        return None
+
+    text_norm = normalize_text(text, synonyms)
+
+    # exact containment match (fast + reliable)
+    for c in cats:
+        c_norm = normalize_text(c, synonyms)
+        if c_norm and c_norm in text_norm:
+            return c
+
+    # singular/plural tolerance (starter -> starters, soup -> soups)
+    for c in cats:
+        c_norm = normalize_text(c, synonyms)
+        if not c_norm:
+            continue
+        if c_norm.endswith("s") and c_norm[:-1] and c_norm[:-1] in text_norm:
+            return c
+        if (c_norm + "s") in text_norm:
+            return c
+
+    return None
 
 def items_in_category(menu: Dict[str, Any], category_name: str, synonyms: Dict[str, str]) -> List[Dict[str, Any]]:
     """
     Return items for a category display name.
 
     Supports:
-    1) Flat schema:
-       categories: [{id,name}], items: [{category_id:<id>, ...}]
-    2) Nested schema (back-compat):
+    1) Nested schema:
        categories: [{name, items:[...]}]
+    2) Flat schema:
+       categories: [{id,name}], items: [{category_id:<id>, ...}]
     """
     out: List[Dict[str, Any]] = []
     if not category_name:
@@ -134,34 +162,35 @@ def items_in_category(menu: Dict[str, Any], category_name: str, synonyms: Dict[s
     if not needle:
         return out
 
-    # --- A) Nested schema (back-compat) ---
     cats = menu.get("categories") or []
-    if isinstance(cats, list):
-        for c in cats:
-            if not isinstance(c, dict):
-                continue
-            c_name = str(c.get("name") or "").strip()
-            if not c_name:
-                continue
+    if not isinstance(cats, list):
+        cats = []
 
-            if normalize_text(c_name, synonyms) == needle:
-                nested_items = c.get("items") or []
-                if isinstance(nested_items, list):
-                    return [it for it in nested_items if isinstance(it, dict)]
-                return []
+    # --- A) Nested schema: only use if the category actually HAS an "items" list ---
+    for c in cats:
+        if not isinstance(c, dict):
+            continue
+        c_name = str(c.get("name") or "").strip()
+        if not c_name:
+            continue
 
-    # --- B) Flat schema (your datasets) ---
-    # Find category id by matching name
+        if normalize_text(c_name, synonyms) == needle:
+            # Only treat as nested schema if "items" key exists and is a list
+            if "items" in c and isinstance(c.get("items"), list):
+                return [it for it in (c.get("items") or []) if isinstance(it, dict)]
+            # Otherwise, it's flat schema category: do NOT return here
+            break
+
+    # --- B) Flat schema: resolve category id by name, then filter menu["items"] ---
     cat_id = None
-    if isinstance(cats, list):
-        for c in cats:
-            if not isinstance(c, dict):
-                continue
-            cid = str(c.get("id") or "").strip()
-            c_name = str(c.get("name") or "").strip()
-            if cid and c_name and normalize_text(c_name, synonyms) == needle:
-                cat_id = cid
-                break
+    for c in cats:
+        if not isinstance(c, dict):
+            continue
+        cid = str(c.get("id") or "").strip()
+        c_name = str(c.get("name") or "").strip()
+        if cid and c_name and normalize_text(c_name, synonyms) == needle:
+            cat_id = cid
+            break
 
     if not cat_id:
         return out
@@ -178,7 +207,6 @@ def items_in_category(menu: Dict[str, Any], category_name: str, synonyms: Dict[s
             out.append(it)
 
     return out
-
 
 _LEADING_JOINERS_RE = re.compile(r"^(?:and|with)\s+", re.I)
 _LEADING_ARTICLES_RE = re.compile(r"^(?:a|an|the)\s+", re.I)

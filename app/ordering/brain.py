@@ -14,7 +14,7 @@ from .menu import (
     items_in_category,
 )
 from .cart import load_state, load_cart, dump_cart, dump_state, recalc_line_total, build_summary
-
+from .menu import extract_category_from_text
 
 def _format_category_items(cat_name: str, items: list[dict], currency: str) -> str:
     """
@@ -118,9 +118,7 @@ def handle_message(
             return "We have: " + ", ".join(cats), dump_cart(cart), dump_state(state)
         return "Tell me what you'd like.", dump_cart(cart), dump_state(state)
 
-    # --- category selection (MUST be before add-items flow) ---
-    # When the user taps/types "Soups", "Starters", etc.
-    cat = find_category_name(menu, msg_raw, synonyms)
+    cat = extract_category_from_text(menu, msg_raw, synonyms) or find_category_name(menu, msg_raw, synonyms)
     if cat:
         items = items_in_category(menu, cat, synonyms)
         return _format_category_items(cat, items, cur), dump_cart(cart), dump_state(state)
