@@ -4,8 +4,45 @@ from __future__ import annotations
 from typing import Any, Dict, Tuple
 
 from .nlp import strip_filler_prefix, normalize_text, split_intents, parse_qty_prefix
-from .menu import build_menu_index, menu_synonyms, currency_symbol, all_category_names, find_item
+from .menu import (
+    build_menu_index,
+    menu_synonyms,
+    currency_symbol,
+    all_category_names,
+    find_item,
+    find_category_name,   # NEW
+    items_in_category,    # NEW
+)
 from .cart import load_state, load_cart, dump_cart, dump_state, recalc_line_total, build_summary
+
+
+def _format_category_items(cat_name: str, items: list[dict], currency: str) -> str:
+    """
+    Simple chat-friendly category rendering.
+    Keeps it lightweight so it works in your demo immediately.
+    """
+    if not items:
+        return f"{cat_name}: no items found."
+
+    # show up to 12 items (avoid massive walls of text)
+    lines = []
+    for it in items[:12]:
+        name = str(it.get("name") or "Item").strip()
+        price = it.get("base_price")
+        if price is None:
+            lines.append(f"• {name}")
+        else:
+            try:
+                p = float(price or 0.0)
+                lines.append(f"• {name} ({currency}{p:.2f})")
+            except Exception:
+                lines.append(f"• {name}")
+
+    more = ""
+    if len(items) > 12:
+        more = f"\n…and {len(items) - 12} more."
+
+    return f"{cat_name}:\n" + "\n".join(lines) + more
 
 
 def handle_message(
@@ -41,10 +78,17 @@ def handle_message(
             return "We have: " + ", ".join(cats), dump_cart(cart), dump_state(state)
         return "Tell me what you'd like.", dump_cart(cart), dump_state(state)
 
+    # --- category selection (NEW: MUST be before add-items flow) ---
+    # When the user taps/types "Soups", "Starters", etc.
+    cat = find_category_name(menu, msg_raw, synonyms)
+    if cat:
+        items = items_in_category(menu, cat)
+        return _format_category_items(cat, items, cur), dump_cart(cart), dump_state(state)
+
     # --- remove (MUST be before add flow) ---
     if msg_norm.startswith("remove ") or msg_norm.startswith("delete "):
         target_text = msg_norm.split(" ", 1)[1].strip()
-        target = find_item(menu, target_text, synonyms)  # or _find_item_in_text / your function
+        target = find_item(menu, target_text, synonyms)
         if not target:
             return "Tell me which item to remove (e.g. “remove Egg Fried Rice”).", dump_cart(cart), dump_state(state)
 
@@ -68,6 +112,7 @@ def handle_message(
         cart = new_cart
         summary, _ = build_summary(cart, currency_symbol=cur)
         return "Removed ✅\n\n" + summary, dump_cart(cart), dump_state(state)
+
     # --- add items (supports multiple) ---
     parts = split_intents(normalize_text(msg_raw, synonyms))
 

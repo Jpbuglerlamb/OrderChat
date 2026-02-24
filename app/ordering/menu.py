@@ -22,6 +22,11 @@ def menu_synonyms(menu: Dict[str, Any]) -> Dict[str, str]:
 
 
 def build_menu_index(menu: Dict[str, Any], synonyms: Dict[str, str]) -> Dict[str, Any]:
+    """
+    Build a lookup index for fast matching:
+      - items_by_id
+      - name_to_item_syn (normalized item name -> item dict)
+    """
     idx: Dict[str, Any] = {}
     items_by_id: Dict[str, Dict[str, Any]] = {}
     name_to_item_syn: Dict[str, Dict[str, Any]] = {}
@@ -64,6 +69,10 @@ def _index_item(
 
 
 def all_category_names(menu: Dict[str, Any]) -> List[str]:
+    """
+    Returns category display names from nested schema:
+      menu["categories"] = [{ "name": "...", "items": [...] }, ...]
+    """
     cats = menu.get("categories") or []
     out: List[str] = []
     if isinstance(cats, list):
@@ -72,6 +81,65 @@ def all_category_names(menu: Dict[str, Any]) -> List[str]:
                 n = str(c.get("name") or "").strip()
                 if n:
                     out.append(n)
+    return out
+
+
+def find_category_name(menu: Dict[str, Any], text: str, synonyms: Dict[str, str]) -> Optional[str]:
+    """
+    Match user text to a category name (e.g. "soups" -> "Soups").
+    Uses normalize_text + fuzzy matching.
+    """
+    if not text:
+        return None
+
+    cats = all_category_names(menu)
+    if not cats:
+        return None
+
+    # normalized category name -> original display name
+    cat_norm_to_display: Dict[str, str] = {}
+    for c in cats:
+        cn = normalize_text(c, synonyms)
+        if cn:
+            cat_norm_to_display[cn] = c
+
+    q = normalize_text(text, synonyms)
+    if not q:
+        return None
+
+    # exact normalized match
+    if q in cat_norm_to_display:
+        return cat_norm_to_display[q]
+
+    # fuzzy normalized match
+    best = fuzzy_best_key(list(cat_norm_to_display.keys()), q, cutoff=0.78)
+    return cat_norm_to_display.get(best) if best else None
+
+
+def items_in_category(menu: Dict[str, Any], category_name: str) -> List[Dict[str, Any]]:
+    """
+    Return items from the nested schema category with name == category_name.
+    (If later you use a flat schema, extend here.)
+    """
+    out: List[Dict[str, Any]] = []
+    needle = (category_name or "").strip().lower()
+    if not needle:
+        return out
+
+    cats = menu.get("categories") or []
+    if not isinstance(cats, list):
+        return out
+
+    for c in cats:
+        if not isinstance(c, dict):
+            continue
+        n = str(c.get("name") or "").strip().lower()
+        if n == needle:
+            for it in (c.get("items") or []):
+                if isinstance(it, dict):
+                    out.append(it)
+            break
+
     return out
 
 
