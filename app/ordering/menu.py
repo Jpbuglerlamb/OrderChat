@@ -116,29 +116,66 @@ def find_category_name(menu: Dict[str, Any], text: str, synonyms: Dict[str, str]
     return cat_norm_to_display.get(best) if best else None
 
 
-def items_in_category(menu: Dict[str, Any], category_name: str) -> List[Dict[str, Any]]:
+def items_in_category(menu: Dict[str, Any], category_name: str, synonyms: Dict[str, str]) -> List[Dict[str, Any]]:
     """
-    Return items from the nested schema category with name == category_name.
-    (If later you use a flat schema, extend here.)
+    Return items for a category display name.
+
+    Supports:
+    1) Flat schema:
+       categories: [{id,name}], items: [{category_id:<id>, ...}]
+    2) Nested schema (back-compat):
+       categories: [{name, items:[...]}]
     """
     out: List[Dict[str, Any]] = []
-    needle = (category_name or "").strip().lower()
+    if not category_name:
+        return out
+
+    needle = normalize_text(category_name, synonyms)
     if not needle:
         return out
 
+    # --- A) Nested schema (back-compat) ---
     cats = menu.get("categories") or []
-    if not isinstance(cats, list):
+    if isinstance(cats, list):
+        for c in cats:
+            if not isinstance(c, dict):
+                continue
+            c_name = str(c.get("name") or "").strip()
+            if not c_name:
+                continue
+
+            if normalize_text(c_name, synonyms) == needle:
+                nested_items = c.get("items") or []
+                if isinstance(nested_items, list):
+                    return [it for it in nested_items if isinstance(it, dict)]
+                return []
+
+    # --- B) Flat schema (your datasets) ---
+    # Find category id by matching name
+    cat_id = None
+    if isinstance(cats, list):
+        for c in cats:
+            if not isinstance(c, dict):
+                continue
+            cid = str(c.get("id") or "").strip()
+            c_name = str(c.get("name") or "").strip()
+            if cid and c_name and normalize_text(c_name, synonyms) == needle:
+                cat_id = cid
+                break
+
+    if not cat_id:
         return out
 
-    for c in cats:
-        if not isinstance(c, dict):
+    items = menu.get("items") or []
+    if not isinstance(items, list):
+        return out
+
+    for it in items:
+        if not isinstance(it, dict):
             continue
-        n = str(c.get("name") or "").strip().lower()
-        if n == needle:
-            for it in (c.get("items") or []):
-                if isinstance(it, dict):
-                    out.append(it)
-            break
+        it_cid = str(it.get("category_id") or it.get("categoryId") or "").strip()
+        if it_cid == cat_id:
+            out.append(it)
 
     return out
 

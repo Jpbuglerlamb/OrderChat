@@ -122,7 +122,7 @@ def handle_message(
     # When the user taps/types "Soups", "Starters", etc.
     cat = find_category_name(menu, msg_raw, synonyms)
     if cat:
-        items = items_in_category(menu, cat)
+        items = items_in_category(menu, cat, synonyms)
         return _format_category_items(cat, items, cur), dump_cart(cart), dump_state(state)
 
     # --- remove (MUST be before add flow) ---
