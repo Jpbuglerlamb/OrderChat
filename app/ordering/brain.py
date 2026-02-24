@@ -10,8 +10,8 @@ from .menu import (
     currency_symbol,
     all_category_names,
     find_item,
-    find_category_name,   # NEW
-    items_in_category,    # NEW
+    find_category_name,
+    items_in_category,
 )
 from .cart import load_state, load_cart, dump_cart, dump_state, recalc_line_total, build_summary
 
@@ -25,7 +25,7 @@ def _format_category_items(cat_name: str, items: list[dict], currency: str) -> s
         return f"{cat_name}: no items found."
 
     # show up to 12 items (avoid massive walls of text)
-    lines = []
+    lines: list[str] = []
     for it in items[:12]:
         name = str(it.get("name") or "Item").strip()
         price = it.get("base_price")
@@ -43,6 +43,43 @@ def _format_category_items(cat_name: str, items: list[dict], currency: str) -> s
         more = f"\n…and {len(items) - 12} more."
 
     return f"{cat_name}:\n" + "\n".join(lines) + more
+
+
+# Natural language command aliases (people don’t speak like buttons)
+_MENU_INTENTS = {
+    "menu",
+    "show menu",
+    "show me the menu",
+    "what do you have",
+    "what have you got",
+    "what do you sell",
+    "what can i get",
+    "what can i have",
+    "what are the options",
+    "options",
+    "list",
+    "list menu",
+    "see menu",
+    "show options",
+    "show categories",
+    "categories",
+    "what's on the menu",
+    "whats on the menu",
+    "what is on the menu",
+}
+
+_BASKET_INTENTS = {
+    "basket",
+    "cart",
+    "summary",
+    "my order",
+    "show basket",
+    "show cart",
+    "show my order",
+    "what's in my basket",
+    "whats in my basket",
+    "what is in my basket",
+}
 
 
 def handle_message(
@@ -68,17 +105,20 @@ def handle_message(
         state = {}
         return "Cleared ✅ Starting fresh.", dump_cart(cart), dump_state(state)
 
-    if msg_norm in {"basket", "cart", "summary", "my order"}:
+    # Basket intent (expanded)
+    if (msg_norm in _BASKET_INTENTS) or ("my basket" in msg_norm):
         summary, _ = build_summary(cart, currency_symbol=cur)
         return summary, dump_cart(cart), dump_state(state)
 
-    if msg_norm in {"menu", "show menu"} or "menu" == msg_norm:
+    # Menu intent (expanded)
+    is_menu_intent = (msg_norm in _MENU_INTENTS) or ("menu" in msg_norm)
+    if is_menu_intent:
         cats = all_category_names(menu)
         if cats:
             return "We have: " + ", ".join(cats), dump_cart(cart), dump_state(state)
         return "Tell me what you'd like.", dump_cart(cart), dump_state(state)
 
-    # --- category selection (NEW: MUST be before add-items flow) ---
+    # --- category selection (MUST be before add-items flow) ---
     # When the user taps/types "Soups", "Starters", etc.
     cat = find_category_name(menu, msg_raw, synonyms)
     if cat:
