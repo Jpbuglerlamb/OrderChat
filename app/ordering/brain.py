@@ -1,6 +1,7 @@
 # app/ordering/brain.py
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, Tuple
 
 from .nlp import strip_filler_prefix, normalize_text, split_intents, parse_qty_prefix
@@ -12,9 +13,10 @@ from .menu import (
     find_item,
     find_category_name,
     items_in_category,
+    extract_category_from_text,
 )
 from .cart import load_state, load_cart, dump_cart, dump_state, recalc_line_total, build_summary
-from .menu import extract_category_from_text
+
 
 def _format_category_items(cat_name: str, items: list[dict], currency: str) -> str:
     """
@@ -82,6 +84,51 @@ _BASKET_INTENTS = {
 }
 
 
+# Question-shaped category queries:
+# "any rice", "got noodles", "do you have drinks", "what sides do you have"
+_CAT_Q_PATTERNS = [
+    re.compile(r"^(?:any|some)\s+(?P<cat>.+)$", re.IGNORECASE),
+    re.compile(r"^(?:got|got any|have you got|do you have|have)\s+(?P<cat>.+)$", re.IGNORECASE),
+    re.compile(r"^(?:any)\s+(?P<cat>.+?)\s+(?:available|today|now)$", re.IGNORECASE),
+    re.compile(r"^(?:what|which)\s+(?P<cat>.+?)\s+(?:do you have|have you got|have)$", re.IGNORECASE),
+]
+
+
+def _try_category_lookup(menu: Dict[str, Any], msg_norm: str, synonyms: Dict[str, str]) -> str | None:
+    """
+    Try to interpret the message as a category request.
+    Uses msg_norm (normalized) to avoid punctuation/and/& issues.
+    Handles "any rice" / "got noodles" / "what sides do you have".
+    """
+    if not msg_norm:
+        return None
+
+    # 1) direct category extraction ("sides", "rice and noodles", etc.)
+    cat = extract_category_from_text(menu, msg_norm, synonyms) or find_category_name(menu, msg_norm, synonyms)
+    if cat:
+        return cat
+
+    # 2) question-shaped category queries
+    for pat in _CAT_Q_PATTERNS:
+        m = pat.match(msg_norm)
+        if not m:
+            continue
+        tail = (m.group("cat") or "").strip()
+
+        # strip common trailing helper words from tail
+        tail = re.sub(r"\b(?:please|pls|plz)\b$", "", tail).strip()
+        tail = re.sub(r"\b(?:do you have|have you got|have|got)\b$", "", tail).strip()
+
+        if not tail:
+            continue
+
+        cat2 = extract_category_from_text(menu, tail, synonyms) or find_category_name(menu, tail, synonyms)
+        if cat2:
+            return cat2
+
+    return None
+
+
 def handle_message(
     message: str,
     items_json: str,
@@ -92,9 +139,9 @@ def handle_message(
     menu = build_menu_index(menu_dict, synonyms)
     cur = currency_symbol(menu)
 
-    msg_raw = (message or "").strip()
-    msg_raw = strip_filler_prefix(msg_raw)
-    msg_norm = normalize_text(msg_raw, synonyms)
+    raw = (message or "").strip()
+    raw = strip_filler_prefix(raw)
+    msg_norm = normalize_text(raw, synonyms)
 
     cart = load_cart(items_json)
     state = load_state(state_json)
@@ -118,7 +165,8 @@ def handle_message(
             return "We have: " + ", ".join(cats), dump_cart(cart), dump_state(state)
         return "Tell me what you'd like.", dump_cart(cart), dump_state(state)
 
-    cat = extract_category_from_text(menu, msg_raw, synonyms) or find_category_name(menu, msg_raw, synonyms)
+    # --- category browsing ---
+    cat = _try_category_lookup(menu, msg_norm, synonyms)
     if cat:
         items = items_in_category(menu, cat, synonyms)
         return _format_category_items(cat, items, cur), dump_cart(cart), dump_state(state)
@@ -152,7 +200,8 @@ def handle_message(
         return "Removed ✅\n\n" + summary, dump_cart(cart), dump_state(state)
 
     # --- add items (supports multiple) ---
-    parts = split_intents(normalize_text(msg_raw, synonyms))
+    # split based on normalized message so "&/+/,/and lists" are handled consistently
+    parts = split_intents(msg_norm)
 
     added = False
     for part in parts:
