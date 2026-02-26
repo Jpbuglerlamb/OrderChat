@@ -3,50 +3,239 @@ from __future__ import annotations
 
 import difflib
 import re
+import unicodedata
 from typing import Dict, List, Optional, Tuple
 
 # ----------------------------
 # Synonyms (base, UK-friendly)
 # Keep this reasonably sized; patterns + fuzzy matching do the heavy lifting.
+# Note: values are canonical forms AFTER normalization (we canonicalize to "and", not "&").
 # ----------------------------
 _DEFAULT_SYNONYMS: Dict[str, str] = {
-    # chips/fries ambiguity: you can decide per restaurant later.
+    # ----------------------------
+    # General ordering shorthand
+    # ----------------------------
+    "regular": "standard",
+    "std": "standard",
+    "normal": "standard",
+    "plain": "plain",
+    "classic": "plain",
+
+    # ----------------------------
+    # Chips / fries (UK)
+    # ----------------------------
     "chips": "fries",
     "chip": "fries",
+    "fries": "fries",
+    "french fries": "fries",
+    "skinny fries": "fries",
+    "straight cut fries": "fries",
+    "chunky chips": "fries",
+    "steak fries": "fries",
 
-    # soft drinks
+    # ----------------------------
+    # Drinks: Coca Cola family
+    # ----------------------------
     "coke": "coca cola",
     "cola": "coca cola",
     "coca-cola": "coca cola",
     "cocacola": "coca cola",
     "coca cola": "coca cola",
+    "original coke": "coca cola",
+    "classic coke": "coca cola",
+    "coca cola original": "coca cola",
 
-    # water
+    "diet coke": "diet coca cola",
+    "diet cola": "diet coca cola",
+    "coca cola diet": "diet coca cola",
+
+    "coke zero": "coca cola zero",
+    "zero coke": "coca cola zero",
+    "coca cola zero": "coca cola zero",
+    "coke 0": "coca cola zero",
+
+    # ----------------------------
+    # Drinks: Pepsi / others
+    # ----------------------------
+    "pepsi": "pepsi",
+    "pepsi max": "pepsi max",
+    "pepsi maxx": "pepsi max",
+    "max pepsi": "pepsi max",
+    "diet pepsi": "pepsi max",  # many people mean max in UK
+
+    "7 up": "7up",
+    "seven up": "7up",
+    "7up": "7up",
+
+    "irn-bru": "irn bru",
+    "irn bru": "irn bru",
+
+    "sprite": "sprite",
+
+    "fanta": "fanta orange",
+    "fanta orange": "fanta orange",
+
+    "dr pepper": "dr pepper",
+    "dr. pepper": "dr pepper",
+
+    "lucozade": "lucozade original",
+    "lucozade original": "lucozade original",
+    "lucozade orange": "lucozade orange",
+
+    "ribena": "ribena",
+    "vimto": "vimto",
+
+    "ginger beer": "ginger beer",
+    "tonic": "tonic water",
+    "tonic water": "tonic water",
+
+    # ----------------------------
+    # Water
+    # ----------------------------
     "water": "still water",
     "still water": "still water",
+    "tap water": "still water",
+    "bottled water": "still water",
+    "sparkling water": "sparkling water",
+    "fizzy water": "sparkling water",
+    "carbonated water": "sparkling water",
 
-    # common typos
+    # ----------------------------
+    # Common typos / spelling variants (general)
+    # ----------------------------
     "donner": "doner",
     "donar": "doner",
+    "doner": "doner",
+    "kebab": "kebab",
+    "kebeb": "kebab",
+
     "pepperonni": "pepperoni",
     "peperoni": "pepperoni",
+    "pepperoni": "pepperoni",
 
-    # pizza names (common UK misspells)
     "margarita": "margherita",
     "margherita": "margherita",
 
+    "chilli": "chili",
+    "chile": "chili",
+
+    # ----------------------------
+    # Sauce spellings / shorthand
+    # ----------------------------
+    "bbq": "barbecue",
+    "barbeque": "barbecue",
+    "barbecue": "barbecue",
+
+    "mayo": "mayonnaise",
+    "mayo.": "mayonnaise",
+    "mayonaise": "mayonnaise",
+    "mayonnaise": "mayonnaise",
+
+    "ketchup": "tomato ketchup",
+    "tomato sauce": "tomato ketchup",
+    "tomato ketchup": "tomato ketchup",
+
+    "sweet chilli": "sweet chili",
+    "sweet chili": "sweet chili",
+
+    # ----------------------------
+    # Chinese takeaway: core shorthand
+    # ----------------------------
+    "s and s": "sweet and sour",
+    "s&s": "sweet and sour",
+    "sweet n sour": "sweet and sour",
+    "sweet and sour": "sweet and sour",
+    "sweet sour": "sweet and sour",
+    "sweet and sour sauce": "sweet and sour",
+
+    "salt n pepper": "salt and pepper",
+    "salt and pepper": "salt and pepper",
+    "salt pepper": "salt and pepper",
+    "s and p": "salt and pepper",
+    "s&p": "salt and pepper",
+
+    "black bean": "black bean sauce",
+    "blackbean": "black bean sauce",
+    "black bean sauce": "black bean sauce",
+
+    "curry sauce": "curry sauce",
+    "chinese curry": "curry sauce",
+    "curry": "curry sauce",
+
+    "satay": "satay sauce",
+    "satay sauce": "satay sauce",
+    "peanut sauce": "satay sauce",
+
+    "ok sauce": "ok sauce",
+    "o k sauce": "ok sauce",
+
+    "chow mein": "chow mein",
+    "chowmein": "chow mein",
+    "chow main": "chow mein",
+
+    "fried rice": "fried rice",
+    "egg fried rice": "egg fried rice",
+    "egg fried": "egg fried rice",
+    "egg rice": "egg fried rice",
+    "special fried rice": "special fried rice",
+    "house fried rice": "special fried rice",
+
+    "rice": "boiled rice",
+    "boiled rice": "boiled rice",
+    "plain rice": "boiled rice",
+    "steamed rice": "boiled rice",
+
+    "noodles": "chow mein",
+    "soft noodles": "chow mein",
+
+    "spring roll": "spring rolls",
+    "spring rolls": "spring rolls",
+    "veg spring rolls": "spring rolls",
+    "vegetable spring rolls": "spring rolls",
+
+    "prawn crackers": "prawn crackers",
+    "prawn crackrs": "prawn crackers",
+    "prawn chips": "prawn crackers",
+
+    "dumplings": "dumplings",
+    "dimsum": "dumplings",
+    "dim sum": "dumplings",
+
+    # ----------------------------
+    # UK-ish shorthand people type
+    # ----------------------------
+    "bev": "drink",
+    "bevs": "drinks",
+    "pop": "soft drink",
+    "fizzy drink": "soft drink",
+    "soda": "soft drink",
+
+    # ----------------------------
+    # Portion sizing words (optional canonicalisation)
+    # ----------------------------
+    "sm": "small",
+    "sml": "small",
+    "small": "small",
+    "med": "medium",
+    "medium": "medium",
+    "lg": "large",
+    "lrg": "large",
+    "large": "large",
 }
 
 # ----------------------------
 # Regex helpers
 # ----------------------------
-# Split user intent by separators while keeping it simple.
-_SPLIT_RE = re.compile(r"\s*(?:,|&|\+|\band\b)\s*", re.IGNORECASE)
+
+# Split user intent by separators.
+# IMPORTANT: do NOT split on "and" here; we handle "and" splitting with protection logic
+# so compounds like "sweet and sour" don't get broken.
+_SPLIT_RE = re.compile(r"\s*(?:,|&|\+)\s*", re.IGNORECASE)
 
 # Quantity prefix: "2x burger", "2 x burger", "2× burger"
 _QTY_RE = re.compile(r"^\s*(\d+)\s*[x×]\s*(.+?)\s*$", re.IGNORECASE)
 
-# Punctuation to spaces (keep letters/numbers/spaces)
+# Punctuation to spaces (keep letters/numbers/spaces/underscores)
 _PUNCT_RE = re.compile(r"[^\w\s]+")
 
 # Leading filler words (UK vibes included)
@@ -68,6 +257,15 @@ _ARTICLES_RE = re.compile(r"^\s*(?:and\s+)?(?:a|an|the)\b[,\s]*", re.IGNORECASE)
 # Trailing politeness
 _TRAILING_POLITE_RE = re.compile(r"\b(?:please|pls|plz)\b\.?\s*$", re.IGNORECASE)
 
+# Phrases containing "and" that should NOT be split into multiple intents.
+# (Add more as you discover them in real orders.)
+_PROTECTED_AND_PHRASES = [
+    "sweet and sour",
+    "salt and pepper",
+    "black and white",
+    "fish and chips",  # common UK order phrase
+]
+
 
 def default_synonyms() -> Dict[str, str]:
     """Base synonym map. Menus can extend this in menu.meta.synonyms."""
@@ -80,14 +278,27 @@ def default_synonyms() -> Dict[str, str]:
 def _basic_normalize(s: str) -> str:
     """
     Basic cleanup:
+    - unicode normalize
     - lower
-    - replace &/+ with 'and'
+    - strip bracketed descriptors (menu fluff like "(Hong Kong Style)")
+    - replace &/+ with "and"
     - strip punctuation to spaces
     - collapse whitespace
     """
     s = (s or "").strip().lower()
+    s = unicodedata.normalize("NFKC", s)
+
+    # remove bracketed descriptors: "(...)" and "[...]"
+    s = re.sub(r"\([^)]*\)", " ", s)
+    s = re.sub(r"\[[^]]*\]", " ", s)
+
+    # normalize separators to words
     s = s.replace("&", " and ").replace("+", " and ")
+
+    # punctuation -> spaces
     s = _PUNCT_RE.sub(" ", s)
+
+    # collapse whitespace
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
@@ -130,7 +341,7 @@ def _apply_pattern_synonyms(s: str) -> str:
     s = re.sub(r"\b(diet\s+coke|diet\s+coca\s*cola)\b", "diet coca cola", s)
     s = re.sub(r"\b(coke\s*zero|coca\s*cola\s*zero|zero\s*coke)\b", "coca cola zero", s)
 
-    s = re.sub(r"\b(pepsi|max)\b", "pepsi max", s)
+    s = re.sub(r"\b(pepsi\s*max|pepsi\s*maxx|pepsi\s*max)\b", "pepsi max", s)
     s = re.sub(r"\b(7\s*up|seven\s*up)\b", "7up", s)
     s = re.sub(r"\b(irn\s*bru|irn-bru)\b", "irn bru", s)
     s = re.sub(r"\b(fanta(?:\s*orange)?)\b", "fanta orange", s)
@@ -145,9 +356,8 @@ def _apply_pattern_synonyms(s: str) -> str:
     s = re.sub(r"\b(peperoni|pepperonni)\b", "pepperoni", s)
     s = re.sub(r"\b(margarita)\b", "margherita", s)
 
-    # --- Common “&”/spacing edge cases ---
-    # “salt&pepper” -> “salt and pepper”
-    s = re.sub(r"\bsalt\s*and\s*pepper\b", "salt and pepper", s)
+    # --- Common "n" shorthand ---
+    s = re.sub(r"\b(n)\b", "and", s)
 
     # collapse again
     s = re.sub(r"\s+", " ", s).strip()
@@ -158,24 +368,22 @@ def _apply_dictionary_synonyms(s: str, synonyms: Dict[str, str]) -> str:
     """
     Applies synonym replacements safely.
     We apply longer keys first to avoid partial replacement conflicts.
-    Uses word boundaries to avoid weird mid-word hits.
+    Uses (?<!\\w) and (?!\\w) rather than \\b for cases with numbers like "7up".
     """
     if not s:
         return s
 
     syn = synonyms or {}
-    # Sort keys longest-first (e.g., "coke zero" before "coke")
     keys = sorted((k for k in syn.keys() if k), key=lambda x: len(str(x)), reverse=True)
 
     for k in keys:
         v = syn.get(k)
         if not v:
             continue
+
         k_norm = _basic_normalize(str(k))
         v_norm = _basic_normalize(str(v))
 
-        # word boundary replace
-        # Note: use (?<!\w) / (?!\w) rather than \b for cases with numbers like "7up"
         pattern = rf"(?<!\w){re.escape(k_norm)}(?!\w)"
         s = re.sub(pattern, v_norm, s)
 
@@ -187,7 +395,7 @@ def normalize_text(s: str, synonyms: Dict[str, str]) -> str:
     """
     Main normalization used by ordering flow.
     Pipeline:
-      basic normalize -> strip filler -> pattern synonyms -> dictionary synonyms -> collapse
+      basic normalize -> strip filler -> re-normalize -> pattern synonyms -> dictionary synonyms -> collapse
     """
     s = _basic_normalize(s)
     s = strip_filler_prefix(s)
@@ -201,25 +409,75 @@ def normalize_text(s: str, synonyms: Dict[str, str]) -> str:
 # Quantity + intent parsing
 # ----------------------------
 def parse_qty_prefix(msg: str) -> Tuple[int, str]:
+    """
+    Parse quantity prefixes like "2x burger", "2 x burger", "2× burger".
+    Returns (qty, rest_of_message).
+    """
     m = _QTY_RE.match(msg or "")
     if not m:
         return 1, (msg or "").strip()
     return max(1, int(m.group(1))), (m.group(2) or "").strip()
 
 
+def _protect_and_phrases(s: str) -> str:
+    """
+    Protect known compound phrases containing 'and' so intent splitting won't break them.
+    We replace ' and ' with ' _and_ ' inside those phrases temporarily.
+    """
+    if not s:
+        return s
+    out = s
+    for phrase in _PROTECTED_AND_PHRASES:
+        ph = _basic_normalize(phrase)
+        if not ph:
+            continue
+        protected = ph.replace(" and ", " _and_ ")
+        out = re.sub(rf"(?<!\w){re.escape(ph)}(?!\w)", protected, out)
+    return out
+
+
+def _unprotect_and_phrases(s: str) -> str:
+    return (s or "").replace(" _and_ ", " and ")
+
+
 def split_intents(msg_norm: str) -> List[str]:
     """
-    Split by commas, &, +, and "and".
-    If nothing splits, returns [msg_norm].
+    Split user intent by commas, &, +, and also natural language "and",
+    BUT without breaking common compound dish phrases like "sweet and sour".
+
+    Strategy:
+      1) protect compound phrases containing "and"
+      2) split by , & +
+      3) then split by " and " (word) only
+      4) unprotect
     """
-    parts = [p.strip() for p in _SPLIT_RE.split(msg_norm or "") if p and p.strip()]
+    s = (msg_norm or "").strip()
+    if not s:
+        return [""]
+
+    s = _protect_and_phrases(s)
+
+    # split on explicit separators first
+    chunks = [c.strip() for c in _SPLIT_RE.split(s) if c and c.strip()]
+
+    # then split remaining on " and " (natural language lists)
+    parts: List[str] = []
+    for c in chunks:
+        sub = [p.strip() for p in re.split(r"\s+\band\b\s+", c, flags=re.IGNORECASE) if p and p.strip()]
+        parts.extend(sub or [c])
+
+    parts = [_unprotect_and_phrases(p) for p in parts]
     return parts or [msg_norm or ""]
 
 
 # ----------------------------
 # Fuzzy matching
 # ----------------------------
-def fuzzy_best_key(keys: List[str], query: str, cutoff: float = 0.72) -> Optional[str]:
+def fuzzy_best_key(keys: List[str], query: str, cutoff: float = 0.68) -> Optional[str]:
+    """
+    Return best matching key from a list using difflib.
+    cutoff is lowered slightly for food ordering tolerance.
+    """
     if not query or not keys:
         return None
     q = query.strip().lower()
