@@ -16,7 +16,7 @@ from .menu import (
     extract_category_from_text,
 )
 from .cart import load_state, load_cart, dump_cart, dump_state, recalc_line_total, build_summary
-from ..ai_intent import interpret_message_llm
+from app.ai_intent import interpret_message_llm
 
 def _format_category_items(cat_name: str, items: list[dict], currency: str) -> str:
     """
