@@ -142,14 +142,12 @@ def require_user_id_or_guest(
       - If Bearer token present and valid -> use that user_id.
       - Else -> create/reuse a Guest user backed by a cookie.
     """
-    # 1) Prefer authenticated user if token exists
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()
         uid = decode_token(token)
         if uid:
             return uid
 
-    # 2) Otherwise, cookie-based guest identity
     if not guest_id:
         guest_id = uuid4().hex
 
@@ -161,13 +159,12 @@ def require_user_id_or_guest(
             name="Guest",
             email=guest_email,
             phone=None,
-            password_hash=hash_password(uuid4().hex),  # random, not used
+            password_hash=hash_password(uuid4().hex),
         )
         db.add(u)
         db.commit()
         db.refresh(u)
 
-    # Refresh cookie (30 days)
     response.set_cookie(
         key="guest_id",
         value=guest_id,
@@ -215,7 +212,6 @@ def _ensure_order_scoped_to_restaurant(order: Order, slug: str) -> None:
     prev_slug = _normalize_slug(str(state.get("restaurant_slug") or ""))
 
     if prev_slug and prev_slug != curr_slug:
-        # New restaurant: wipe draft clean
         order.items_json = "[]"
         state = {}
 
@@ -257,7 +253,6 @@ def root():
     return {"ok": True, "service": "takeaway-api"}
 
 
-# Render / load balancers often send HEAD checks. Without this, you can get 405.
 @app.head("/")
 def root_head():
     return Response(status_code=200)
@@ -296,10 +291,6 @@ def login(payload: LoginIn, db: Session = Depends(get_db)):
 # -------------------
 @app.get("/r/{slug}", response_class=HTMLResponse)
 def restaurant_page(slug: str):
-    """
-    QR opens this.
-    If restaurant exists -> serve chat UI.
-    """
     slug = _normalize_slug(slug)
     menu = load_menu_by_slug(slug)
     if not menu:
@@ -338,7 +329,7 @@ def menu():
 
 
 # -------------------
-# Order reset (DB-level) ✅ fixes "Reset still shows old items"
+# Order reset (DB-level)
 # -------------------
 @app.post("/order/reset")
 def reset_order(user_id: int = Depends(require_user_id), db: Session = Depends(get_db)):
@@ -371,14 +362,21 @@ async def chat(payload: ChatIn, user_id: int = Depends(require_user_id), db: Ses
     order = get_or_create_draft(db, user_id)
     menu_dict = load_menu()
 
-    text = await _apply_optional_llm_rewrite(payload.message, menu_dict, order.state_json)
+    try:
+        text = await _apply_optional_llm_rewrite(payload.message, menu_dict, order.state_json)
 
-    reply, updated_items_json, updated_state_json = handle_message(
-        message=text,
-        items_json=order.items_json,
-        menu_dict=menu_dict,
-        state_json=order.state_json,
-    )
+        reply, updated_items_json, updated_state_json = handle_message(
+            message=text,
+            items_json=order.items_json,
+            menu_dict=menu_dict,
+            state_json=order.state_json,
+        )
+    except Exception as e:
+        print("[CHAT] crashed:", repr(e), flush=True)
+        traceback.print_exc()
+        reply = "Sorry, I hit a glitch. Try 'menu' or tell me a dish name (e.g. 'beef in black bean')."
+        updated_items_json = order.items_json
+        updated_state_json = order.state_json
 
     order.items_json = updated_items_json
     order.state_json = updated_state_json
@@ -394,16 +392,11 @@ async def chat(payload: ChatIn, user_id: int = Depends(require_user_id), db: Ses
     db.commit()
     db.refresh(order)
 
-    return {
-        "reply": reply,
-        "order_id": order.id,
-        "summary": order.summary_text,
-        "items": items,
-    }
+    return {"reply": reply, "order_id": order.id, "summary": order.summary_text, "items": items}
 
 
 # -------------------
-# Chat ordering (restaurant-scoped)  ✅ guest-ready
+# Chat ordering (restaurant-scoped) ✅ guest-ready
 # -------------------
 @app.post("/r/{slug}/chat")
 async def chat_for_restaurant(
@@ -419,18 +412,23 @@ async def chat_for_restaurant(
         raise HTTPException(status_code=404, detail="Restaurant not found")
 
     order = get_or_create_draft(db, user_id)
-
-    # Prevent mixing draft orders across restaurants
     _ensure_order_scoped_to_restaurant(order, slug)
 
-    text = await _apply_optional_llm_rewrite(payload.message, menu_dict, order.state_json)
+    try:
+        text = await _apply_optional_llm_rewrite(payload.message, menu_dict, order.state_json)
 
-    reply, updated_items_json, updated_state_json = handle_message(
-        message=text,
-        items_json=order.items_json,
-        menu_dict=menu_dict,
-        state_json=order.state_json,
-    )
+        reply, updated_items_json, updated_state_json = handle_message(
+            message=text,
+            items_json=order.items_json,
+            menu_dict=menu_dict,
+            state_json=order.state_json,
+        )
+    except Exception as e:
+        print("[CHAT] crashed:", repr(e), flush=True)
+        traceback.print_exc()
+        reply = "Sorry, I hit a glitch. Try 'menu' or tell me a dish name (e.g. 'beef in black bean')."
+        updated_items_json = order.items_json
+        updated_state_json = order.state_json
 
     order.items_json = updated_items_json
     order.state_json = updated_state_json
@@ -491,17 +489,8 @@ def confirm(user_id: int = Depends(require_user_id), db: Session = Depends(get_d
         raise HTTPException(status_code=404, detail="User not found")
 
     subject = f"New Takeaway Order (Order #{order.id})"
-    body = (
-        f"Customer: {u.name}\n"
-        f"Email: {u.email}\n"
-        f"Phone: {u.phone}\n\n"
-        f"{order.summary_text}"
-    )
+    body = f"Customer: {u.name}\nEmail: {u.email}\nPhone: {u.phone}\n\n{order.summary_text}"
 
-    send_order_email(
-        to_email=settings.orders_email_to,
-        subject=subject,
-        body=body,
-    )
+    send_order_email(to_email=settings.orders_email_to, subject=subject, body=body)
 
     return {"ok": True, "order_id": order.id, "status": order.status}

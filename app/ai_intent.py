@@ -7,9 +7,7 @@ from typing import Any, Dict
 
 from openai import AsyncOpenAI
 
-
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
 
 SYSTEM = """You are an intent parser for a takeaway ordering app.
 Convert the user's message into ONE JSON command that matches the provided JSON schema.
@@ -20,8 +18,6 @@ Rules:
 - Keep it concise and robust to typos/slang.
 """
 
-
-# JSON Schema for Structured Outputs
 COMMAND_SCHEMA: Dict[str, Any] = {
     "name": "takeaway_command",
     "schema": {
@@ -78,7 +74,7 @@ def _menu_hints(menu: Dict[str, Any]) -> Dict[str, Any]:
                 }
             )
 
-    return {"categories": cats, "items": items[:120]}
+    return {"categories": cats, "items": items[:120]}  # cap
 
 
 def _extract_response_text(resp: Any) -> str:
@@ -86,13 +82,12 @@ def _extract_response_text(resp: Any) -> str:
     OpenAI Python SDK response shapes can vary by version.
     Try multiple ways to pull the generated text.
     """
-    # Newer SDKs often expose output_text
     txt = getattr(resp, "output_text", None)
     if isinstance(txt, str) and txt.strip():
         return txt.strip()
 
-    # Fallback: dig into output arrays
     try:
+        # Responses API sometimes stores text in output blocks
         out0 = resp.output[0]
         content0 = out0.content[0]
         text = getattr(content0, "text", None)
@@ -101,7 +96,6 @@ def _extract_response_text(resp: Any) -> str:
     except Exception:
         pass
 
-    # Last resort
     return ""
 
 
@@ -129,7 +123,6 @@ async def interpret_message_llm(message: str, menu: Dict[str, Any], state: Dict[
     if not text:
         raise RuntimeError("OpenAI response had no text content to parse")
 
-    # Structured outputs should already be valid JSON, but still guard.
     try:
         cmd = json.loads(text)
     except Exception as e:
