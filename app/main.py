@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
@@ -222,12 +223,16 @@ def _ensure_order_scoped_to_restaurant(order: Order, slug: str) -> None:
     order.state_json = json.dumps(state)
 
 
+def _llm_ready() -> bool:
+    return bool(settings.llm_enabled and settings.openai_api_key and interpret_message_llm)
+
+
 async def _apply_optional_llm_rewrite(text: str, menu_dict: Dict[str, Any], state_json: str) -> str:
     """
     Optional LLM layer to convert messy user text into deterministic, user-like commands.
     Silent fallback on any error.
     """
-    if not (settings.llm_enabled and settings.openai_api_key and interpret_message_llm):
+    if not _llm_ready():
         return text
 
     try:
@@ -239,7 +244,8 @@ async def _apply_optional_llm_rewrite(text: str, menu_dict: Dict[str, Any], stat
         candidate = command_to_userlike_text(cmd)
         return candidate or text
     except Exception as e:
-        print("[LLM] rewrite failed:", repr(e))
+        print("[LLM] rewrite failed:", repr(e), flush=True)
+        traceback.print_exc()
         return text
 
 
@@ -249,6 +255,12 @@ async def _apply_optional_llm_rewrite(text: str, menu_dict: Dict[str, Any], stat
 @app.get("/")
 def root():
     return {"ok": True, "service": "takeaway-api"}
+
+
+# Render / load balancers often send HEAD checks. Without this, you can get 405.
+@app.head("/")
+def root_head():
+    return Response(status_code=200)
 
 
 # -------------------
