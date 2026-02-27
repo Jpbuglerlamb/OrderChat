@@ -93,17 +93,39 @@ _PROTEIN_Q_RE = re.compile(
 )
 
 
-def _items_matching_keyword(menu_dict: Dict[str, Any], keyword: str) -> list[dict]:
+def _all_menu_item_names(menu_index: Dict[str, Any], menu_dict: Dict[str, Any]) -> list[dict]:
+    """
+    Return a list of items (dicts) from either:
+    - the indexed menu (preferred), or
+    - the raw menu JSON (fallback)
+    """
+    items: list[dict] = []
+
+    # 1) Preferred: indexed menu often keeps a flat list
+    for it in (menu_index.get("items") or []):
+        if isinstance(it, dict):
+            items.append(it)
+
+    # 2) Fallback: raw JSON categories/items
+    if not items:
+        for c in (menu_dict.get("categories") or []):
+            for it in (c.get("items") or []):
+                if isinstance(it, dict):
+                    items.append(it)
+
+    return items
+
+
+def _items_matching_keyword(menu_index: Dict[str, Any], menu_dict: Dict[str, Any], keyword: str) -> list[dict]:
     kw = (keyword or "").strip().lower()
     if not kw:
         return []
 
     hits: list[dict] = []
-    for c in (menu_dict.get("categories") or []):
-        for it in (c.get("items") or []):
-            name = str(it.get("name") or "").lower()
-            if kw in name:
-                hits.append(it)
+    for it in _all_menu_item_names(menu_index, menu_dict):
+        name = str(it.get("name") or "").lower()
+        if kw in name:
+            hits.append(it)
     return hits
 
 
@@ -172,7 +194,7 @@ def handle_message(
     m = _PROTEIN_Q_RE.match(msg_norm)
     if m:
         kw = (m.group("kw") or "").strip().lower()
-        hits = _items_matching_keyword(menu_dict, kw)
+        hits = _items_matching_keyword(menu, menu_dict, kw)
         if not hits:
             return f"I couldn’t find any {kw} dishes on this menu.", dump_cart(cart), dump_state(state)
 
