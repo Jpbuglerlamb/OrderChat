@@ -238,7 +238,8 @@ async def _apply_optional_llm_rewrite(text: str, menu_dict: Dict[str, Any], stat
         )
         candidate = command_to_userlike_text(cmd)
         return candidate or text
-    except Exception:
+    except Exception as e:
+        print("[LLM] rewrite failed:", repr(e))
         return text
 
 

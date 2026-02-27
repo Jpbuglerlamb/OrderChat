@@ -1,11 +1,9 @@
 # app/ai_intent.py
 from __future__ import annotations
-
 import os
 import json
 from typing import Any, Dict
-
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
