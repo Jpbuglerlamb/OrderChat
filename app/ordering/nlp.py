@@ -256,6 +256,62 @@ _ARTICLES_RE = re.compile(r"^\s*(?:and\s+)?(?:a|an|the)\b[,\s]*", re.IGNORECASE)
 # Trailing politeness
 _TRAILING_POLITE_RE = re.compile(r"\b(?:please|pls|plz)\b\.?\s*$", re.IGNORECASE)
 
+# ----------------------------
+# Category / browse question stripping
+# ----------------------------
+
+# Question-ish prefixes that wrap category browsing intent.
+# Keep it short and high-signal; you can expand as you see real messages.
+_QUESTION_PREFIX_RE = re.compile(
+    r"^\s*(?:"
+    r"what\s+(?:.*\s+)?do\s+you\s+have|"
+    r"what\s+have\s+you\s+got|"
+    r"what\s+.*\s+is\s+there|"
+    r"what\s+are\s+the\s+options\s+for|"
+    r"show\s+me|"
+    r"can\s+i\s+see|"
+    r"do\s+you\s+have\s+any|"
+    r"any|"
+    r"which|"
+    r"whats|what's"
+    r")\b[,\s]*",
+    re.IGNORECASE,
+)
+
+# Optional trailing browse suffixes
+_QUESTION_SUFFIX_RE = re.compile(
+    r"\b(?:do\s+you\s+have|have\s+you\s+got|available|options|on\s+the\s+menu)\b\.?\s*$",
+    re.IGNORECASE,
+)
+
+
+def strip_question_wrapper(raw: str) -> str:
+    """
+    Removes common browse/question wrappers so category extraction can work.
+    Examples:
+      "What rice do you have?" -> "rice"
+      "Show me the rice options" -> "rice options" (still useful)
+      "Do you have any drinks?" -> "drinks"
+    """
+    s = (raw or "").strip()
+
+    # remove leading question wrappers (possibly repeating)
+    while True:
+        s2 = _QUESTION_PREFIX_RE.sub("", s).strip()
+        if s2 == s:
+            break
+        s = s2
+
+    # remove trailing browse words (light touch)
+    s = _QUESTION_SUFFIX_RE.sub("", s).strip()
+
+    # remove leading articles again, just in case
+    s = _ARTICLES_RE.sub("", s).strip()
+
+    # remove trailing please/pls
+    s = _TRAILING_POLITE_RE.sub("", s).strip()
+
+    return s
 # Phrases containing "and" that should NOT be split into multiple intents.
 # (Add more as you discover them in real orders.)
 _PROTECTED_AND_PHRASES = [
@@ -394,10 +450,11 @@ def normalize_text(s: str, synonyms: Dict[str, str]) -> str:
     """
     Main normalization used by ordering flow.
     Pipeline:
-      basic normalize -> strip filler -> re-normalize -> pattern synonyms -> dictionary synonyms -> collapse
+      basic normalize -> strip filler -> strip question wrapper -> re-normalize -> pattern synonyms -> dictionary synonyms -> collapse
     """
     s = _basic_normalize(s)
     s = strip_filler_prefix(s)
+    s = strip_question_wrapper(s)  # ✅ add this
     s = _basic_normalize(s)  # re-normalize after stripping
     s = _apply_pattern_synonyms(s)
     s = _apply_dictionary_synonyms(s, synonyms)
