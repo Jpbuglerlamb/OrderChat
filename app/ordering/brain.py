@@ -338,6 +338,17 @@ _BASKET_INTENTS = {
     "whats in my basket",
     "what is in my basket",
 }
+_CONFIRM_INTENTS = {
+    "confirm",
+    "checkout",
+    "place order",
+    "place my order",
+    "complete order",
+    "done",
+    "finish",
+    "pay",
+    "order now",
+}
 
 _KEYWORD_Q_PATTERNS = [
     re.compile(r"^(?:do you have|have you got|have|got)\s+(?P<kw>.+)$", re.I),
@@ -422,7 +433,6 @@ def handle_message(
     cur = currency_symbol(menu)
 
     raw = (message or "").strip()
-    raw = (message or "").strip()
     msg_norm = normalize_text(raw, synonyms)
 
     cart = load_cart(items_json)
@@ -470,6 +480,17 @@ def handle_message(
     if (msg_norm in _BASKET_INTENTS) or ("my basket" in msg_norm):
         summary, _ = build_summary(cart, currency_symbol=cur)
         return summary, dump_cart(cart), dump_state(state)
+
+    # 2.5) Confirm / checkout
+    if msg_norm in _CONFIRM_INTENTS:
+        if not cart:
+            return "Your basket is empty. Add something first 🙂", dump_cart(cart), dump_state(state)
+
+        # clear suggestions so next message isn't treated as a selection follow-up
+        state.pop("suggestions", None)
+
+        summary, _ = build_summary(cart, currency_symbol=cur)
+        return "Confirmed ✅\n\n" + summary, dump_cart(cart), dump_state(state)
 
     # 3) Menu
     is_menu_intent = (msg_norm in _MENU_INTENTS) or ("menu" in msg_norm)
@@ -559,6 +580,7 @@ def handle_message(
 
     if added:
         summary, _ = build_summary(cart, currency_symbol=cur)
-        return "Added ✅\n\n" + summary, dump_cart(cart), dump_state(state)
+        cart = []
+        return "Order placed ✅\n\n" + summary, dump_cart(cart), dump_state(state)
 
     return "I didn’t catch that. Try 'menu', ask for a category, or type an item name.", dump_cart(cart), dump_state(state)
