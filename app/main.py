@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 from uuid import uuid4
-
+from .cart_api import router as cart_router
 from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, EmailStr
@@ -53,7 +53,7 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
 )
-
+app.include_router(cart_router)
 Base.metadata.create_all(bind=engine)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]  # TakeawayDemo/
@@ -198,6 +198,14 @@ def _ensure_order_scoped_to_restaurant(order: Order, slug: str) -> None:
     state["restaurant_slug"] = curr_slug
     order.state_json = json.dumps(state)
 
+def _business_order_email(menu_dict: Dict[str, Any]) -> str:
+    meta = menu_dict.get("meta") or {}
+    if isinstance(meta, dict):
+        for k in ("order_email", "email", "contact_email"):
+            v = meta.get(k)
+            if isinstance(v, str) and "@" in v:
+                return v.strip()
+    return settings.orders_email_to
 
 def _llm_ready() -> bool:
     return bool(settings.llm_enabled and settings.openai_api_key and interpret_message_llm)
@@ -460,3 +468,68 @@ def confirm(user_id: int = Depends(require_user_id), db: Session = Depends(get_d
 
     send_order_email(to_email=settings.orders_email_to, subject=subject, body=body)
     return {"ok": True, "order_id": order.id, "status": order.status}
+
+@app.post("/r/{slug}/order/confirm")
+def confirm_restaurant_order(
+    slug: str,
+    user_id: int = Depends(require_user_id_or_guest),
+    db: Session = Depends(get_db),
+):
+    slug = _normalize_slug(slug)
+    menu_dict = load_menu_by_slug(slug)
+    if not menu_dict:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    order = (
+        db.query(Order)
+        .filter(Order.user_id == user_id, Order.status == "draft")
+        .order_by(Order.id.desc())
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=400, detail="No draft order to confirm")
+
+    # Ensure it belongs to this restaurant
+    _ensure_order_scoped_to_restaurant(order, slug)
+
+    items = _safe_json_list(order.items_json)
+    if not items:
+        raise HTTPException(status_code=400, detail="Order is empty")
+
+    symbol = _currency_symbol_from_menu(menu_dict)
+    summary, _total = build_summary(items, currency_symbol=symbol)
+
+    order.summary_text = summary
+    order.status = "confirmed"
+    order.updated_at = datetime.utcnow()
+    order.state_json = "{}"
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    to_email = _business_order_email(menu_dict)
+    subject = f"New Order ({slug}) · Order #{order.id}"
+    body = (
+        f"Restaurant: {slug}\n"
+        f"Customer: {u.name}\nEmail: {u.email}\nPhone: {u.phone}\n\n"
+        f"{order.summary_text}"
+    )
+
+    send_order_email(to_email=to_email, subject=subject, body=body)
+    return {"ok": True, "order_id": order.id, "status": order.status}
+
+BASKET_HTML_PATH = FRONTEND_DIR / "basket.html"
+
+@app.get("/r/{slug}/basket", response_class=HTMLResponse)
+def basket_page(slug: str):
+    slug = _normalize_slug(slug)
+    menu = load_menu_by_slug(slug)
+    if not menu:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+    if not BASKET_HTML_PATH.exists():
+        raise HTTPException(status_code=500, detail=f"Missing frontend file: {BASKET_HTML_PATH}")
+    return BASKET_HTML_PATH.read_text(encoding="utf-8")
