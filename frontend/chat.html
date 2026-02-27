@@ -445,7 +445,9 @@
 
   // Topbar actions
   document.getElementById("menuBtn").addEventListener("click", () => sendMessage("menu"));
-  document.getElementById("basketBtn").addEventListener("click", () => sendMessage("basket"));
+  document.getElementById("basketBtn").addEventListener("click", () => {
+    window.location.href = `/r/${slug}/basket`;
+  });
 
   sendBtn.addEventListener("click", () => sendMessage());
   inputEl.addEventListener("keydown", (e) => {
