@@ -16,7 +16,7 @@ from .menu import (
     extract_category_from_text,
 )
 from .cart import load_state, load_cart, dump_cart, dump_state, recalc_line_total, build_summary
-
+from ..ai_intent import interpret_message_llm
 
 def _format_category_items(cat_name: str, items: list[dict], currency: str) -> str:
     """
@@ -158,7 +158,11 @@ def handle_message(
         return summary, dump_cart(cart), dump_state(state)
 
     # Menu intent (expanded)
-    is_menu_intent = (msg_norm in _MENU_INTENTS) or ("menu" in msg_norm)
+    is_menu_intent = (
+            (msg_norm in _MENU_INTENTS)
+            or ("menu" in msg_norm)
+            or any(intent in msg_norm for intent in _MENU_INTENTS)
+    )
     if is_menu_intent:
         cats = all_category_names(menu)
         if cats:
@@ -227,4 +231,70 @@ def handle_message(
         summary, _ = build_summary(cart, currency_symbol=cur)
         return "Added ✅\n\n" + summary, dump_cart(cart), dump_state(state)
 
+    # --- LLM fallback (only when rules failed) ---
+    try:
+        cmd = interpret_message_llm(message, menu_dict, state)
+    except Exception:
+        cmd = {"intent": "unknown", "category": None, "item_name": None, "qty": None,
+               "option_value": None, "extra_name": None}
+
+    intent = (cmd.get("intent") or "unknown").strip()
+    cat_text = (cmd.get("category") or "").strip() or None
+    item_text = (cmd.get("item_name") or "").strip() or None
+    qty = int(cmd.get("qty") or 1)
+
+    if intent == "show_menu":
+        cats = all_category_names(menu)
+        if cats:
+            return "We have: " + ", ".join(cats), dump_cart(cart), dump_state(state)
+
+    if intent == "show_basket":
+        summary, _ = build_summary(cart, currency_symbol=cur)
+        return summary, dump_cart(cart), dump_state(state)
+
+    if intent == "show_category" and cat_text:
+        cat = extract_category_from_text(menu, cat_text, synonyms) or find_category_name(menu, cat_text, synonyms)
+        if cat:
+            items = items_in_category(menu, cat, synonyms)
+            return _format_category_items(cat, items, cur), dump_cart(cart), dump_state(state)
+
+    if intent in {"add_item", "remove_item"} and item_text:
+        item = find_item(menu, item_text, synonyms)
+        if item:
+            if intent == "add_item":
+                new_line = {
+                    "item_id": str(item.get("id", "")),
+                    "name": str(item.get("name", "Item")),
+                    "qty": max(1, qty),
+                    "base_price": float(item.get("base_price", 0.0) or 0.0),
+                    "choices": {},
+                    "extras": [],
+                    "line_total": 0.0,
+                }
+                recalc_line_total(new_line)
+                cart.append(new_line)
+                summary, _ = build_summary(cart, currency_symbol=cur)
+                return "Added ✅\n\n" + summary, dump_cart(cart), dump_state(state)
+
+            # remove_item
+            target_id = item.get("id")
+            removed = False
+            new_cart = []
+            for ln in cart:
+                if (not removed) and target_id and ln.get("item_id") == target_id:
+                    q = int(ln.get("qty", 1) or 1)
+                    if q > 1:
+                        ln["qty"] = q - 1
+                        recalc_line_total(ln)
+                        new_cart.append(ln)
+                    removed = True
+                    continue
+                new_cart.append(ln)
+
+            if removed:
+                cart = new_cart
+                summary, _ = build_summary(cart, currency_symbol=cur)
+                return "Removed ✅\n\n" + summary, dump_cart(cart), dump_state(state)
+
+    # still nothing
     return "I didn’t catch that. Try 'menu' or an item name.", dump_cart(cart), dump_state(state)

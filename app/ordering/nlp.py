@@ -180,7 +180,6 @@ _DEFAULT_SYNONYMS: Dict[str, str] = {
     "special fried rice": "special fried rice",
     "house fried rice": "special fried rice",
 
-    "rice": "boiled rice",
     "boiled rice": "boiled rice",
     "plain rice": "boiled rice",
     "steamed rice": "boiled rice",
