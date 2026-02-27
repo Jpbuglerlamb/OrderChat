@@ -524,30 +524,14 @@ def confirm_restaurant_order(
 
 BASKET_HTML_PATH = FRONTEND_DIR / "basket.html"
 
-
-@app.get("/r/{slug}/basket")
-def get_basket(
-    slug: str,
-    user_id: int = Depends(require_user_id_or_guest),
-    db: Session = Depends(get_db),
-):
+@app.get("/r/{slug}/basket", response_class=HTMLResponse)
+def basket_page(slug: str):
     slug = _normalize_slug(slug)
-
-    menu_dict = load_menu_by_slug(slug)
-    if not menu_dict:
+    menu = load_menu_by_slug(slug)
+    if not menu:
         raise HTTPException(status_code=404, detail="Restaurant not found")
 
-    order = get_or_create_draft(db, user_id)
-    _ensure_order_scoped_to_restaurant(order, slug)
+    if not BASKET_HTML_PATH.exists():
+        raise HTTPException(status_code=500, detail=f"Missing frontend file: {BASKET_HTML_PATH}")
 
-    items = _safe_json_list(order.items_json)
-
-    symbol = _currency_symbol_from_menu(menu_dict)
-    summary, total = build_summary(items, currency_symbol=symbol)
-
-    return {
-        "items": items,
-        "total": total,
-        "currency_symbol": symbol,
-        "summary": summary,
-    }
+    return BASKET_HTML_PATH.read_text(encoding="utf-8")
