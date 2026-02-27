@@ -3,18 +3,22 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from openai import AsyncOpenAI
 
+# Create client once at import time (OK in FastAPI)
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+
 SYSTEM = """You are an intent parser for a takeaway ordering app.
+
 Convert the user's message into ONE JSON command that matches the provided JSON schema.
 
 Rules:
-- Never invent menu items. If unsure, use intent "unknown".
-- If the system is awaiting an option/extras (state.mode), interpret short answers like "large" or "no".
+- Never invent menu items. Only choose from menu_hints.
+- If unsure, use intent "unknown".
+- If the system is awaiting a selection (state.mode), interpret short answers like "large", "no", "yes", "1", etc.
 - Keep it concise and robust to typos/slang.
 """
 
@@ -54,7 +58,7 @@ COMMAND_SCHEMA: Dict[str, Any] = {
 def _menu_hints(menu: Dict[str, Any]) -> Dict[str, Any]:
     """
     Keep hints small to control cost + latency.
-    Provide enough signal for the LLM to choose valid categories/items without inventing.
+    Only include info the model needs to avoid inventing items.
     """
     cats: list[str] = []
     items: list[dict] = []
@@ -74,20 +78,20 @@ def _menu_hints(menu: Dict[str, Any]) -> Dict[str, Any]:
                 }
             )
 
-    return {"categories": cats, "items": items[:120]}  # cap
+    return {"categories": cats, "items": items[:160]}  # cap
 
 
-def _extract_response_text(resp: Any) -> str:
+def _extract_text(resp: Any) -> str:
     """
-    OpenAI Python SDK response shapes can vary by version.
-    Try multiple ways to pull the generated text.
+    Different SDK versions expose output differently.
+    Try the common paths.
     """
     txt = getattr(resp, "output_text", None)
     if isinstance(txt, str) and txt.strip():
         return txt.strip()
 
+    # fallback to digging output/content
     try:
-        # Responses API sometimes stores text in output blocks
         out0 = resp.output[0]
         content0 = out0.content[0]
         text = getattr(content0, "text", None)
@@ -99,10 +103,16 @@ def _extract_response_text(resp: Any) -> str:
     return ""
 
 
-async def interpret_message_llm(message: str, menu: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, Any]:
+async def interpret_message_llm(
+    message: str,
+    menu: Dict[str, Any],
+    state: Dict[str, Any],
+    *,
+    model: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Returns a dict matching COMMAND_SCHEMA.
-    Raises on failure (caller decides whether to fall back).
+    Raises on failure (caller decides fallback).
     """
     payload = {
         "message": message,
@@ -111,7 +121,7 @@ async def interpret_message_llm(message: str, menu: Dict[str, Any], state: Dict[
     }
 
     resp = await client.responses.create(
-        model=os.getenv("LLM_MODEL", "gpt-5-mini"),
+        model=model or os.getenv("LLM_MODEL", "gpt-5-mini"),
         input=[
             {"role": "system", "content": SYSTEM},
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
@@ -119,16 +129,12 @@ async def interpret_message_llm(message: str, menu: Dict[str, Any], state: Dict[
         response_format={"type": "json_schema", "json_schema": COMMAND_SCHEMA},
     )
 
-    text = _extract_response_text(resp)
+    text = _extract_text(resp)
     if not text:
-        raise RuntimeError("OpenAI response had no text content to parse")
+        raise RuntimeError("OpenAI response contained no output_text")
 
-    try:
-        cmd = json.loads(text)
-    except Exception as e:
-        raise RuntimeError(f"Failed to JSON-parse OpenAI output: {e}. Raw: {text[:300]}") from e
-
+    cmd = json.loads(text)
     if not isinstance(cmd, dict) or "intent" not in cmd:
-        raise RuntimeError(f"OpenAI returned unexpected payload: {cmd!r}")
+        raise RuntimeError(f"Unexpected LLM payload: {cmd!r}")
 
     return cmd

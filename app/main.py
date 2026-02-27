@@ -31,18 +31,12 @@ from .ordering.brain import handle_message
 from .ordering.cart import build_summary
 from .ordering.menu_store import load_menu_by_slug  # multi-restaurant loader
 
-# Optional AI layer
-from .command_router import command_to_userlike_text
-
 try:
     from .ai_intent import interpret_message_llm
 except Exception:
     interpret_message_llm = None
 
 
-# -------------------
-# Config (env-driven)
-# -------------------
 class Settings(BaseModel):
     llm_enabled: bool = os.getenv("LLM_ENABLED", "1").strip().lower() not in {"0", "false"}
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "").strip()
@@ -62,15 +56,11 @@ app = FastAPI(
 
 Base.metadata.create_all(bind=engine)
 
-# Project paths
 PROJECT_ROOT = Path(__file__).resolve().parents[1]  # TakeawayDemo/
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 CHAT_HTML_PATH = FRONTEND_DIR / "chat.html"
 
 
-# -------------------
-# Schemas
-# -------------------
 class SignupIn(BaseModel):
     name: str
     email: EmailStr
@@ -87,9 +77,6 @@ class ChatIn(BaseModel):
     message: str
 
 
-# -------------------
-# Helpers
-# -------------------
 def _safe_json_dict(raw: str | None) -> Dict[str, Any]:
     if not raw:
         return {}
@@ -137,17 +124,14 @@ def require_user_id_or_guest(
     authorization: str | None = Header(default=None),
     guest_id: str | None = Cookie(default=None, alias="guest_id"),
 ) -> int:
-    """
-    For QR/web users:
-      - If Bearer token present and valid -> use that user_id.
-      - Else -> create/reuse a Guest user backed by a cookie.
-    """
+    # 1) Prefer authenticated user if token exists
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()
         uid = decode_token(token)
         if uid:
             return uid
 
+    # 2) Otherwise, cookie-based guest identity
     if not guest_id:
         guest_id = uuid4().hex
 
@@ -203,10 +187,6 @@ def get_or_create_draft(db: Session, user_id: int) -> Order:
 
 
 def _ensure_order_scoped_to_restaurant(order: Order, slug: str) -> None:
-    """
-    Prevent a user's draft order mixing across restaurants.
-    We store restaurant_slug in state_json. If it changes, we reset the draft.
-    """
     curr_slug = _normalize_slug(slug)
     state = _safe_json_dict(order.state_json)
     prev_slug = _normalize_slug(str(state.get("restaurant_slug") or ""))
@@ -223,11 +203,36 @@ def _llm_ready() -> bool:
     return bool(settings.llm_enabled and settings.openai_api_key and interpret_message_llm)
 
 
+def _cmd_to_brain_text(cmd: Dict[str, Any], original_text: str) -> str:
+    """
+    Convert structured command into simple text that the deterministic brain understands.
+    Keep it conservative.
+    """
+    intent = (cmd.get("intent") or "unknown").strip()
+    category = (cmd.get("category") or "").strip()
+    item_name = (cmd.get("item_name") or "").strip()
+    qty = cmd.get("qty")
+
+    if intent == "show_menu":
+        return "menu"
+    if intent == "show_basket":
+        return "basket"
+    if intent == "show_category" and category:
+        # could be a real category OR a keyword like "beef" (brain can handle both)
+        return category
+
+    if intent == "add_item" and item_name:
+        if isinstance(qty, int) and qty > 1:
+            return f"{qty} {item_name}"
+        return item_name
+
+    if intent == "remove_item" and item_name:
+        return f"remove {item_name}"
+
+    return original_text
+
+
 async def _apply_optional_llm_rewrite(text: str, menu_dict: Dict[str, Any], state_json: str) -> str:
-    """
-    Optional LLM layer to convert messy user text into deterministic, user-like commands.
-    Silent fallback on any error.
-    """
     if not _llm_ready():
         return text
 
@@ -237,30 +242,24 @@ async def _apply_optional_llm_rewrite(text: str, menu_dict: Dict[str, Any], stat
             menu=menu_dict,
             state=_safe_json_dict(state_json),
         )
-        candidate = command_to_userlike_text(cmd)
-        return candidate or text
+        return _cmd_to_brain_text(cmd, text)
     except Exception as e:
         print("[LLM] rewrite failed:", repr(e), flush=True)
         traceback.print_exc()
         return text
 
 
-# -------------------
-# Health
-# -------------------
 @app.get("/")
 def root():
     return {"ok": True, "service": "takeaway-api"}
 
 
+# Render/load balancers sometimes send HEAD. Avoid 405.
 @app.head("/")
 def root_head():
     return Response(status_code=200)
 
 
-# -------------------
-# Auth
-# -------------------
 @app.post("/auth/signup")
 def signup(payload: SignupIn, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == payload.email).first():
@@ -286,9 +285,6 @@ def login(payload: LoginIn, db: Session = Depends(get_db)):
     return {"token": create_token(u.id)}
 
 
-# -------------------
-# Restaurant routing (slug)
-# -------------------
 @app.get("/r/{slug}", response_class=HTMLResponse)
 def restaurant_page(slug: str):
     slug = _normalize_slug(slug)
@@ -320,17 +316,11 @@ def restaurant_menu(slug: str):
     return menu
 
 
-# -------------------
-# Menu (legacy single-menu)
-# -------------------
 @app.get("/menu")
 def menu():
     return load_menu()
 
 
-# -------------------
-# Order reset (DB-level)
-# -------------------
 @app.post("/order/reset")
 def reset_order(user_id: int = Depends(require_user_id), db: Session = Depends(get_db)):
     order = (
@@ -354,29 +344,19 @@ def reset_order(user_id: int = Depends(require_user_id), db: Session = Depends(g
     return {"ok": True, "message": "Draft reset"}
 
 
-# -------------------
-# Chat ordering (legacy single-menu)
-# -------------------
 @app.post("/chat")
 async def chat(payload: ChatIn, user_id: int = Depends(require_user_id), db: Session = Depends(get_db)):
     order = get_or_create_draft(db, user_id)
     menu_dict = load_menu()
 
-    try:
-        text = await _apply_optional_llm_rewrite(payload.message, menu_dict, order.state_json)
+    text = await _apply_optional_llm_rewrite(payload.message, menu_dict, order.state_json)
 
-        reply, updated_items_json, updated_state_json = handle_message(
-            message=text,
-            items_json=order.items_json,
-            menu_dict=menu_dict,
-            state_json=order.state_json,
-        )
-    except Exception as e:
-        print("[CHAT] crashed:", repr(e), flush=True)
-        traceback.print_exc()
-        reply = "Sorry, I hit a glitch. Try 'menu' or tell me a dish name (e.g. 'beef in black bean')."
-        updated_items_json = order.items_json
-        updated_state_json = order.state_json
+    reply, updated_items_json, updated_state_json = handle_message(
+        message=text,
+        items_json=order.items_json,
+        menu_dict=menu_dict,
+        state_json=order.state_json,
+    )
 
     order.items_json = updated_items_json
     order.state_json = updated_state_json
@@ -395,9 +375,6 @@ async def chat(payload: ChatIn, user_id: int = Depends(require_user_id), db: Ses
     return {"reply": reply, "order_id": order.id, "summary": order.summary_text, "items": items}
 
 
-# -------------------
-# Chat ordering (restaurant-scoped) ✅ guest-ready
-# -------------------
 @app.post("/r/{slug}/chat")
 async def chat_for_restaurant(
     slug: str,
@@ -414,21 +391,14 @@ async def chat_for_restaurant(
     order = get_or_create_draft(db, user_id)
     _ensure_order_scoped_to_restaurant(order, slug)
 
-    try:
-        text = await _apply_optional_llm_rewrite(payload.message, menu_dict, order.state_json)
+    text = await _apply_optional_llm_rewrite(payload.message, menu_dict, order.state_json)
 
-        reply, updated_items_json, updated_state_json = handle_message(
-            message=text,
-            items_json=order.items_json,
-            menu_dict=menu_dict,
-            state_json=order.state_json,
-        )
-    except Exception as e:
-        print("[CHAT] crashed:", repr(e), flush=True)
-        traceback.print_exc()
-        reply = "Sorry, I hit a glitch. Try 'menu' or tell me a dish name (e.g. 'beef in black bean')."
-        updated_items_json = order.items_json
-        updated_state_json = order.state_json
+    reply, updated_items_json, updated_state_json = handle_message(
+        message=text,
+        items_json=order.items_json,
+        menu_dict=menu_dict,
+        state_json=order.state_json,
+    )
 
     order.items_json = updated_items_json
     order.state_json = updated_state_json
@@ -453,9 +423,6 @@ async def chat_for_restaurant(
     }
 
 
-# -------------------
-# Confirm order (legacy single-menu)
-# -------------------
 @app.post("/order/confirm")
 def confirm(user_id: int = Depends(require_user_id), db: Session = Depends(get_db)):
     order = (
@@ -492,5 +459,4 @@ def confirm(user_id: int = Depends(require_user_id), db: Session = Depends(get_d
     body = f"Customer: {u.name}\nEmail: {u.email}\nPhone: {u.phone}\n\n{order.summary_text}"
 
     send_order_email(to_email=settings.orders_email_to, subject=subject, body=body)
-
     return {"ok": True, "order_id": order.id, "status": order.status}
