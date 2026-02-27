@@ -2,7 +2,8 @@
   "meta": {
     "slug": "coffee-demo",
     "currency": "GBP",
-    "notes_allowed": true
+    "notes_allowed": true,
+    "order_email": "Lambjoan11@gmail.com"
   },
   "categories": [
     { "id": "coffee", "name": "Coffee" },

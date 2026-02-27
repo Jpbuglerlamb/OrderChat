@@ -5,7 +5,8 @@ import difflib
 import re
 from typing import Any, Dict, List, Tuple
 
-from .nlp import strip_filler_prefix, normalize_text, split_intents, parse_qty_prefix
+from app.emailer import send_order_email
+from .nlp import normalize_text, split_intents, parse_qty_prefix
 from .menu import (
     build_menu_index,
     menu_synonyms,
@@ -58,6 +59,72 @@ _ORDINAL_MAP = {
 }
 
 
+# -------------------------
+# Natural language intents
+# -------------------------
+_MENU_INTENTS = {
+    "menu",
+    "show menu",
+    "show me the menu",
+    "what do you have",
+    "what have you got",
+    "what do you sell",
+    "what can i get",
+    "what can i have",
+    "what are the options",
+    "options",
+    "list",
+    "list menu",
+    "see menu",
+    "show options",
+    "show categories",
+    "categories",
+    "what's on the menu",
+    "whats on the menu",
+    "what is on the menu",
+}
+
+_BASKET_INTENTS = {
+    "basket",
+    "cart",
+    "summary",
+    "my order",
+    "show basket",
+    "show cart",
+    "show my order",
+    "what's in my basket",
+    "whats in my basket",
+    "what is in my basket",
+}
+
+_CONFIRM_INTENTS = {
+    "confirm",
+    "checkout",
+    "place order",
+    "place my order",
+    "complete order",
+    "done",
+    "finish",
+    "pay",
+    "order now",
+}
+
+_KEYWORD_Q_PATTERNS = [
+    re.compile(r"^(?:do you have|have you got|have|got)\s+(?P<kw>.+)$", re.I),
+    re.compile(r"^(?:any|some)\s+(?P<kw>.+)$", re.I),
+]
+
+_CAT_Q_PATTERNS = [
+    re.compile(r"^(?:any|some)\s+(?P<cat>.+)$", re.IGNORECASE),
+    re.compile(r"^(?:got|got any|have you got|do you have|have)\s+(?P<cat>.+)$", re.IGNORECASE),
+    re.compile(r"^(?:any)\s+(?P<cat>.+?)\s+(?:available|today|now)$", re.IGNORECASE),
+    re.compile(r"^(?:what|which)\s+(?P<cat>.+?)\s+(?:do you have|have you got|have)$", re.IGNORECASE),
+]
+
+
+# -------------------------
+# Suggestion memory helpers
+# -------------------------
 def _tick_suggestions(state: Dict[str, Any]) -> None:
     """Decrease TTL each turn; expire suggestions."""
     s = state.get("suggestions")
@@ -73,7 +140,7 @@ def _tick_suggestions(state: Dict[str, Any]) -> None:
 
 def _set_suggestions(state: Dict[str, Any], items: List[Dict[str, Any]], reason: str) -> None:
     """Store candidates for follow-ups like 'that' or '2'."""
-    candidates = []
+    candidates: List[Dict[str, Any]] = []
     for it in items[:SUGGESTION_MAX]:
         candidates.append(
             {
@@ -162,7 +229,7 @@ def _resolve_selection(msg_norm: str, candidates: List[Dict[str, Any]]) -> Dict[
 
 
 # -------------------------
-# Helpers (formatting)
+# Formatting helpers
 # -------------------------
 def _format_category_items(cat_name: str, items: list[dict], currency: str) -> str:
     if not items:
@@ -280,7 +347,6 @@ def _item_text_blob(it: Dict[str, Any]) -> str:
 def _keyword_matches(menu: Dict[str, Any], keyword: str, synonyms: Dict[str, str]) -> List[Dict[str, Any]]:
     """
     Match keyword against item text using both raw and normalized forms.
-    This fixes cases where menu has punctuation/spacing or weird unicode.
     """
     kw_raw = (keyword or "").strip().lower()
     if not kw_raw:
@@ -302,67 +368,8 @@ def _keyword_matches(menu: Dict[str, Any], keyword: str, synonyms: Dict[str, str
 
 
 # -------------------------
-# Natural language intents
+# Query helpers
 # -------------------------
-_MENU_INTENTS = {
-    "menu",
-    "show menu",
-    "show me the menu",
-    "what do you have",
-    "what have you got",
-    "what do you sell",
-    "what can i get",
-    "what can i have",
-    "what are the options",
-    "options",
-    "list",
-    "list menu",
-    "see menu",
-    "show options",
-    "show categories",
-    "categories",
-    "what's on the menu",
-    "whats on the menu",
-    "what is on the menu",
-}
-
-_BASKET_INTENTS = {
-    "basket",
-    "cart",
-    "summary",
-    "my order",
-    "show basket",
-    "show cart",
-    "show my order",
-    "what's in my basket",
-    "whats in my basket",
-    "what is in my basket",
-}
-_CONFIRM_INTENTS = {
-    "confirm",
-    "checkout",
-    "place order",
-    "place my order",
-    "complete order",
-    "done",
-    "finish",
-    "pay",
-    "order now",
-}
-
-_KEYWORD_Q_PATTERNS = [
-    re.compile(r"^(?:do you have|have you got|have|got)\s+(?P<kw>.+)$", re.I),
-    re.compile(r"^(?:any|some)\s+(?P<kw>.+)$", re.I),
-]
-
-_CAT_Q_PATTERNS = [
-    re.compile(r"^(?:any|some)\s+(?P<cat>.+)$", re.IGNORECASE),
-    re.compile(r"^(?:got|got any|have you got|do you have|have)\s+(?P<cat>.+)$", re.IGNORECASE),
-    re.compile(r"^(?:any)\s+(?P<cat>.+?)\s+(?:available|today|now)$", re.IGNORECASE),
-    re.compile(r"^(?:what|which)\s+(?P<cat>.+?)\s+(?:do you have|have you got|have)$", re.IGNORECASE),
-]
-
-
 def _try_category_lookup(menu: Dict[str, Any], msg_norm: str, synonyms: Dict[str, str]) -> str | None:
     if not msg_norm:
         return None
@@ -419,6 +426,28 @@ def _add_item_to_cart(cart: List[Dict[str, Any]], item: Dict[str, Any], qty: int
     cart.append(new_line)
 
 
+def _business_order_email(menu_dict: Dict[str, Any]) -> str:
+    """
+    Determine where to send order notifications.
+    Priority:
+      meta.order_email -> meta.email -> meta.contact_email -> fallback.
+    """
+    meta = menu_dict.get("meta") or {}
+    if isinstance(meta, dict):
+        for k in ("order_email", "email", "contact_email"):
+            v = meta.get(k)
+            if isinstance(v, str) and "@" in v:
+                return v.strip()
+    return "orders@example.com"
+
+
+def _send_business_order_email(menu_dict: Dict[str, Any], summary: str, total: float, currency: str) -> None:
+    to_email = _business_order_email(menu_dict)
+    subject = f"New order received ({currency}{float(total or 0.0):.2f})"
+    body = "New order:\n\n" + (summary or "")
+    send_order_email(to_email=to_email, subject=subject, body=body)
+
+
 # -------------------------
 # Main entry
 # -------------------------
@@ -447,7 +476,6 @@ def handle_message(
         chosen = _resolve_selection(msg_norm, candidates)
 
         if chosen:
-            # Prefer name lookup (works even if id lookup isn't supported by find_item)
             item = None
             cid = str(chosen.get("id") or "").strip()
             cname = str(chosen.get("name") or "").strip()
@@ -464,7 +492,7 @@ def handle_message(
                 return "Added ✅\n\n" + summary, dump_cart(cart), dump_state(state)
 
         # user said "ok/that" but multiple candidates
-        if len(candidates) > 1 and (msg_norm in _CONFIRM_WORDS or "that" in msg_norm):
+        if len(candidates) > 1 and (msg_norm in _CONFIRM_WORDS or "that" in msg_norm or "this" in msg_norm):
             lines = ["Which one would you like? Reply with a number:"]
             for i, c in enumerate(candidates[:SUGGESTION_MAX], start=1):
                 lines.append(f"{i}) {c.get('name')}")
@@ -486,11 +514,21 @@ def handle_message(
         if not cart:
             return "Your basket is empty. Add something first 🙂", dump_cart(cart), dump_state(state)
 
-        # clear suggestions so next message isn't treated as a selection follow-up
+        # clear suggestions so the next message isn't treated as selection
         state.pop("suggestions", None)
 
-        summary, _ = build_summary(cart, currency_symbol=cur)
-        return "Confirmed ✅\n\n" + summary, dump_cart(cart), dump_state(state)
+        summary, total = build_summary(cart, currency_symbol=cur)
+
+        # notify business
+        try:
+            _send_business_order_email(menu_dict, summary=summary, total=float(total or 0.0), currency=cur)
+        except Exception:
+            # Don't break ordering flow if email fails in demo
+            pass
+
+        # demo behaviour: clear cart after placing order
+        cart = []
+        return "Order placed ✅\n\n" + summary, dump_cart(cart), dump_state(state)
 
     # 3) Menu
     is_menu_intent = (msg_norm in _MENU_INTENTS) or ("menu" in msg_norm)
@@ -531,7 +569,7 @@ def handle_message(
 
         target_id = str(target.get("id") or "")
         removed = False
-        new_cart = []
+        new_cart: List[Dict[str, Any]] = []
         for ln in cart:
             if (not removed) and target_id and str(ln.get("item_id") or "") == target_id:
                 qty = int(ln.get("qty", 1) or 1)
@@ -551,17 +589,12 @@ def handle_message(
         return "Removed ✅\n\n" + summary, dump_cart(cart), dump_state(state)
 
     # 7) Add items (supports multiple)
-    # IMPORTANT: use original raw (not cleaned too aggressively) but also try cleaned phrase
     parts = split_intents(msg_norm)
 
     added = False
     for part in parts:
         qty, text = parse_qty_prefix(part)
 
-        # Try three ways:
-        # 1) normalized text
-        # 2) cleaned phrase (removes "I'll have..." etc.)
-        # 3) raw piece
         text_clean = _clean_order_phrase(text)
         text_norm = normalize_text(text, synonyms)
         text_clean_norm = normalize_text(text_clean, synonyms)
@@ -580,7 +613,6 @@ def handle_message(
 
     if added:
         summary, _ = build_summary(cart, currency_symbol=cur)
-        cart = []
-        return "Order placed ✅\n\n" + summary, dump_cart(cart), dump_state(state)
+        return "Added ✅\n\n" + summary, dump_cart(cart), dump_state(state)
 
     return "I didn’t catch that. Try 'menu', ask for a category, or type an item name.", dump_cart(cart), dump_state(state)
