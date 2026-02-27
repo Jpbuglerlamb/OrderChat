@@ -72,13 +72,13 @@ def _tick_suggestions(state: Dict[str, Any]) -> None:
 
 
 def _set_suggestions(state: Dict[str, Any], items: List[Dict[str, Any]], reason: str) -> None:
-    """Store a small list of candidates for follow-up messages like 'that' or '2'."""
+    """Store candidates for follow-ups like 'that' or '2'."""
     candidates = []
     for it in items[:SUGGESTION_MAX]:
         candidates.append(
             {
                 "id": str(it.get("id") or ""),
-                "name": str(it.get("name") or "").strip(),
+                "name": str(it.get("name") or it.get("title") or it.get("item") or "").strip(),
             }
         )
     state["suggestions"] = {"reason": reason, "items": candidates, "ttl": SUGGESTION_TTL_TURNS}
@@ -170,7 +170,7 @@ def _format_category_items(cat_name: str, items: list[dict], currency: str) -> s
 
     lines: list[str] = []
     for it in items[:12]:
-        name = str(it.get("name") or "Item").strip()
+        name = str(it.get("name") or it.get("title") or it.get("item") or "Item").strip()
         price = it.get("base_price")
         if price is None:
             lines.append(f"• {name}")
@@ -190,13 +190,13 @@ def _format_category_items(cat_name: str, items: list[dict], currency: str) -> s
 
 def _format_suggestions_list(items: List[Dict[str, Any]], currency: str, intro: str) -> str:
     """
-    A compact numbered list to encourage follow-up selection:
+    Compact numbered list to encourage follow-up selection:
       1) Item (£x.xx)
       2) Item (£x.xx)
     """
     lines = [intro]
     for i, it in enumerate(items[:SUGGESTION_MAX], start=1):
-        name = str(it.get("name") or "Item").strip()
+        name = str(it.get("name") or it.get("title") or it.get("item") or "Item").strip()
         price = it.get("base_price")
         if price is None:
             lines.append(f"{i}) {name}")
@@ -206,6 +206,7 @@ def _format_suggestions_list(items: List[Dict[str, Any]], currency: str, intro: 
                 lines.append(f"{i}) {name} ({currency}{p:.2f})")
             except Exception:
                 lines.append(f"{i}) {name}")
+
     lines.append("Reply with a number (e.g. “1”) or say “I’ll have that”.")
     return "\n".join(lines)
 
@@ -220,7 +221,12 @@ def _clean_order_phrase(text: str) -> str:
     # leading filler
     t = re.sub(r"^(?:okay|ok|alright|right)\b[,\s]*", "", t, flags=re.I)
     t = re.sub(r"^(?:i\s*will|i'll|ill)\s+(?:have|get|take)\b[,\s]*", "", t, flags=re.I)
-    t = re.sub(r"^(?:can\s+i\s+have|can\s+i\s+get|could\s+i\s+have|could\s+i\s+get)\b[,\s]*", "", t, flags=re.I)
+    t = re.sub(
+        r"^(?:can\s+i\s+have|can\s+i\s+get|could\s+i\s+have|could\s+i\s+get)\b[,\s]*",
+        "",
+        t,
+        flags=re.I,
+    )
     t = re.sub(r"^(?:give\s+me)\b[,\s]*", "", t, flags=re.I)
 
     # trailing fluff
@@ -230,28 +236,52 @@ def _clean_order_phrase(text: str) -> str:
     return t.strip()
 
 
+# -------------------------
+# Robust item flattening + keyword matching
+# -------------------------
 def _all_items_flat(menu: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Flatten indexed menu into an item list."""
-    flat: list[dict] = []
+    """
+    Flatten indexed menu into a list of item dicts, tolerant to schema differences.
+    build_menu_index usually yields categories -> items, but some datasets vary.
+    """
+    flat: List[Dict[str, Any]] = []
     for c in (menu.get("categories") or []):
-        for it in (c.get("items") or []):
+        items = c.get("items") or c.get("menu_items") or []
+        if not isinstance(items, list):
+            continue
+        for it in items:
             if isinstance(it, dict):
                 flat.append(it)
     return flat
 
 
-def _keyword_matches(menu: Dict[str, Any], keyword: str) -> List[Dict[str, Any]]:
-    """Substring match in name + (optional) description."""
-    kw = (keyword or "").strip().lower()
-    if not kw:
+def _item_text_blob(it: Dict[str, Any]) -> str:
+    name = str(it.get("name") or it.get("title") or it.get("item") or "").strip()
+    desc = str(it.get("description") or it.get("desc") or "").strip()
+    return (name + " " + desc).strip()
+
+
+def _keyword_matches(menu: Dict[str, Any], keyword: str, synonyms: Dict[str, str]) -> List[Dict[str, Any]]:
+    """
+    Match keyword against item text using both raw and normalized forms.
+    This fixes cases where menu has punctuation/spacing or weird unicode.
+    """
+    kw_raw = (keyword or "").strip().lower()
+    if not kw_raw:
         return []
-    hits: list[dict] = []
+
+    kw_norm = normalize_text(kw_raw, synonyms).lower().strip()
+
+    hits: List[Dict[str, Any]] = []
     for it in _all_items_flat(menu):
-        name = str(it.get("name") or "").strip()
-        desc = str(it.get("description") or "").strip()
-        blob = (name + " " + desc).lower().strip()
-        if kw and blob and kw in blob:
+        blob_raw = _item_text_blob(it).lower()
+        if not blob_raw:
+            continue
+        blob_norm = normalize_text(blob_raw, synonyms).lower()
+
+        if kw_raw in blob_raw or (kw_norm and kw_norm in blob_norm):
             hits.append(it)
+
     return hits
 
 
@@ -351,7 +381,7 @@ def _try_keyword_query(msg_norm: str) -> str | None:
 def _add_item_to_cart(cart: List[Dict[str, Any]], item: Dict[str, Any], qty: int) -> None:
     new_line = {
         "item_id": str(item.get("id", "")),
-        "name": str(item.get("name", "Item")),
+        "name": str(item.get("name") or item.get("title") or item.get("item") or "Item"),
         "qty": max(1, int(qty or 1)),
         "base_price": float(item.get("base_price", 0.0) or 0.0),
         "choices": {},
@@ -387,13 +417,22 @@ def handle_message(
     # Expire old suggestions each turn
     _tick_suggestions(state)
 
-    # 0) Follow-up selection resolution (this is the "intelligent" part)
+    # 0) Follow-up selection resolution ("that", "2", "second", etc.)
     candidates = _suggestions_items(state)
     if candidates and _looks_like_selection(msg_norm):
         chosen = _resolve_selection(msg_norm, candidates)
-        if chosen and chosen.get("id"):
-            # resolve to actual menu item by id or name
-            item = find_item(menu, str(chosen["id"]), synonyms) or find_item(menu, str(chosen["name"]), synonyms)
+
+        if chosen:
+            # Prefer name lookup (works even if id lookup isn't supported by find_item)
+            item = None
+            cid = str(chosen.get("id") or "").strip()
+            cname = str(chosen.get("name") or "").strip()
+
+            if cid:
+                item = find_item(menu, cid, synonyms)
+            if not item and cname:
+                item = find_item(menu, cname, synonyms)
+
             if item:
                 _add_item_to_cart(cart, item, qty=1)
                 state.pop("suggestions", None)
@@ -401,7 +440,7 @@ def handle_message(
                 return "Added ✅\n\n" + summary, dump_cart(cart), dump_state(state)
 
         # user said "ok/that" but multiple candidates
-        if len(candidates) > 1 and msg_norm in _CONFIRM_WORDS.union({"that"}):
+        if len(candidates) > 1 and (msg_norm in _CONFIRM_WORDS or "that" in msg_norm):
             lines = ["Which one would you like? Reply with a number:"]
             for i, c in enumerate(candidates[:SUGGESTION_MAX], start=1):
                 lines.append(f"{i}) {c.get('name')}")
@@ -430,18 +469,17 @@ def handle_message(
     cat = _try_category_lookup(menu, msg_norm, synonyms)
     if cat:
         items = items_in_category(menu, cat, synonyms)
-        # Store suggestions for follow-up selection
         if items:
             _set_suggestions(state, items, reason=f"category:{cat}")
-        reply = _format_category_items(cat, items, cur)
-        if items:
-            reply += "\n\nWhich one would you like? You can reply “1”, “2”, or “that”."
-        return reply, dump_cart(cart), dump_state(state)
+            reply = _format_suggestions_list(items, cur, f"{cat}:")
+            return reply, dump_cart(cart), dump_state(state)
+
+        return _format_category_items(cat, items, cur), dump_cart(cart), dump_state(state)
 
     # 5) Keyword query like "do you have beef?"
     kw = _try_keyword_query(msg_norm)
     if kw:
-        hits = _keyword_matches(menu, kw)
+        hits = _keyword_matches(menu, kw, synonyms)
         if hits:
             _set_suggestions(state, hits, reason=f"keyword:{kw}")
             reply = _format_suggestions_list(hits, cur, f"Yep, we have {kw} dishes:")
@@ -478,15 +516,27 @@ def handle_message(
         return "Removed ✅\n\n" + summary, dump_cart(cart), dump_state(state)
 
     # 7) Add items (supports multiple)
+    # IMPORTANT: use original raw (not cleaned too aggressively) but also try cleaned phrase
     parts = split_intents(msg_norm)
 
     added = False
     for part in parts:
         qty, text = parse_qty_prefix(part)
-        text = _clean_order_phrase(text)
-        text_norm = normalize_text(text, synonyms)
 
-        item = find_item(menu, text_norm, synonyms) or find_item(menu, text, synonyms)
+        # Try three ways:
+        # 1) normalized text
+        # 2) cleaned phrase (removes "I'll have..." etc.)
+        # 3) raw piece
+        text_clean = _clean_order_phrase(text)
+        text_norm = normalize_text(text, synonyms)
+        text_clean_norm = normalize_text(text_clean, synonyms)
+
+        item = (
+            find_item(menu, text_norm, synonyms)
+            or find_item(menu, text_clean_norm, synonyms)
+            or find_item(menu, text_clean, synonyms)
+            or find_item(menu, text, synonyms)
+        )
         if not item:
             continue
 
