@@ -1,11 +1,13 @@
 # app/ai_intent.py
 from __future__ import annotations
-import os
+
 import json
+import os
 from typing import Any, Dict
+
 from openai import AsyncOpenAI
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 SYSTEM = """You are an intent parser for a takeaway ordering app.
 Convert the user's message into ONE JSON command that matches the provided JSON schema.
@@ -15,7 +17,6 @@ Rules:
 - Keep it concise and robust to typos/slang.
 """
 
-# JSON Schema for Structured Outputs
 COMMAND_SCHEMA: Dict[str, Any] = {
     "name": "takeaway_command",
     "schema": {
@@ -48,8 +49,8 @@ COMMAND_SCHEMA: Dict[str, Any] = {
     "strict": True,
 }
 
+
 def _menu_hints(menu: Dict[str, Any]) -> Dict[str, Any]:
-    # Keep hints small to control cost + latency.
     cats = []
     items = []
     for c in menu.get("categories", []) or []:
@@ -57,22 +58,27 @@ def _menu_hints(menu: Dict[str, Any]) -> Dict[str, Any]:
         if cname:
             cats.append(cname)
         for it in c.get("items", []) or []:
-            items.append({
-                "name": it.get("name"),
-                "category": cname,
-                "options": list((it.get("options") or {}).keys()),
-                "extras": [e.get("name") for e in (it.get("extras") or [])],
-            })
-    return {"categories": cats, "items": items[:120]}  # cap
+            items.append(
+                {
+                    "name": it.get("name"),
+                    "category": cname,
+                    "options": list((it.get("options") or {}).keys()),
+                    "extras": [e.get("name") for e in (it.get("extras") or [])],
+                }
+            )
+    return {"categories": cats, "items": items[:120]}
 
-def interpret_message_llm(message: str, menu: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, Any]:
+
+async def interpret_message_llm(
+    message: str, menu: Dict[str, Any], state: Dict[str, Any]
+) -> Dict[str, Any]:
     payload = {
         "message": message,
         "state": state,
         "menu_hints": _menu_hints(menu),
     }
 
-    resp = client.responses.create(
+    resp = await client.responses.create(
         model="gpt-5-mini",
         input=[
             {"role": "system", "content": SYSTEM},
