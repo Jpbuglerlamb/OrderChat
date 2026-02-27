@@ -1,43 +1,125 @@
+# app/cart_api.py
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+import json
+from datetime import datetime
+from uuid import uuid4
+from typing import Any, Dict, List
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Depends, Response, Header, Cookie
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.db import get_db
+from app.models import User, Order
+from app.auth import decode_token, hash_password
 
 from app.ordering.cart import load_cart, dump_cart, recalc_line_total
 from app.ordering.menu import build_menu_index, menu_synonyms, currency_symbol, find_item
-
+from app.ordering.menu_store import load_menu_by_slug
 
 router = APIRouter()
 
 
-# --- You MUST adapt these 2 functions to your existing session store ---
-def get_session_state(request: Request) -> Dict[str, Any]:
-    """
-    Return mutable session dict containing at least:
-      - items_json: str
-      - state_json: str (optional)
-    Replace this with your existing session storage.
-    """
-    s = getattr(request.app.state, "sessions", None)
-    if s is None:
-        request.app.state.sessions = {}
-        s = request.app.state.sessions
+# -------------------------
+# Auth / guest identity (DB-backed cart)
+# -------------------------
+def require_user_id_or_guest(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    authorization: str | None = Header(default=None),
+    guest_id: str | None = Cookie(default=None, alias="guest_id"),
+) -> int:
+    # 1) Prefer authenticated user if token exists
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+        uid = decode_token(token)
+        if uid:
+            return uid
 
-    # simplest demo key (replace with your real session id / cookie)
-    key = request.client.host + ":" + (request.headers.get("user-agent") or "")
-    if key not in s:
-        s[key] = {"items_json": "[]", "state_json": "{}"}
-    return s[key]
+    # 2) Otherwise cookie-based guest identity
+    if not guest_id:
+        guest_id = uuid4().hex
+
+    guest_email = f"guest+{guest_id}@demo.local"
+
+    u = db.query(User).filter(User.email == guest_email).first()
+    if not u:
+        u = User(
+            name="Guest",
+            email=guest_email,
+            phone=None,
+            password_hash=hash_password(uuid4().hex),
+        )
+        db.add(u)
+        db.commit()
+        db.refresh(u)
+
+    response.set_cookie(
+        key="guest_id",
+        value=guest_id,
+        httponly=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30,
+    )
+    return u.id
 
 
-def set_items_json(request: Request, items_json: str) -> None:
-    sess = get_session_state(request)
-    sess["items_json"] = items_json
+def _safe_json_dict(raw: str | None) -> Dict[str, Any]:
+    if not raw:
+        return {}
+    try:
+        v = json.loads(raw)
+        return v if isinstance(v, dict) else {}
+    except Exception:
+        return {}
 
 
-# --- API models ---
+def get_or_create_draft(db: Session, user_id: int) -> Order:
+    order = (
+        db.query(Order)
+        .filter(Order.user_id == user_id, Order.status == "draft")
+        .order_by(Order.id.desc())
+        .first()
+    )
+    if order:
+        order.items_json = order.items_json or "[]"
+        order.state_json = order.state_json or "{}"
+        order.summary_text = order.summary_text or ""
+        return order
+
+    order = Order(
+        user_id=user_id,
+        status="draft",
+        items_json="[]",
+        state_json="{}",
+        summary_text="",
+        updated_at=datetime.utcnow(),
+    )
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+    return order
+
+
+def _ensure_order_scoped_to_restaurant(order: Order, slug: str) -> None:
+    slug = (slug or "").strip().lower()
+    state = _safe_json_dict(order.state_json)
+    prev_slug = (str(state.get("restaurant_slug") or "")).strip().lower()
+
+    # if restaurant changes, clear cart
+    if prev_slug and prev_slug != slug:
+        order.items_json = "[]"
+        state = {}
+
+    state["restaurant_slug"] = slug
+    order.state_json = json.dumps(state, ensure_ascii=False)
+
+
+# -------------------------
+# API models
+# -------------------------
 class UpdateQtyIn(BaseModel):
     item_id: str
     delta: int
@@ -47,6 +129,9 @@ class RemoveIn(BaseModel):
     item_id: str
 
 
+# -------------------------
+# Payload
+# -------------------------
 def _cart_payload(menu_dict: Dict[str, Any], cart: List[Dict[str, Any]]) -> Dict[str, Any]:
     cur = currency_symbol(menu_dict)
     total = 0.0
@@ -72,26 +157,49 @@ def _cart_payload(menu_dict: Dict[str, Any], cart: List[Dict[str, Any]]) -> Dict
     }
 
 
+# -------------------------
+# Routes (DB-backed)
+# -------------------------
 @router.get("/r/{slug}/cart")
-def get_cart(slug: str, request: Request):
-    # however you load restaurant menu_dict today:
-    menu_dict = request.app.state.menu_store.get(slug)  # <-- adapt
+def get_cart(
+    slug: str,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(require_user_id_or_guest),
+):
+    slug = (slug or "").strip().lower()
+    menu_dict = load_menu_by_slug(slug)
     if not menu_dict:
         raise HTTPException(status_code=404, detail="Unknown restaurant")
 
-    sess = get_session_state(request)
-    cart = load_cart(sess.get("items_json") or "[]")
+    order = get_or_create_draft(db, user_id)
+    _ensure_order_scoped_to_restaurant(order, slug)
+    db.add(order)
+    db.commit()
+
+    cart = load_cart(order.items_json)
     return _cart_payload(menu_dict, cart)
 
 
 @router.post("/r/{slug}/cart/update")
-def update_qty(slug: str, request: Request, data: UpdateQtyIn):
-    menu_dict = request.app.state.menu_store.get(slug)  # <-- adapt
+def update_qty(
+    slug: str,
+    request: Request,
+    response: Response,
+    data: UpdateQtyIn,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(require_user_id_or_guest),
+):
+    slug = (slug or "").strip().lower()
+    menu_dict = load_menu_by_slug(slug)
     if not menu_dict:
         raise HTTPException(status_code=404, detail="Unknown restaurant")
 
-    sess = get_session_state(request)
-    cart = load_cart(sess.get("items_json") or "[]")
+    order = get_or_create_draft(db, user_id)
+    _ensure_order_scoped_to_restaurant(order, slug)
+
+    cart = load_cart(order.items_json)
 
     item_id = (data.item_id or "").strip()
     delta = int(data.delta or 0)
@@ -106,11 +214,14 @@ def update_qty(slug: str, request: Request, data: UpdateQtyIn):
                 cart = [x for x in cart if str(x.get("item_id") or "") != item_id]
             else:
                 recalc_line_total(ln)
-            items_json = dump_cart(cart)
-            set_items_json(request, items_json)
+
+            order.items_json = dump_cart(cart)
+            order.updated_at = datetime.utcnow()
+            db.add(order)
+            db.commit()
             return _cart_payload(menu_dict, cart)
 
-    # If not in cart and delta is positive, add it (nice UX)
+    # If not in cart and delta is positive, add it
     if delta > 0:
         synonyms = menu_synonyms(menu_dict)
         menu = build_menu_index(menu_dict, synonyms)
@@ -130,33 +241,60 @@ def update_qty(slug: str, request: Request, data: UpdateQtyIn):
         recalc_line_total(new_line)
         cart.append(new_line)
 
-    items_json = dump_cart(cart)
-    set_items_json(request, items_json)
+    order.items_json = dump_cart(cart)
+    order.updated_at = datetime.utcnow()
+    db.add(order)
+    db.commit()
     return _cart_payload(menu_dict, cart)
 
 
 @router.post("/r/{slug}/cart/remove")
-def remove_line(slug: str, request: Request, data: RemoveIn):
-    menu_dict = request.app.state.menu_store.get(slug)  # <-- adapt
+def remove_line(
+    slug: str,
+    request: Request,
+    response: Response,
+    data: RemoveIn,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(require_user_id_or_guest),
+):
+    slug = (slug or "").strip().lower()
+    menu_dict = load_menu_by_slug(slug)
     if not menu_dict:
         raise HTTPException(status_code=404, detail="Unknown restaurant")
 
-    sess = get_session_state(request)
-    cart = load_cart(sess.get("items_json") or "[]")
+    order = get_or_create_draft(db, user_id)
+    _ensure_order_scoped_to_restaurant(order, slug)
 
+    cart = load_cart(order.items_json)
     item_id = (data.item_id or "").strip()
+
     cart = [ln for ln in cart if str(ln.get("item_id") or "") != item_id]
 
-    items_json = dump_cart(cart)
-    set_items_json(request, items_json)
+    order.items_json = dump_cart(cart)
+    order.updated_at = datetime.utcnow()
+    db.add(order)
+    db.commit()
     return _cart_payload(menu_dict, cart)
 
 
 @router.post("/r/{slug}/cart/clear")
-def clear_cart(slug: str, request: Request):
-    menu_dict = request.app.state.menu_store.get(slug)  # <-- adapt
+def clear_cart(
+    slug: str,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(require_user_id_or_guest),
+):
+    slug = (slug or "").strip().lower()
+    menu_dict = load_menu_by_slug(slug)
     if not menu_dict:
         raise HTTPException(status_code=404, detail="Unknown restaurant")
 
-    set_items_json(request, "[]")
+    order = get_or_create_draft(db, user_id)
+    _ensure_order_scoped_to_restaurant(order, slug)
+
+    order.items_json = "[]"
+    order.updated_at = datetime.utcnow()
+    db.add(order)
+    db.commit()
     return _cart_payload(menu_dict, [])
