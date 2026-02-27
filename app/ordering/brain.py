@@ -241,17 +241,33 @@ def _clean_order_phrase(text: str) -> str:
 # -------------------------
 def _all_items_flat(menu: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
-    Flatten indexed menu into a list of item dicts, tolerant to schema differences.
-    build_menu_index usually yields categories -> items, but some datasets vary.
+    Flatten menu into items regardless of restaurant schema.
+    Supports multiple dataset formats.
     """
     flat: List[Dict[str, Any]] = []
+
+    # Standard indexed format
     for c in (menu.get("categories") or []):
-        items = c.get("items") or c.get("menu_items") or []
-        if not isinstance(items, list):
-            continue
-        for it in items:
-            if isinstance(it, dict):
-                flat.append(it)
+        for key in ("items", "menu_items", "products"):
+            items = c.get(key)
+            if isinstance(items, list):
+                flat.extend([it for it in items if isinstance(it, dict)])
+
+    # Some datasets store items directly
+    if not flat:
+        for key in ("items", "menu_items", "products"):
+            items = menu.get(key)
+            if isinstance(items, list):
+                flat.extend([it for it in items if isinstance(it, dict)])
+
+    # Some use sections instead of categories
+    if not flat:
+        for sec in (menu.get("sections") or []):
+            for key in ("items", "menu_items", "products"):
+                items = sec.get(key)
+                if isinstance(items, list):
+                    flat.extend([it for it in items if isinstance(it, dict)])
+
     return flat
 
 
