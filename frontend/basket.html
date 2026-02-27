@@ -172,7 +172,7 @@
   });
 
   async function apiGetCart(){
-    const res = await fetch(`/r/${slug}/cart`);
+    const res = await fetch(`/r/${slug}/basket`);
     const data = await res.json();
     if(!res.ok) throw new Error(data.detail || "Failed to load cart");
     return data;
