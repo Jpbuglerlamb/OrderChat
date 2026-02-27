@@ -422,9 +422,7 @@ def handle_message(
     cur = currency_symbol(menu)
 
     raw = (message or "").strip()
-    raw = strip_filler_prefix(raw)
-
-    # Normalize text for intent matching
+    raw = (message or "").strip()
     msg_norm = normalize_text(raw, synonyms)
 
     cart = load_cart(items_json)

@@ -283,7 +283,20 @@ _QUESTION_SUFFIX_RE = re.compile(
     r"\b(?:do\s+you\s+have|have\s+you\s+got|available|options|on\s+the\s+menu)\b\.?\s*$",
     re.IGNORECASE,
 )
-
+# Generic "browse the menu" questions that should become the intent: "menu"
+_GENERIC_MENU_Q_RE = re.compile(
+    r"^\s*(?:"
+    r"what\s+do\s+you\s+have|"
+    r"what\s+have\s+you\s+got|"
+    r"what\s+do\s+you\s+sell|"
+    r"what\s+can\s+i\s+get|"
+    r"what\s+can\s+i\s+have|"
+    r"what'?s\s+on\s+the\s+menu|"
+    r"show\s+(?:me\s+)?the\s+menu|"
+    r"(?:the\s+)?menu"
+    r")\s*[?!.\s]*$",
+    re.IGNORECASE,
+)
 
 def strip_question_wrapper(raw: str) -> str:
     """
@@ -450,15 +463,31 @@ def normalize_text(s: str, synonyms: Dict[str, str]) -> str:
     """
     Main normalization used by ordering flow.
     Pipeline:
-      basic normalize -> strip filler -> strip question wrapper -> re-normalize -> pattern synonyms -> dictionary synonyms -> collapse
+      basic normalize -> (generic menu?) -> strip filler -> (generic menu?) -> strip question wrapper
+      -> re-normalize -> pattern synonyms -> dictionary synonyms -> collapse
     """
-    s = _basic_normalize(s)
-    s = strip_filler_prefix(s)
-    s = strip_question_wrapper(s)  # ✅ add this
-    s = _basic_normalize(s)  # re-normalize after stripping
-    s = _apply_pattern_synonyms(s)
-    s = _apply_dictionary_synonyms(s, synonyms)
-    return re.sub(r"\s+", " ", s).strip()
+    s0 = _basic_normalize(s)
+
+    # Guard 1: catch generic browse questions early
+    if _GENERIC_MENU_Q_RE.match(s0):
+        return "menu"
+
+    s0 = strip_filler_prefix(s0)
+
+    # Guard 2: filler might be removed leaving a generic menu request
+    if _GENERIC_MENU_Q_RE.match(s0):
+        return "menu"
+
+    s0 = strip_question_wrapper(s0)
+
+    # If question wrapper stripping makes it empty, treat as menu
+    if not s0 and _GENERIC_MENU_Q_RE.match(_basic_normalize(s)):
+        return "menu"
+
+    s0 = _basic_normalize(s0)  # re-normalize after stripping
+    s0 = _apply_pattern_synonyms(s0)
+    s0 = _apply_dictionary_synonyms(s0, synonyms)
+    return re.sub(r"\s+", " ", s0).strip()
 
 
 # ----------------------------
