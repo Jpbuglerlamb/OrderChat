@@ -112,6 +112,7 @@ _CONFIRM_INTENTS = {
 _KEYWORD_Q_PATTERNS = [
     re.compile(r"^(?:do you have|have you got|have|got)\s+(?P<kw>.+)$", re.I),
     re.compile(r"^(?:any|some)\s+(?P<kw>.+)$", re.I),
+    re.compile(r"^(?:what about)\s+(?P<kw>.+)$", re.I),  # ✅ new
 ]
 
 _CAT_Q_PATTERNS = [
@@ -403,12 +404,20 @@ def _try_keyword_query(msg_norm: str) -> str | None:
         m = pat.match(msg_norm or "")
         if not m:
             continue
+
         kw = (m.group("kw") or "").strip()
+
+        # ✅ strip leading filler words like "some", "any", "a", "an", "the"
+        kw = re.sub(r"^(?:some|any|a|an|the)\s+", "", kw, flags=re.I).strip()
+
+        # clean common tails
         kw = re.sub(r"\b(?:dishes|dish|options|stuff|meals)\b$", "", kw, flags=re.I).strip()
         kw = re.sub(r"\b(?:please|pls|plz)\b$", "", kw, flags=re.I).strip()
         kw = re.sub(r"\?$", "", kw).strip()
+
         if kw:
             return kw
+
     return None
 
 
@@ -610,6 +619,14 @@ def handle_message(
 
         _add_item_to_cart(cart, item, qty=qty)
         added = True
+
+    # 7.5) single-keyword fallback ("beef", "chicken", etc.)
+    if msg_norm and len(msg_norm.split()) <= 2:
+        hits = _keyword_matches(menu, msg_norm, synonyms)
+        if hits:
+            _set_suggestions(state, hits, reason=f"keyword:{msg_norm}")
+            return _format_suggestions_list(hits, cur, f"Here are {msg_norm} options:"), dump_cart(cart), dump_state(
+                state)
 
     if added:
         summary, _ = build_summary(cart, currency_symbol=cur)
