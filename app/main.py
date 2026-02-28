@@ -534,4 +534,4 @@ def basket_page(slug: str):
     if not BASKET_HTML_PATH.exists():
         raise HTTPException(status_code=500, detail=f"Missing frontend file: {BASKET_HTML_PATH}")
 
-    return BASKET_HTML_PATH.read_text(encoding="utf-8")
+    return BASKET_HTML_PATH.read_text(encoding="utf")
