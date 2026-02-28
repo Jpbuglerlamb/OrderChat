@@ -112,7 +112,8 @@ _CONFIRM_INTENTS = {
 _KEYWORD_Q_PATTERNS = [
     re.compile(r"^(?:do you have|have you got|have|got)\s+(?P<kw>.+)$", re.I),
     re.compile(r"^(?:any|some)\s+(?P<kw>.+)$", re.I),
-    re.compile(r"^(?:what about)\s+(?P<kw>.+)$", re.I),  # ✅ new
+    re.compile(r"^(?:what about)\s+(?P<kw>.+)$", re.I),
+    re.compile(r"^(?:anything|something|options)\s+(?:with|containing)\s+(?P<kw>.+)$", re.I),
 ]
 
 _CAT_Q_PATTERNS = [
@@ -409,6 +410,7 @@ def _try_keyword_query(msg_norm: str) -> str | None:
 
         # ✅ strip leading filler words like "some", "any", "a", "an", "the"
         kw = re.sub(r"^(?:some|any|a|an|the)\s+", "", kw, flags=re.I).strip()
+        kw = re.sub(r"^(?:with|containing)\s+","", kw, flags=re.I).strip()
 
         # clean common tails
         kw = re.sub(r"\b(?:dishes|dish|options|stuff|meals)\b$", "", kw, flags=re.I).strip()
