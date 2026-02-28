@@ -123,6 +123,25 @@ _CAT_Q_PATTERNS = [
     re.compile(r"^(?:what|which)\s+(?P<cat>.+?)\s+(?:do you have|have you got|have)$", re.IGNORECASE),
 ]
 
+import re
+
+_EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)
+_PHONE_RE = re.compile(r"\b(?:\+?\d[\d\s().-]{7,}\d)\b")
+
+def _extract_email(text: str) -> str | None:
+    m = _EMAIL_RE.search(text or "")
+    return m.group(0).strip() if m else None
+
+def _extract_phone(text: str) -> str | None:
+    m = _PHONE_RE.search(text or "")
+    if not m:
+        return None
+    # light cleanup
+    p = re.sub(r"[^\d+]", "", m.group(0))
+    return p if len(re.sub(r"\D", "", p)) >= 8 else None
+
+def _is_cancel(text_norm: str) -> bool:
+    return text_norm in {"cancel", "stop", "nevermind", "never mind", "back"}
 
 # -------------------------
 # Suggestion memory helpers
@@ -520,26 +539,111 @@ def handle_message(
         summary, _ = build_summary(cart, currency_symbol=cur)
         return summary, dump_cart(cart), dump_state(state)
 
-    # 2.5) Confirm / checkout
+    # 2.5) Confirm / checkout (now with contact capture)
     if msg_norm in _CONFIRM_INTENTS:
         if not cart:
             return "Your basket is empty. Add something first 🙂", dump_cart(cart), dump_state(state)
 
-        # clear suggestions so the next message isn't treated as selection
+        # If we don't have name yet, start checkout flow
+        if not str(state.get("customer_name") or "").strip():
+            state["checkout_stage"] = "need_name"
+            return "Got it ✅ What name should I put on the order?", dump_cart(cart), dump_state(state)
+
+        # If we don't have contact yet, ask for it
+        if not (str(state.get("customer_email") or "").strip() or str(state.get("customer_phone") or "").strip()):
+            state["checkout_stage"] = "need_contact"
+            return "Nice. What’s best: an email address or phone number?", dump_cart(cart), dump_state(state)
+
+        # We have contact info -> place order
         state.pop("suggestions", None)
+        state.pop("checkout_stage", None)
 
         summary, total = build_summary(cart, currency_symbol=cur)
 
-        # notify business
         try:
-            _send_business_order_email(menu_dict, summary=summary, total=float(total or 0.0), currency=cur)
+            _send_business_order_email(
+                menu_dict,
+                summary=(
+                        f"Customer: {state.get('customer_name', '')}\n"
+                        f"Email: {state.get('customer_email', '')}\n"
+                        f"Phone: {state.get('customer_phone', '')}\n\n"
+                        + (summary or "")
+                ),
+                total=float(total or 0.0),
+                currency=cur,
+            )
         except Exception:
-            # Don't break ordering flow if email fails in demo
             pass
 
-        # demo behaviour: clear cart after placing order
         cart = []
+        # clear customer details after order (optional, but recommended)
+        state.pop("customer_name", None)
+        state.pop("customer_email", None)
+        state.pop("customer_phone", None)
+
         return "Order placed ✅\n\n" + summary, dump_cart(cart), dump_state(state)
+
+    # 2.6) Checkout flow: capture name/contact
+    stage = str(state.get("checkout_stage") or "")
+    if stage:
+        if _is_cancel(msg_norm):
+            state.pop("checkout_stage", None)
+            return "No worries. Back to ordering. What would you like next?", dump_cart(cart), dump_state(state)
+
+        raw_text = (message or "").strip()
+
+        if stage == "need_name":
+            # Accept simple names, but avoid grabbing an email/phone as a "name"
+            if _extract_email(raw_text) or _extract_phone(raw_text):
+                return "I need the name first 🙂 What name should I put on the order?", dump_cart(cart), dump_state(
+                    state)
+
+            name = raw_text[:60].strip()
+            if not name:
+                return "What name should I put on the order?", dump_cart(cart), dump_state(state)
+
+            state["customer_name"] = name
+            state["checkout_stage"] = "need_contact"
+            return f"Nice, {name}. What’s best: an email address or phone number?", dump_cart(cart), dump_state(state)
+
+        if stage == "need_contact":
+            email = _extract_email(raw_text)
+            phone = _extract_phone(raw_text)
+
+            if email:
+                state["customer_email"] = email
+            if phone and not state.get("customer_phone"):
+                state["customer_phone"] = phone
+
+            if not (state.get("customer_email") or state.get("customer_phone")):
+                return "Could you send an email address or phone number? (Either one is fine.)", dump_cart(
+                    cart), dump_state(state)
+
+            # Now we can place order automatically (reuse confirm path)
+            state.pop("checkout_stage", None)
+            summary, total = build_summary(cart, currency_symbol=cur)
+
+            try:
+                _send_business_order_email(
+                    menu_dict,
+                    summary=(
+                            f"Customer: {state.get('customer_name', '')}\n"
+                            f"Email: {state.get('customer_email', '')}\n"
+                            f"Phone: {state.get('customer_phone', '')}\n\n"
+                            + (summary or "")
+                    ),
+                    total=float(total or 0.0),
+                    currency=cur,
+                )
+            except Exception:
+                pass
+
+            cart = []
+            state.pop("customer_name", None)
+            state.pop("customer_email", None)
+            state.pop("customer_phone", None)
+
+            return "Order placed 🥘\n\n" + summary, dump_cart(cart), dump_state(state)
 
     # 3) Menu
     is_menu_intent = (msg_norm in _MENU_INTENTS) or ("menu" in msg_norm)
