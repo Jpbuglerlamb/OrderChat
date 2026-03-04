@@ -576,7 +576,8 @@ def handle_message(
             pass
 
         cart = []
-        return "Order placed ✅\n\n" + summary, dump_cart(cart), dump_state(state)
+        state["order_submitted"] = True
+        return "Order placed 🥘\n\n" + summary, dump_cart(cart), dump_state(state)
 
     # 2.6) Checkout flow: capture name/contact
     stage = str(state.get("checkout_stage") or "")

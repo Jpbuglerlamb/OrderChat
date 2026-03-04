@@ -412,32 +412,32 @@ async def chat_for_restaurant(
         state_json=order.state_json,
     )
 
-    order.items_json = updated_items_json
-    order.state_json = updated_state_json
+    state = _safe_json_dict(updated_state_json)
 
+    # Always store updated cart/state first
+    order.items_json = updated_items_json
+    order.state_json = json.dumps(state)
+
+    # Build summary from items
     items = _safe_json_list(order.items_json)
     symbol = _currency_symbol_from_menu(menu_dict)
     summary, _total = build_summary(items, currency_symbol=symbol)
-
     order.summary_text = summary
+    order.updated_at = datetime.utcnow()
 
-    if reply.lower().startswith("order placed"):
-        st = _safe_json_dict(order.state_json)
-
+    # Finalize if submitted
+    if state.get("order_submitted"):
         order.status = "confirmed"
         order.kitchen_status = "new"
-        order.customer_name = str(st.get("customer_name") or "")
-        order.customer_email = str(st.get("customer_email") or "")
-        order.customer_phone = str(st.get("customer_phone") or "")
-        order.updated_at = datetime.utcnow()
+        order.restaurant_slug = slug
 
-        db.add(order)
-        db.commit()
-        db.refresh(order)
+        order.customer_name = str(state.get("customer_name") or "")
+        order.customer_email = str(state.get("customer_email") or "")
+        order.customer_phone = str(state.get("customer_phone") or "")
 
-        # Optional: start a new draft automatically next message
-        # (Leave as-is for now if you want one draft at a time.)
-    order.updated_at = datetime.utcnow()
+        # Prevent re-submit
+        state.pop("order_submitted", None)
+        order.state_json = json.dumps(state)
 
     db.add(order)
     db.commit()
