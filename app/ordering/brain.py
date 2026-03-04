@@ -635,11 +635,8 @@ def handle_message(
                 pass
 
             cart = []
-            state.pop("customer_name", None)
-            state.pop("customer_email", None)
-            state.pop("customer_phone", None)
-
-            return "Order placed 🥘\n\n" + summary, dump_cart(cart), dump_state(state)
+            state["order_submitted"] = True
+            return "Order placed \n\n" + summary, dump_cart(cart), dump_state(state)
 
     # 3) Menu
     is_menu_intent = (msg_norm in _MENU_INTENTS) or ("menu" in msg_norm)

@@ -557,6 +557,20 @@ def basket_page(slug: str):
 
     return BASKET_HTML_PATH.read_text(encoding="utf-8")
 
+STAFF_HTML_PATH = FRONTEND_DIR / "staff.html"
+
+@app.get("/r/{slug}/staff", response_class=HTMLResponse)
+def staff_page(slug: str):
+    slug = _normalize_slug(slug)
+    menu = load_menu_by_slug(slug)
+    if not menu:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    if not STAFF_HTML_PATH.exists():
+        raise HTTPException(status_code=500, detail=f"Missing frontend file: {STAFF_HTML_PATH}")
+
+    return STAFF_HTML_PATH.read_text(encoding="utf-8")
+
 @app.get("/r/{slug}/staff/orders")
 def staff_orders(slug: str, db: Session = Depends(get_db)):
     slug = _normalize_slug(slug)
@@ -568,8 +582,6 @@ def staff_orders(slug: str, db: Session = Depends(get_db)):
         .order_by(Order.created_at.desc())
         .all()
     )
-    ...
-
     return [
         {
             "id": o.id,
