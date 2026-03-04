@@ -1,4 +1,4 @@
-# app/cart_api.py
+# app/routes/cart_api.py
 from __future__ import annotations
 
 import json
@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import User, Order
-from app.auth import decode_token, hash_password
+from app.security.auth import decode_token, hash_password
 
 from app.ordering.cart import load_cart, dump_cart, recalc_line_total
 from app.ordering.menu import build_menu_index, menu_synonyms, currency_symbol, find_item

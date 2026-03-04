@@ -12,3 +12,4 @@ passlib[bcrypt]
 itsdangerous
 jinja2
 python-multipart
+itsdangerous

@@ -5,7 +5,7 @@ import difflib
 import re
 from typing import Any, Dict, List, Tuple
 
-from app.emailer import send_order_email
+from app.services.emailer import send_order_email
 from .nlp import (
     normalize_text,
     split_intents,

@@ -1,10 +1,16 @@
+# app/routes/web_customer.py
+from __future__ import annotations
+
 from datetime import datetime
+from pathlib import Path
+
 from fastapi import APIRouter, Request, Form, Depends
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from .db import get_db
+from app.db import get_db
+
 from .auth_platform import (
     create_user,
     verify_user,
@@ -13,8 +19,12 @@ from .auth_platform import (
     get_session_email,
 )
 
-router = APIRouter()
-templates = Jinja2Templates(directory="app/frontend")  # adjust if your templates folder differs
+router = APIRouter(tags=["web-auth"])
+
+# Point templates at project_root/frontend (NOT app/frontend)
+PROJECT_ROOT = Path(__file__).resolve().parents[2]  # TakeawayDemo/
+TEMPLATES_DIR = PROJECT_ROOT / "app" / "frontend"
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
 @router.get("/auth/signup", response_class=HTMLResponse)
@@ -22,7 +32,12 @@ def signup_page(request: Request):
     error = request.query_params.get("error")
     return templates.TemplateResponse(
         "signup.html",
-        {"request": request, "error": error, "email": get_session_email(request), "year": datetime.utcnow().year},
+        {
+            "request": request,
+            "error": error,
+            "email": get_session_email(request),
+            "year": datetime.utcnow().year,
+        },
     )
 
 
@@ -36,10 +51,18 @@ def signup(
     db: Session = Depends(get_db),
 ):
     try:
-        create_user(db, email=email, password=password, name=name, phone=phone, address=address)
+        create_user(
+            db,
+            email=email,
+            password=password,
+            name=name,
+            phone=phone,
+            address=address,
+        )
     except ValueError:
         return RedirectResponse(url="/auth/signup?error=exists", status_code=302)
 
+    # After signup, send them to chat (welcome flag optional)
     resp = RedirectResponse(url="/chat?welcome=1", status_code=302)
     set_session_cookie(resp, email)
     return resp
@@ -50,7 +73,12 @@ def login_page(request: Request):
     error = request.query_params.get("error")
     return templates.TemplateResponse(
         "login.html",
-        {"request": request, "error": error, "email": get_session_email(request), "year": datetime.utcnow().year},
+        {
+            "request": request,
+            "error": error,
+            "email": get_session_email(request),
+            "year": datetime.utcnow().year,
+        },
     )
 
 
