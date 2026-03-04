@@ -49,6 +49,11 @@
     btn.textContent = b ? "Logging in…" : "Log in";
   }
 
+  function showError(msg) {
+    errEl.textContent = msg || "Login failed";
+    msgEl.textContent = "Error";
+  }
+
   form.onsubmit = async (e) => {
     e.preventDefault();
     errEl.textContent = "";
@@ -62,33 +67,49 @@
     try {
       const res = await fetch("/staff/login", {
         method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ email, password })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
 
+      // Always read as text first (so we can show helpful errors)
+      const raw = await res.text();
+
+      // Attempt JSON parse, but don't die if it's not JSON
+      let data = null;
+      try { data = raw ? JSON.parse(raw) : null; } catch {}
+
       if (!res.ok) {
-        const t = await res.text();
-        throw new Error(`Login failed: ${res.status}\n${t}`);
+        const detail =
+          (data && (data.detail || data.error)) ||
+          raw ||
+          `HTTP ${res.status}`;
+        showError(`Login failed (${res.status})\n${detail}`);
+        return;
       }
 
-      const data = await res.json();
+      // If res.ok but body wasn't JSON
+      if (!data || typeof data !== "object") {
+        showError(`Login response was not JSON.\n\n${raw}`);
+        return;
+      }
+
       const token = data.token;
-      const slug = (data.restaurant_slug || "").toString().trim();
+      const slug = String(data.restaurant_slug || "").trim();
 
-      if (!token || !slug) throw new Error("Login response missing token/restaurant_slug");
+      if (!token || !slug) {
+        showError(`Login response missing token/restaurant_slug.\n\n${raw}`);
+        return;
+      }
 
-      // Store token keyed by slug so one browser can handle multiple restaurants
       localStorage.setItem(`staff_token:${slug}`, token);
       localStorage.setItem("staff_last_slug", slug);
 
       okEl.textContent = "Logged in ✅ Redirecting…";
       msgEl.textContent = "";
 
-      // Send them to their restaurant dashboard
       location.href = `/r/${slug}/staff`;
     } catch (err) {
-      errEl.textContent = String(err.stack || err);
-      msgEl.textContent = "Error";
+      showError(String(err && (err.stack || err.message || err)));
     } finally {
       setBusy(false);
     }
