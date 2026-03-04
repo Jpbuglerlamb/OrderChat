@@ -6,25 +6,42 @@ import re
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response
+from fastapi import (
+    APIRouter,
+    Cookie,
+    Depends,
+    Form,
+    Header,
+    HTTPException,
+    Request,
+    Response,
+)
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.menu import load_menu
 from app.models import Order, StaffUser, User
 from app.ordering.brain import handle_message
 from app.ordering.cart import build_summary
 from app.ordering.menu_store import load_menu_by_slug
-from app.security.auth import decode_token, hash_password, verify_password, create_staff_token, decode_staff_token
+from app.security.auth import (
+    create_staff_token,
+    decode_staff_token,
+    decode_token,
+    hash_password,
+    verify_password,
+)
 
 try:
     from app.ai_intent import interpret_message_llm
 except Exception:
     interpret_message_llm = None
+
 
 router = APIRouter(tags=["commands"])
 
@@ -36,12 +53,12 @@ BASKET_HTML_PATH = FRONTEND_DIR / "basket.html"
 STAFF_HTML_PATH = FRONTEND_DIR / "staff.html"
 STAFF_LOGIN_HTML_PATH = FRONTEND_DIR / "staff_login.html"
 
-
 # ---------- Helpers ----------
 _STATUS_Q_RE = re.compile(
     r"\b(status|order status|progress|update|ready yet|is it ready|where is my order|how long)\b",
     re.IGNORECASE,
 )
+
 
 def is_order_status_query(raw: str) -> bool:
     s = (raw or "").strip().lower()
@@ -81,8 +98,7 @@ def _currency_symbol_from_menu(menu_dict: Dict[str, Any], default: str = "GBP") 
     return "£" if cur == "GBP" else ""
 
 
-def _llm_ready(openai_api_key: str | None = None) -> bool:
-    # if you want to use env in here, keep it simple
+def _llm_ready() -> bool:
     return bool(interpret_message_llm)
 
 
@@ -96,15 +112,21 @@ def command_to_userlike_text(cmd: Dict[str, Any]) -> str:
     if intent == "show_category":
         cat = cmd.get("category") or ""
         return str(cat).strip() or "menu"
+
     if intent == "add_item":
         name = (cmd.get("item_name") or "").strip()
-        qty = int(cmd.get("qty") or 1)
+        try:
+            qty = int(cmd.get("qty") or 1)
+        except Exception:
+            qty = 1
         if not name:
             return ""
         return name if qty <= 1 else f"{qty}x {name}"
+
     if intent == "remove_item":
         name = (cmd.get("item_name") or "").strip()
         return f"remove {name}" if name else ""
+
     if intent == "confirm":
         return "confirm"
 
@@ -115,7 +137,11 @@ async def _apply_optional_llm_rewrite(text: str, menu_dict: Dict[str, Any], stat
     if not _llm_ready():
         return text
     try:
-        cmd = await interpret_message_llm(message=text, menu=menu_dict, state=_safe_json_dict(state_json))
+        cmd = await interpret_message_llm(
+            message=text,
+            menu=menu_dict,
+            state=_safe_json_dict(state_json),
+        )
         rewritten = command_to_userlike_text(cmd)
         return rewritten or text
     except Exception as e:
@@ -124,9 +150,11 @@ async def _apply_optional_llm_rewrite(text: str, menu_dict: Dict[str, Any], stat
         return text
 
 
+# ---------- Auth dependencies ----------
 def require_user_id(authorization: str | None = Header(default=None)) -> int:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Missing Bearer token")
+
     token = authorization.split(" ", 1)[1].strip()
     uid = decode_token(token)
     if not uid:
@@ -141,12 +169,14 @@ def require_user_id_or_guest(
     authorization: str | None = Header(default=None),
     guest_id: str | None = Cookie(default=None, alias="guest_id"),
 ) -> int:
+    # 1) Prefer authenticated token if present
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()
         uid = decode_token(token)
         if uid:
             return uid
 
+    # 2) Otherwise cookie-based guest
     if not guest_id:
         guest_id = uuid4().hex
 
@@ -178,17 +208,21 @@ def require_user_id_or_guest(
 def require_staff(authorization: str | None = Header(default=None)) -> Dict[str, Any]:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Missing Bearer token")
+
     token = authorization.split(" ", 1)[1].strip()
     payload = decode_staff_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid staff token")
+
     rs = payload.get("restaurant_slug")
     if not isinstance(rs, str) or not rs.strip():
         raise HTTPException(status_code=401, detail="Staff token missing restaurant")
+
     payload["restaurant_slug"] = _normalize_slug(rs)
     return payload
 
 
+# ---------- Order helpers ----------
 def get_or_create_draft(db: Session, user_id: int) -> Order:
     order = (
         db.query(Order)
@@ -222,6 +256,7 @@ def _ensure_order_scoped_to_restaurant(order: Order, slug: str) -> None:
     state = _safe_json_dict(order.state_json)
     prev_slug = _normalize_slug(str(state.get("restaurant_slug") or ""))
 
+    # If user switched restaurant mid-order, wipe cart/state
     if prev_slug and prev_slug != curr_slug:
         order.items_json = "[]"
         state = {}
@@ -230,7 +265,73 @@ def _ensure_order_scoped_to_restaurant(order: Order, slug: str) -> None:
     order.state_json = json.dumps(state)
 
 
-# ---------- Routes you previously had in main.py ----------
+def _is_guest_email(email: str | None) -> bool:
+    e = (email or "").strip().lower()
+    return e.endswith("@demo.local") and e.startswith("guest+")
+
+
+# ---------- "Me" endpoints for welcome + remembering name ----------
+class MeOut(BaseModel):
+    user_id: int
+    is_guest: bool
+    name: Optional[str] = None
+    email: Optional[str] = None
+    restaurant_slug: str
+
+
+@router.get("/r/{slug}/me", response_model=MeOut)
+def me_for_restaurant(
+    slug: str,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(require_user_id_or_guest),
+):
+    slug = _normalize_slug(slug)
+
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    is_guest = _is_guest_email(u.email)
+
+    return {
+        "user_id": u.id,
+        "is_guest": is_guest,
+        "name": (u.name or None),
+        "email": (None if is_guest else (u.email or None)),
+        "restaurant_slug": slug,
+    }
+
+
+class SetNameIn(BaseModel):
+    name: str
+
+
+@router.post("/r/{slug}/me/name")
+def set_name_for_restaurant(
+    slug: str,
+    payload: SetNameIn,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(require_user_id_or_guest),
+):
+    name = (payload.name or "").strip()
+    if len(name) < 2:
+        raise HTTPException(status_code=400, detail="Name too short")
+
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    u.name = name
+    db.add(u)
+    db.commit()
+    return {"ok": True, "name": u.name}
+
+
+# ---------- Pages / menus ----------
 @router.get("/r/{slug}", response_class=HTMLResponse)
 def restaurant_page(slug: str):
     slug = _normalize_slug(slug)
@@ -240,6 +341,15 @@ def restaurant_page(slug: str):
     if not CHAT_HTML_PATH.exists():
         raise HTTPException(status_code=500, detail=f"Missing frontend file: {CHAT_HTML_PATH}")
     return CHAT_HTML_PATH.read_text(encoding="utf-8")
+
+
+@router.get("/r/{slug}/health")
+def restaurant_health(slug: str):
+    slug = _normalize_slug(slug)
+    menu = load_menu_by_slug(slug)
+    if not menu:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+    return {"ok": True, "restaurant_slug": slug}
 
 
 @router.get("/r/{slug}/menu")
@@ -280,11 +390,29 @@ def staff_login_page():
     return STAFF_LOGIN_HTML_PATH.read_text(encoding="utf-8")
 
 
+# ---------- Staff auth ----------
+# Supports BOTH:
+# - JSON fetch: { "email": "...", "password": "..." }
+# - HTML form submit: email=...&password=...
 @router.post("/staff/login")
-def staff_login(payload: dict, db: Session = Depends(get_db)):
-    # expects {"email": "...", "password": "..."}
-    email = str(payload.get("email") or "").strip()
-    password = str(payload.get("password") or "")
+async def staff_login(
+    request: Request,
+    db: Session = Depends(get_db),
+    email: Optional[str] = Form(default=None),
+    password: Optional[str] = Form(default=None),
+):
+    if email is None and password is None:
+        try:
+            payload = await request.json()
+            email = str(payload.get("email") or "").strip()
+            password = str(payload.get("password") or "")
+        except Exception:
+            email = ""
+            password = ""
+
+    email = (email or "").strip()
+    password = password or ""
+
     s = db.query(StaffUser).filter(StaffUser.email == email).first()
     if not s or not verify_password(password, s.password_hash):
         raise HTTPException(status_code=401, detail="Bad credentials")
@@ -293,6 +421,71 @@ def staff_login(payload: dict, db: Session = Depends(get_db)):
     return {"token": token, "restaurant_slug": _normalize_slug(s.restaurant_slug)}
 
 
+# ---------- Staff API (protected) ----------
+@router.get("/r/{slug}/staff/orders")
+def staff_orders(
+    slug: str,
+    db: Session = Depends(get_db),
+    staff: Dict[str, Any] = Depends(require_staff),
+):
+    slug = _normalize_slug(slug)
+
+    if staff.get("restaurant_slug") != slug:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    # KEY FIX: only show CONFIRMED orders to staff
+    # Also include NULL kitchen_status so new orders appear.
+    orders = (
+        db.query(Order)
+        .filter(Order.restaurant_slug == slug)
+        .filter(Order.status == "confirmed")
+        .filter(or_(Order.kitchen_status.is_(None), Order.kitchen_status != "completed"))
+        .order_by(Order.created_at.desc())
+        .all()
+    )
+
+    return [
+        {
+            "id": o.id,
+            "name": o.customer_name,
+            "phone": o.customer_phone,
+            "summary": o.summary_text,
+            "status": (o.kitchen_status or "new"),
+        }
+        for o in orders
+    ]
+
+
+@router.post("/r/{slug}/staff/orders/{order_id}/status")
+def update_order_status(
+    slug: str,
+    order_id: int,
+    data: dict,
+    db: Session = Depends(get_db),
+    staff: Dict[str, Any] = Depends(require_staff),
+):
+    slug = _normalize_slug(slug)
+
+    if staff.get("restaurant_slug") != slug:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    order = db.query(Order).filter(Order.id == order_id, Order.restaurant_slug == slug).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    new_status = data.get("status")
+    if isinstance(new_status, str) and new_status.strip():
+        order.kitchen_status = new_status.strip()
+
+    order.updated_at = datetime.utcnow()
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+
+    return {"ok": True, "id": order.id, "status": order.kitchen_status}
+
+
+# ---------- Chat ----------
 @router.post("/r/{slug}/chat")
 async def chat_for_restaurant(
     slug: str,
@@ -310,6 +503,7 @@ async def chat_for_restaurant(
     order = get_or_create_draft(db, user_id)
     _ensure_order_scoped_to_restaurant(order, slug)
 
+    # Customer asking for status
     if is_order_status_query(msg):
         if (order.status or "").lower() != "confirmed":
             return {
@@ -339,6 +533,7 @@ async def chat_for_restaurant(
             "kitchen_status": status,
         }
 
+    # Optional LLM rewrite to command-like text
     text = await _apply_optional_llm_rewrite(msg, menu_dict, order.state_json)
 
     reply, updated_items_json, updated_state_json = handle_message(
@@ -348,18 +543,42 @@ async def chat_for_restaurant(
         state_json=order.state_json,
     )
 
+    # Persist cart/state
     order.items_json = updated_items_json
-    order.state_json = updated_state_json
 
+    # Normalize state into dict so we can inspect flags safely
+    state = _safe_json_dict(updated_state_json)
+    order.state_json = json.dumps(state)
+
+    # Build summary
     items = _safe_json_list(order.items_json)
     symbol = _currency_symbol_from_menu(menu_dict)
     summary, _total = build_summary(items, currency_symbol=symbol)
-
     order.summary_text = summary
     order.updated_at = datetime.utcnow()
+
+    # Finalize if the brain says "submitted"
+    if state.get("order_submitted"):
+        order.status = "confirmed"
+        order.kitchen_status = "new"
+        order.restaurant_slug = slug
+
+        order.customer_name = str(state.get("customer_name") or "")
+        order.customer_email = str(state.get("customer_email") or "")
+        order.customer_phone = str(state.get("customer_phone") or "")
+
+        # Prevent re-submit loop
+        state.pop("order_submitted", None)
+        order.state_json = json.dumps(state)
 
     db.add(order)
     db.commit()
     db.refresh(order)
 
-    return {"reply": reply, "order_id": order.id, "summary": order.summary_text, "items": items, "restaurant_slug": slug}
+    return {
+        "reply": reply,
+        "order_id": order.id,
+        "summary": order.summary_text,
+        "items": items,
+        "restaurant_slug": slug,
+    }

@@ -1,611 +1,236 @@
 <!doctype html>
-<html lang="en">
+<html>
 <head>
   <meta charset="utf-8" />
-  <title>Kitchen Orders</title>
+  <title>Staff Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root{
-      --bg0:#0b0d10;
-      --bg1:#0f1318;
-      --card:#131922;
-      --card2:#0f141c;
-      --line:#263141;
-      --text:#eef2f7;
-      --muted:#a9b4c2;
-      --accent:#2f81f7;
-
-      --new:#f59e0b;
-      --accepted:#38bdf8;
-      --preparing:#a78bfa;
-      --ready:#34d399;
-      --completed:#94a3b8;
-      --danger:#fb7185;
-
-      --shadow: 0 10px 30px rgba(0,0,0,.35);
-      --radius:16px;
-    }
-
-    *{ box-sizing:border-box; }
-    body{
-      margin:0;
-      font-family: -apple-system, system-ui, Segoe UI, Roboto, sans-serif;
-      background: radial-gradient(1200px 600px at 20% -10%, rgba(47,129,247,.18), transparent 55%),
-                  radial-gradient(900px 500px at 90% 0%, rgba(167,139,250,.12), transparent 55%),
-                  linear-gradient(180deg, var(--bg0), #07090c);
-      color:var(--text);
-    }
-
-    .topbar{
-      position: sticky;
-      top:0;
-      z-index:10;
-      backdrop-filter: blur(10px);
-      background: rgba(10,12,16,.7);
-      border-bottom:1px solid rgba(255,255,255,.06);
-    }
-
-    .topbar-inner{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      padding:14px 18px;
-      max-width: 1200px;
-      margin:0 auto;
-    }
-
-    .title{
-      display:flex;
-      flex-direction:column;
-      gap:2px;
-      line-height:1.1;
-    }
-    .title h1{
-      margin:0;
-      font-size:22px;
-      letter-spacing:.2px;
-    }
-    .title .sub{
-      color:var(--muted);
-      font-size:13px;
-    }
-
-    .actions{
-      display:flex;
-      align-items:center;
-      gap:10px;
-    }
-
-    .btn{
-      border:1px solid rgba(255,255,255,.10);
-      background: rgba(255,255,255,.06);
-      color: var(--text);
-      padding:10px 12px;
-      border-radius: 12px;
-      cursor:pointer;
-      font-weight:600;
-      font-size:13px;
-      transition: transform .06s ease, background .15s ease, border-color .15s ease;
-    }
-    .btn:hover{ background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.16); }
-    .btn:active{ transform: translateY(1px); }
-    .btn.primary{
-      background: rgba(47,129,247,.18);
-      border-color: rgba(47,129,247,.35);
-    }
-    .btn.danger{
-      background: rgba(251,113,133,.12);
-      border-color: rgba(251,113,133,.35);
-    }
-
-    .wrap{
-      max-width: 1200px;
-      margin: 18px auto 80px;
-      padding: 0 18px;
-    }
-
-    .grid{
-      display:grid;
-      gap:14px;
-    }
-
-    .empty{
-      margin-top:18px;
-      padding: 18px;
-      border: 1px dashed rgba(255,255,255,.14);
-      border-radius: var(--radius);
-      color: var(--muted);
-      background: rgba(255,255,255,.03);
-    }
-
-    .card{
-      border:1px solid rgba(255,255,255,.09);
-      background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      overflow:hidden;
-    }
-
-    .card-head{
-      display:flex;
-      justify-content:space-between;
-      align-items:flex-start;
-      gap:12px;
-      padding: 14px 16px;
-      background: rgba(255,255,255,.03);
-      border-bottom:1px solid rgba(255,255,255,.06);
-    }
-
-    .order-meta{
-      display:flex;
-      flex-direction:column;
-      gap:6px;
-    }
-    .order-meta .line1{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      flex-wrap:wrap;
-    }
-
-    .order-id{
-      font-size:16px;
-      font-weight:800;
-      letter-spacing:.2px;
-    }
-    .customer{
-      font-size:14px;
-      color: var(--muted);
-      font-weight:600;
-    }
-
-    .pill{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight:800;
-      letter-spacing:.4px;
-      text-transform: uppercase;
-      border: 1px solid rgba(255,255,255,.12);
-      background: rgba(255,255,255,.06);
-      white-space: nowrap;
-    }
-    .dot{
-      width:9px; height:9px; border-radius:999px;
-      background: var(--muted);
-      box-shadow: 0 0 0 3px rgba(255,255,255,.06);
-    }
-
-    .card-body{
-      padding: 14px 16px;
-      display:grid;
-      grid-template-columns: 1fr 280px;
-      gap:14px;
-    }
-    @media (max-width: 860px){
-      .card-body{ grid-template-columns: 1fr; }
-    }
-
-    .summary{
-      background: rgba(0,0,0,.22);
-      border: 1px solid rgba(255,255,255,.08);
-      border-radius: 14px;
-      padding: 12px 12px;
-    }
-    .summary h3{
-      margin:0 0 8px 0;
-      font-size:13px;
-      color: var(--muted);
-      letter-spacing:.3px;
-      text-transform: uppercase;
-    }
-    .items{
-      font-size:15px;
-      line-height:1.55;
-      white-space: pre-wrap;
-    }
-
-    .right{
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-    }
-
-    .total{
-      border-radius: 14px;
-      padding: 12px;
-      border: 1px solid rgba(255,255,255,.08);
-      background: rgba(47,129,247,.10);
-      font-weight:900;
-      font-size: 16px;
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-    }
-    .total span{ color: rgba(255,255,255,.85); }
-
-    .status-row{
-      border-radius: 14px;
-      padding: 12px;
-      border: 1px solid rgba(255,255,255,.08);
-      background: rgba(255,255,255,.03);
-    }
-    .status-row label{
-      display:block;
-      font-size:12px;
-      color: var(--muted);
-      margin-bottom:8px;
-      text-transform: uppercase;
-      letter-spacing:.25px;
-      font-weight:800;
-    }
-
-    .status-controls{
-      display:flex;
-      gap:8px;
-      flex-wrap:wrap;
-    }
-    .chip{
-      padding: 9px 10px;
-      border-radius: 999px;
-      border: 1px solid rgba(255,255,255,.12);
-      background: rgba(255,255,255,.06);
-      color: var(--text);
-      font-weight:800;
-      font-size:12px;
-      cursor:pointer;
-      user-select:none;
-      transition: transform .06s ease, background .15s ease, border-color .15s ease;
-    }
-    .chip:hover{ background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.18); }
-    .chip:active{ transform: translateY(1px); }
-    .chip.active{
-      border-color: rgba(47,129,247,.6);
-      background: rgba(47,129,247,.18);
-    }
-
-    .toast{
-      position: fixed;
-      right: 14px;
-      bottom: 14px;
-      padding: 10px 12px;
-      background: rgba(0,0,0,.55);
-      border: 1px solid rgba(255,255,255,.12);
-      border-radius: 12px;
-      color: var(--text);
-      font-size: 13px;
-      max-width: 360px;
-      box-shadow: var(--shadow);
-      opacity:0;
-      transform: translateY(10px);
-      transition: opacity .2s ease, transform .2s ease;
-      pointer-events:none;
-      white-space: pre-wrap;
-    }
-    .toast.show{
-      opacity:1;
-      transform: translateY(0);
-    }
-
-    .flash{
-      outline: 2px solid rgba(52,211,153,.6);
-      box-shadow: 0 0 0 4px rgba(52,211,153,.12), var(--shadow);
-      animation: flash 1.6s ease-out 1;
-    }
-    @keyframes flash{
-      0%{ filter: brightness(1.1); }
-      100%{ filter: brightness(1); }
-    }
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; background:#0b0c0f; color:#eee; }
+    .wrap { max-width: 980px; margin: 20px auto; }
+    .top { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .title { font-size:20px; font-weight:900; }
+    .muted { color:#aaa; font-size:13px; }
+    .btn { border:1px solid #333; background:#1a1a1a; color:#eee; padding:10px 12px; border-radius:12px; cursor:pointer; font-weight:800; }
+    .btn.primary { background:#2f81f7; border:0; }
+    .card { border:1px solid #333; border-radius:16px; padding:14px; background:#111217; margin-top:14px; }
+    .row { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+    .left { min-width:0; }
+    .name { font-weight:900; }
+    .summary { color:#cfcfcf; margin-top:6px; white-space:pre-wrap; }
+    .pill { display:inline-block; padding:6px 10px; border-radius:999px; background:#1a1a1a; border:1px solid #333; font-size:12px; font-weight:800; }
+    select { background:#0f0f0f; color:#eee; border:1px solid #333; padding:10px; border-radius:12px; font-weight:800; }
+    .err { color:#ff6b6b; white-space:pre-wrap; margin-top:10px; }
+    .ok { color:#7ee787; white-space:pre-wrap; margin-top:10px; }
+    .grid { display:flex; flex-direction:column; gap:10px; }
   </style>
 </head>
-
 <body>
-  <div class="topbar">
-    <div class="topbar-inner">
-      <div class="title">
-        <h1>Kitchen Orders</h1>
-        <div class="sub" id="subtitle">Loading…</div>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <div class="title" id="title">Staff Dashboard</div>
+        <div class="muted" id="subtitle">Loading…</div>
       </div>
-      <div class="actions">
-        <button class="btn primary" id="refreshBtn">Refresh</button>
-        <button class="btn danger" id="logoutBtn">Log out</button>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button class="btn" id="refreshBtn" type="button">Refresh</button>
+        <button class="btn" id="logoutBtn" type="button">Log out</button>
       </div>
+    </div>
+
+    <div id="err" class="err"></div>
+    <div id="ok" class="ok"></div>
+
+    <div class="card">
+      <div class="muted">Orders</div>
+      <div class="grid" id="orders"></div>
     </div>
   </div>
 
-  <div class="wrap">
-    <div class="grid" id="list"></div>
-    <div class="empty" id="empty" style="display:none;">No orders yet.</div>
-  </div>
-
-  <div class="toast" id="toast"></div>
-
 <script>
-  // ---- Config ----
-  const STATUS_CHOICES = ["new", "accepted", "preparing", "ready", "completed"];
+  const errEl = document.getElementById("err");
+  const okEl = document.getElementById("ok");
+  const ordersEl = document.getElementById("orders");
+  const titleEl = document.getElementById("title");
+  const subtitleEl = document.getElementById("subtitle");
 
-  function statusColor(status){
-    switch((status||"").toLowerCase()){
-      case "new": return getComputedStyle(document.documentElement).getPropertyValue("--new");
-      case "accepted": return getComputedStyle(document.documentElement).getPropertyValue("--accepted");
-      case "preparing": return getComputedStyle(document.documentElement).getPropertyValue("--preparing");
-      case "ready": return getComputedStyle(document.documentElement).getPropertyValue("--ready");
-      case "completed": return getComputedStyle(document.documentElement).getPropertyValue("--completed");
-      default: return getComputedStyle(document.documentElement).getPropertyValue("--muted");
-    }
-  }
-
-  function getSlug(){
+  function getSlugFromPath(){
+    const parts = location.pathname.split("/").filter(Boolean);
     // /r/{slug}/staff
-    const m = location.pathname.match(/^\/r\/([^\/]+)\/staff/);
-    return m ? m[1] : "";
+    if(parts.length >= 3 && parts[0] === "r" && parts[2] === "staff") return parts[1];
+    return "";
   }
 
-  function getToken(slug){
-    return localStorage.getItem(`staff_token:${slug}`) || "";
+  const slug = getSlugFromPath();
+  titleEl.textContent = `Staff Dashboard · ${slug || "unknown"}`;
+
+  function tokenKey(slug){ return `staff_token:${slug}`; }
+
+  function setError(msg){
+    errEl.textContent = msg || "";
+    okEl.textContent = "";
+  }
+  function setOk(msg){
+    okEl.textContent = msg || "";
+    errEl.textContent = "";
   }
 
-  function toast(msg){
-    const el = document.getElementById("toast");
-    el.textContent = msg;
-    el.classList.add("show");
-    clearTimeout(window.__toastTimer);
-    window.__toastTimer = setTimeout(()=> el.classList.remove("show"), 2200);
-  }
+  async function apiGetOrders(){
+    const token = localStorage.getItem(tokenKey(slug));
+    if(!token) throw new Error("No staff token found. Please log in again.");
 
-  function playDing(){
-    // Tiny inlined "ding" using WebAudio (no file needed).
-    try{
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = "sine";
-      o.frequency.value = 880;
-      g.gain.value = 0.0001;
-      o.connect(g); g.connect(ctx.destination);
-      o.start();
-      const t = ctx.currentTime;
-      g.gain.exponentialRampToValueAtTime(0.12, t + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
-      o.stop(t + 0.28);
-    }catch(e){}
-  }
+    const res = await fetch(`/r/${slug}/staff/orders`, {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
 
-  async function apiGet(url, token){
-    const res = await fetch(url, { headers: { "Authorization": `Bearer ${token}` }});
+    const raw = await res.text();
+    let data = null;
+    try { data = raw ? JSON.parse(raw) : null; } catch {}
+
     if(!res.ok){
-      const t = await res.text();
-      throw new Error(`${res.status} ${res.statusText}\n${t}`);
+      const detail = (data && (data.detail || data.error)) || raw || `HTTP ${res.status}`;
+      throw new Error(`Failed to load orders (${res.status})\n${detail}`);
     }
-    return res.json();
+    return data;
   }
 
-  async function apiPost(url, token, body){
-    const res = await fetch(url, {
+  async function apiSetStatus(orderId, status){
+    const token = localStorage.getItem(tokenKey(slug));
+    if(!token) throw new Error("No staff token found. Please log in again.");
+
+    const res = await fetch(`/r/${slug}/staff/orders/${orderId}/status`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify(body || {})
+      body: JSON.stringify({ status })
     });
+
+    const raw = await res.text();
+    let data = null;
+    try { data = raw ? JSON.parse(raw) : null; } catch {}
+
     if(!res.ok){
-      const t = await res.text();
-      throw new Error(`${res.status} ${res.statusText}\n${t}`);
+      const detail = (data && (data.detail || data.error)) || raw || `HTTP ${res.status}`;
+      throw new Error(`Failed to update status (${res.status})\n${detail}`);
     }
-    return res.json();
+    return data;
   }
 
-  function parseTotal(summaryText){
-    // Your summary_text includes "Total: £10.60" style lines
-    const m = (summaryText||"").match(/Total:\s*([^\n]+)/i);
-    return m ? m[1].trim() : "";
-  }
+  function renderOrders(list){
+    ordersEl.innerHTML = "";
 
-  function renderOrder(o, slug, token){
-    const card = document.createElement("div");
-    card.className = "card";
-    card.dataset.orderId = String(o.id);
+    const orders = Array.isArray(list) ? list : [];
+    subtitleEl.textContent = `${orders.length} active order${orders.length===1?"":"s"}`;
 
-    const status = (o.status || "new").toLowerCase();
-
-    const total = parseTotal(o.summary || "");
-
-    // Head
-    const head = document.createElement("div");
-    head.className = "card-head";
-
-    const left = document.createElement("div");
-    left.className = "order-meta";
-
-    const line1 = document.createElement("div");
-    line1.className = "line1";
-
-    const id = document.createElement("div");
-    id.className = "order-id";
-    id.textContent = `#${o.id}`;
-
-    const cust = document.createElement("div");
-    cust.className = "customer";
-    cust.textContent = o.name ? o.name : "Customer";
-
-    line1.appendChild(id);
-    line1.appendChild(cust);
-
-    if(o.phone){
-      const phone = document.createElement("div");
-      phone.className = "customer";
-      phone.textContent = `• ${o.phone}`;
-      line1.appendChild(phone);
+    if(orders.length === 0){
+      const empty = document.createElement("div");
+      empty.className = "muted";
+      empty.style.padding = "10px 0";
+      empty.textContent = "No orders right now.";
+      ordersEl.appendChild(empty);
+      return;
     }
 
-    const pill = document.createElement("div");
-    pill.className = "pill";
-    const dot = document.createElement("span");
-    dot.className = "dot";
-    dot.style.background = statusColor(status);
-    const txt = document.createElement("span");
-    txt.textContent = status;
-    pill.appendChild(dot);
-    pill.appendChild(txt);
+    for(const o of orders){
+      const card = document.createElement("div");
+      card.className = "card";
+      card.style.marginTop = "10px";
 
-    left.appendChild(line1);
-    left.appendChild(pill);
+      const row = document.createElement("div");
+      row.className = "row";
 
-    head.appendChild(left);
-    card.appendChild(head);
+      const left = document.createElement("div");
+      left.className = "left";
 
-    // Body
-    const body = document.createElement("div");
-    body.className = "card-body";
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = `${o.name || "Customer"}  ·  ${o.phone || ""}`;
 
-    const summary = document.createElement("div");
-    summary.className = "summary";
-    const h3 = document.createElement("h3");
-    h3.textContent = "Order summary";
-    const items = document.createElement("div");
-    items.className = "items";
-    items.textContent = o.summary || "";
-    summary.appendChild(h3);
-    summary.appendChild(items);
+      const summary = document.createElement("div");
+      summary.className = "summary";
+      summary.textContent = o.summary || "";
 
-    const right = document.createElement("div");
-    right.className = "right";
+      const status = document.createElement("div");
+      status.style.marginTop = "10px";
+      status.innerHTML = `<span class="pill">Status: ${o.status || "new"}</span>`;
 
-    const totalBox = document.createElement("div");
-    totalBox.className = "total";
-    const t1 = document.createElement("span");
-    t1.textContent = "Total";
-    const t2 = document.createElement("span");
-    t2.textContent = total || "—";
-    totalBox.appendChild(t1);
-    totalBox.appendChild(t2);
+      left.appendChild(name);
+      left.appendChild(summary);
+      left.appendChild(status);
 
-    const statusBox = document.createElement("div");
-    statusBox.className = "status-row";
-    const lab = document.createElement("label");
-    lab.textContent = "Status";
-    const controls = document.createElement("div");
-    controls.className = "status-controls";
+      const right = document.createElement("div");
 
-    STATUS_CHOICES.forEach(s => {
-      const chip = document.createElement("button");
-      chip.className = "chip" + (s === status ? " active" : "");
-      chip.type = "button";
-      chip.textContent = s;
-      chip.onclick = async () => {
-        // prevent auto refresh mid-change
-        window.__pauseRefresh = Date.now() + 2500;
+      const sel = document.createElement("select");
+      const opts = ["new","accepted","preparing","ready","completed"];
+      for(const s of opts){
+        const opt = document.createElement("option");
+        opt.value = s;
+        opt.textContent = s;
+        if(String(o.status||"new").toLowerCase() === s) opt.selected = true;
+        sel.appendChild(opt);
+      }
 
-        // optimistic UI
-        [...controls.querySelectorAll(".chip")].forEach(c => c.classList.remove("active"));
-        chip.classList.add("active");
-        dot.style.background = statusColor(s);
-        txt.textContent = s;
-
+      const btn = document.createElement("button");
+      btn.className = "btn primary";
+      btn.style.marginTop = "10px";
+      btn.textContent = "Update";
+      btn.onclick = async () => {
         try{
-          await apiPost(`/r/${slug}/staff/orders/${o.id}/status`, token, { status: s });
-          toast(`Order #${o.id} → ${s}`);
+          btn.disabled = true;
+          const out = await apiSetStatus(o.id, sel.value);
+          setOk(`Updated order #${o.id} → ${out.status}`);
+          await refresh();
         }catch(e){
-          toast(`Failed to update #${o.id}\n${String(e.message || e)}`);
+          setError(String(e.message || e));
+        }finally{
+          btn.disabled = false;
         }
       };
-      controls.appendChild(chip);
-    });
 
-    statusBox.appendChild(lab);
-    statusBox.appendChild(controls);
+      right.appendChild(sel);
+      right.appendChild(btn);
 
-    right.appendChild(totalBox);
-    right.appendChild(statusBox);
-
-    body.appendChild(summary);
-    body.appendChild(right);
-
-    card.appendChild(body);
-
-    return card;
+      row.appendChild(left);
+      row.appendChild(right);
+      card.appendChild(row);
+      ordersEl.appendChild(card);
+    }
   }
 
-  let lastSeenIds = new Set();
-
-  async function loadOrders({silent=false} = {}){
-    const slug = getSlug();
-    const token = getToken(slug);
-
-    if(!slug){
-      document.getElementById("subtitle").textContent = "Missing restaurant slug in URL.";
-      return;
-    }
-    if(!token){
-      document.getElementById("subtitle").textContent = `Not logged in for ${slug}. Redirecting…`;
-      location.href = "/staff/login";
-      return;
-    }
-
+  async function refresh(){
     try{
-      const data = await apiGet(`/r/${slug}/staff/orders`, token);
-      const orders = Array.isArray(data) ? data : [];
-
-      const list = document.getElementById("list");
-      const empty = document.getElementById("empty");
-
-      // New order detection
-      const idsNow = new Set(orders.map(o => String(o.id)));
-      let newCount = 0;
-      for(const id of idsNow){
-        if(!lastSeenIds.has(id)) newCount++;
-      }
-
-      // Render
-      list.innerHTML = "";
-      orders.forEach(o => {
-        const card = renderOrder(o, slug, token);
-        // flash brand new orders
-        if(!lastSeenIds.has(String(o.id))) card.classList.add("flash");
-        list.appendChild(card);
-      });
-
-      empty.style.display = orders.length ? "none" : "block";
-
-      document.getElementById("subtitle").textContent =
-        `Restaurant: ${slug} • Showing ${orders.length} order(s) • Updated ${new Date().toLocaleTimeString()}`;
-
-      if(newCount > 0 && !silent){
-        playDing();
-        toast(`${newCount} new order${newCount>1?"s":""} ✅`);
-      }
-
-      lastSeenIds = idsNow;
+      setError("");
+      const list = await apiGetOrders();
+      renderOrders(list);
     }catch(e){
-      document.getElementById("subtitle").textContent = `Error loading orders: ${String(e.message || e)}`;
-      toast(String(e.message || e));
-      // If token is invalid, kick to login
-      if(String(e.message || e).includes("401")){
-        location.href = "/staff/login";
+      renderOrders([]);
+      setError(String(e.message || e));
+      // If token missing/expired, bounce to login
+      if(String(e.message || e).toLowerCase().includes("token")){
+        // keep it gentle: give them a second to read
+        setTimeout(() => location.href = "/staff/login", 600);
       }
     }
   }
 
-  // Buttons
-  document.getElementById("refreshBtn").onclick = () => loadOrders();
+  document.getElementById("refreshBtn").onclick = refresh;
+
   document.getElementById("logoutBtn").onclick = () => {
-    const slug = getSlug();
-    localStorage.removeItem(`staff_token:${slug}`);
+    if(slug) localStorage.removeItem(tokenKey(slug));
     localStorage.removeItem("staff_last_slug");
     location.href = "/staff/login";
   };
 
-  // Initial load + polling
-  loadOrders({silent:true});
-  setInterval(() => {
-    if(window.__pauseRefresh && Date.now() < window.__pauseRefresh) return;
-    loadOrders({silent:true});
-  }, 5000);
+  // If slug missing, go to login
+  if(!slug){
+    subtitleEl.textContent = "Bad URL";
+    setError("This page must be opened as /r/{slug}/staff");
+  }else{
+    refresh();
+    // auto-refresh every 6 seconds
+    setInterval(refresh, 6000);
+  }
 </script>
 </body>
 </html>
