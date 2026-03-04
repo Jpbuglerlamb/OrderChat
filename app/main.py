@@ -728,3 +728,26 @@ def update_order_status(
     db.refresh(order)
 
     return {"ok": True, "id": order.id, "status": order.kitchen_status}
+
+@app.get("/create-demo-staff")
+def create_demo_staff(db: Session = Depends(get_db)):
+    from .models import StaffUser
+    from .auth import hash_password
+
+    existing = db.query(StaffUser).filter(
+        StaffUser.email == "staff@chinese.com"
+    ).first()
+
+    if existing:
+        return {"status": "already exists"}
+
+    u = StaffUser(
+        email="staff@chinese.com",
+        password_hash=hash_password("1234"),
+        restaurant_slug="chinese-demo",
+    )
+
+    db.add(u)
+    db.commit()
+
+    return {"status": "created"}
