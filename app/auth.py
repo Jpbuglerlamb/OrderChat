@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from passlib.context import CryptContext
-import os, jwt
+from jose import jwt
+import os
 from typing import Any, Dict, Optional
 
 
