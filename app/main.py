@@ -23,14 +23,14 @@ from .models import Order, StaffUser, User
 from .ordering.brain import handle_message
 from .ordering.cart import build_summary
 from .ordering.menu_store import load_menu_by_slug  # multi-restaurant loader
-from .db import Base, engine
+
+# NEW platform auth (make sure these files exist in app/)
 from . import models_platform  # noqa: F401
 from .auth_routes import router as auth_router
 
 # Load .env locally (safe in prod too)
 try:
     from dotenv import load_dotenv
-
     load_dotenv()
 except Exception:
     pass
@@ -49,8 +49,7 @@ try:
 except Exception:
     interpret_message_llm = None
 
-Base.metadata.create_all(bind=engine)
-app.include_router(auth_router)
+
 # -------------------------
 # Settings
 # -------------------------
@@ -63,22 +62,36 @@ class Settings(BaseModel):
 
 settings = Settings()
 
+
+# -------------------------
+# Create app ONCE
+# -------------------------
 app = FastAPI(
     title="Takeaway Ordering API",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
 )
-app.include_router(cart_router)
 
+# -------------------------
+# Routers
+# -------------------------
+app.include_router(cart_router)
+app.include_router(auth_router)
+
+# -------------------------
+# DB init (after models imported)
+# -------------------------
 Base.metadata.create_all(bind=engine)
 
+# -------------------------
+# Frontend paths
+# -------------------------
 PROJECT_ROOT = Path(__file__).resolve().parents[1]  # TakeawayDemo/
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 CHAT_HTML_PATH = FRONTEND_DIR / "chat.html"
 BASKET_HTML_PATH = FRONTEND_DIR / "basket.html"
 STAFF_HTML_PATH = FRONTEND_DIR / "staff.html"
-
 
 # -------------------------
 # Schemas
