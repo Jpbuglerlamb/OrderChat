@@ -1,91 +1,87 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
 <head>
-<title>Kitchen Orders</title>
-
-<style>
-body{
-  font-family: sans-serif;
-  background:#111;
-  color:white;
-  padding:20px;
-}
-
-.order{
-  border:1px solid #444;
-  padding:15px;
-  margin-bottom:15px;
-  border-radius:8px;
-}
-
-button{
-  padding:10px 16px;
-  margin-right:10px;
-  border:none;
-  border-radius:6px;
-  cursor:pointer;
-}
-
-.accept{background:#2ecc71;}
-.ready{background:#3498db;}
-.complete{background:#888;}
-</style>
+  <meta charset="utf-8" />
+  <title>Kitchen Orders</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; background:#111; color:#eee; }
+    .card { border:1px solid #333; border-radius:12px; padding:12px; margin:10px 0; background:#1a1a1a; }
+    .muted { color:#aaa; font-size:12px; }
+    .err { color:#ff6b6b; white-space:pre-wrap; }
+    select { background:#222; color:#eee; border:1px solid #333; padding:6px; border-radius:8px; }
+  </style>
 </head>
-
 <body>
-
-<h1>Kitchen Orders</h1>
-
-<div id="orders"></div>
+  <h1>Kitchen Orders</h1>
+  <div id="status" class="muted"></div>
+  <div id="errors" class="err"></div>
+  <div id="list"></div>
 
 <script>
+  const slug = location.pathname.split("/")[2]; // /r/{slug}/staff
+  const statusEl = document.getElementById("status");
+  const errEl = document.getElementById("errors");
+  const listEl = document.getElementById("list");
 
-const slug = "chinese-demo"; // change per restaurant
+  async function loadOrders() {
+    errEl.textContent = "";
+    statusEl.textContent = "Loading…";
 
-async function loadOrders(){
+    const url = `/r/${slug}/staff/orders`;
+    const res = await fetch(url, { cache: "no-store" });
 
-  const res = await fetch(`/r/${slug}/staff/orders`);
-  const orders = await res.json();
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`GET ${url} failed: ${res.status}\n${t}`);
+    }
 
-  const container = document.getElementById("orders");
-  container.innerHTML = "";
+    const orders = await res.json();
+    statusEl.textContent = orders.length ? `Showing ${orders.length} order(s)` : "No orders yet";
 
-  orders.forEach(o=>{
+    listEl.innerHTML = "";
+    for (const o of orders) {
+      const div = document.createElement("div");
+      div.className = "card";
+      div.innerHTML = `
+        <div><b>#${o.id}</b> ${o.name || "—"} <span class="muted">${o.phone || ""}</span></div>
+        <div class="muted" style="margin:6px 0;">${(o.summary || "").replace(/\n/g,"<br>")}</div>
+        <div>
+          <label class="muted">Status:</label>
+          <select data-id="${o.id}">
+            ${["new","accepted","preparing","completed"].map(s => `<option value="${s}" ${o.status===s?"selected":""}>${s}</option>`).join("")}
+          </select>
+        </div>
+      `;
+      listEl.appendChild(div);
+    }
 
-    const div = document.createElement("div");
-    div.className="order";
+    // bind status changes
+    listEl.querySelectorAll("select").forEach(sel => {
+      sel.onchange = async (e) => {
+        const orderId = sel.getAttribute("data-id");
+        const newStatus = sel.value;
+        const postUrl = `/r/${slug}/staff/orders/${orderId}/status`;
+        const r = await fetch(postUrl, {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ status: newStatus })
+        });
+        if (!r.ok) {
+          const t = await r.text();
+          throw new Error(`POST ${postUrl} failed: ${r.status}\n${t}`);
+        }
+        await loadOrders();
+      };
+    });
+  }
 
-    div.innerHTML = `
-      <h3>Order #${o.id}</h3>
-      <p><b>${o.name}</b></p>
-      <p>${o.phone || ""}</p>
-      <pre>${o.summary}</pre>
+  async function tick() {
+    try { await loadOrders(); }
+    catch (e) { errEl.textContent = String(e.stack || e); statusEl.textContent = "Error"; }
+  }
 
-      <button class="accept" onclick="updateStatus(${o.id},'accepted')">Accept</button>
-      <button class="ready" onclick="updateStatus(${o.id},'ready')">Ready</button>
-      <button class="complete" onclick="updateStatus(${o.id},'completed')">Complete</button>
-    `;
-
-    container.appendChild(div);
-  });
-
-}
-
-async function updateStatus(id,status){
-
-  await fetch(`/r/${slug}/staff/orders/${id}/status`,{
-    method:"POST",
-    headers:{ "Content-Type":"application/json"},
-    body:JSON.stringify({status})
-  });
-
-  loadOrders();
-}
-
-setInterval(loadOrders,2000);
-loadOrders();
-
+  tick();
+  setInterval(tick, 3000);
 </script>
-
 </body>
 </html>
