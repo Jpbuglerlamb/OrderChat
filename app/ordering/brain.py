@@ -575,7 +575,6 @@ def handle_message(
         except Exception:
             pass
 
-        cart = []
         state["order_submitted"] = True
         return "Order placed \n\n" + summary, dump_cart(cart), dump_state(state)
 
@@ -634,7 +633,6 @@ def handle_message(
             except Exception:
                 pass
 
-            cart = []
             state["order_submitted"] = True
             return "Order placed \n\n" + summary, dump_cart(cart), dump_state(state)
 
