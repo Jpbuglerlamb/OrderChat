@@ -38,3 +38,15 @@ class Order(Base):
     summary_text = Column(Text, default="")
     items_json = Column(Text, default="[]")
     state_json = Column(Text, default="{}")
+
+    class StaffUser(Base):
+        __tablename__ = "staff_users"
+
+        id = Column(Integer, primary_key=True)
+        email = Column(String, unique=True, index=True, nullable=False)
+        password_hash = Column(String, nullable=False)
+
+        restaurant_slug = Column(String, index=True, nullable=False)  # ties login to dataset
+        role = Column(String, default="staff")  # optional: staff/admin
+
+        created_at = Column(DateTime, default=datetime.utcnow)

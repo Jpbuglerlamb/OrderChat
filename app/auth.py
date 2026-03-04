@@ -1,12 +1,11 @@
 # app/auth.py
 from __future__ import annotations
 
-import os
 from datetime import datetime, timedelta, timezone
-from typing import Optional
-
-from jose import jwt
 from passlib.context import CryptContext
+import os, jwt
+from typing import Any, Dict, Optional
+
 
 
 pwd = CryptContext(schemes=["argon2"], deprecated="auto")
@@ -47,5 +46,24 @@ def decode_token(token: str) -> Optional[int]:
     try:
         data = jwt.decode(token, _jwt_secret(), algorithms=[_jwt_alg()])
         return int(data.get("sub"))
+    except Exception:
+        return None
+
+JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret")
+JWT_ALG = "HS256"
+JWT_TTL_DAYS = int(os.getenv("JWT_TTL_DAYS", "14"))
+
+def create_staff_token(payload: Dict[str, Any]) -> str:
+    data = dict(payload)
+    data["type"] = "staff"
+    data["exp"] = datetime.utcnow() + timedelta(days=JWT_TTL_DAYS)
+    return jwt.encode(data, JWT_SECRET, algorithm=JWT_ALG)
+
+def decode_staff_token(token: str) -> Optional[Dict[str, Any]]:
+    try:
+        data = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+        if not isinstance(data, dict) or data.get("type") != "staff":
+            return None
+        return data
     except Exception:
         return None

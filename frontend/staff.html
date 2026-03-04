@@ -3,35 +3,95 @@
 <head>
   <meta charset="utf-8" />
   <title>Kitchen Orders</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; background:#111; color:#eee; }
     .card { border:1px solid #333; border-radius:12px; padding:12px; margin:10px 0; background:#1a1a1a; }
     .muted { color:#aaa; font-size:12px; }
-    .err { color:#ff6b6b; white-space:pre-wrap; }
+    .err { color:#ff6b6b; white-space:pre-wrap; margin-top:10px; }
+    .topbar { display:flex; gap:10px; align-items:center; justify-content:space-between; margin-bottom:10px; }
+    .btn { background:#222; color:#eee; border:1px solid #333; padding:8px 10px; border-radius:10px; cursor:pointer; }
+    .btn:hover { border-color:#555; }
     select { background:#222; color:#eee; border:1px solid #333; padding:6px; border-radius:8px; }
   </style>
 </head>
 <body>
-  <h1>Kitchen Orders</h1>
-  <div id="status" class="muted"></div>
+  <div class="topbar">
+    <div>
+      <h1 style="margin:0;">Kitchen Orders</h1>
+      <div id="status" class="muted"></div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button id="refreshBtn" class="btn">Refresh</button>
+      <button id="logoutBtn" class="btn">Log out</button>
+    </div>
+  </div>
+
   <div id="errors" class="err"></div>
   <div id="list"></div>
 
 <script>
-  const slug = location.pathname.split("/")[2]; // /r/{slug}/staff
+  // URL is /r/{slug}/staff
+  const parts = location.pathname.split("/").filter(Boolean); // ["r", "{slug}", "staff"]
+  const slug = parts[1] || "";
   const statusEl = document.getElementById("status");
   const errEl = document.getElementById("errors");
   const listEl = document.getElementById("list");
+
+  const refreshBtn = document.getElementById("refreshBtn");
+  const logoutBtn = document.getElementById("logoutBtn");
+
+  function getToken() {
+    return localStorage.getItem(`staff_token:${slug}`) || "";
+  }
+
+  function requireLoginOrRedirect() {
+    if (!slug) {
+      errEl.textContent = "Bad URL: missing restaurant slug.";
+      statusEl.textContent = "Error";
+      return false;
+    }
+    const token = getToken();
+    if (!token) {
+      // If you add a backend route for this, point it there.
+      // Otherwise, serve staff_login.html as a static file and use that path.
+      location.href = `/staff/login`; // change if needed
+      return false;
+    }
+    return true;
+  }
+
+  function logout() {
+    localStorage.removeItem(`staff_token:${slug}`);
+    statusEl.textContent = "Logged out";
+    listEl.innerHTML = "";
+    location.href = `/staff/login`; // change if needed
+  }
+
+  logoutBtn.onclick = logout;
+  refreshBtn.onclick = () => tick();
+
+  async function authedFetch(url, opts = {}) {
+    const token = getToken();
+    const headers = Object.assign({}, opts.headers || {});
+    headers["Authorization"] = `Bearer ${token}`;
+    return fetch(url, Object.assign({}, opts, { headers }));
+  }
 
   async function loadOrders() {
     errEl.textContent = "";
     statusEl.textContent = "Loading…";
 
     const url = `/r/${slug}/staff/orders`;
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await authedFetch(url, { cache: "no-store" });
 
     if (!res.ok) {
       const t = await res.text();
+      if (res.status === 401) {
+        // token expired/invalid
+        localStorage.removeItem(`staff_token:${slug}`);
+        throw new Error("Session expired. Please log in again.\n\n" + t);
+      }
       throw new Error(`GET ${url} failed: ${res.status}\n${t}`);
     }
 
@@ -57,27 +117,42 @@
 
     // bind status changes
     listEl.querySelectorAll("select").forEach(sel => {
-      sel.onchange = async (e) => {
+      sel.onchange = async () => {
         const orderId = sel.getAttribute("data-id");
         const newStatus = sel.value;
         const postUrl = `/r/${slug}/staff/orders/${orderId}/status`;
-        const r = await fetch(postUrl, {
+
+        const r = await authedFetch(postUrl, {
           method: "POST",
           headers: {"Content-Type":"application/json"},
           body: JSON.stringify({ status: newStatus })
         });
+
         if (!r.ok) {
           const t = await r.text();
+          if (r.status === 401) {
+            localStorage.removeItem(`staff_token:${slug}`);
+            throw new Error("Session expired. Please log in again.\n\n" + t);
+          }
           throw new Error(`POST ${postUrl} failed: ${r.status}\n${t}`);
         }
+
         await loadOrders();
       };
     });
   }
 
   async function tick() {
+    if (!requireLoginOrRedirect()) return;
     try { await loadOrders(); }
-    catch (e) { errEl.textContent = String(e.stack || e); statusEl.textContent = "Error"; }
+    catch (e) {
+      errEl.textContent = String(e.stack || e);
+      statusEl.textContent = "Error";
+      // If session expired, kick them out nicely
+      if (String(e).includes("Session expired")) {
+        setTimeout(() => location.href = `/staff/login`, 600);
+      }
+    }
   }
 
   tick();

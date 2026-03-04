@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Staff Login</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; background:#111; color:#eee; }
+    .wrap { max-width: 420px; margin: 40px auto; }
+    .card { border:1px solid #333; border-radius:12px; padding:16px; background:#1a1a1a; }
+    label { display:block; margin:10px 0 6px; color:#bbb; font-size:13px; }
+    input { width:100%; padding:10px; border-radius:10px; border:1px solid #333; background:#0f0f0f; color:#eee; }
+    button { margin-top:14px; width:100%; padding:10px; border-radius:10px; border:0; background:#2f81f7; color:white; font-weight:600; cursor:pointer; }
+    button:disabled { opacity:0.6; cursor:not-allowed; }
+    .muted { color:#aaa; font-size:12px; margin-top:10px; }
+    .err { color:#ff6b6b; white-space:pre-wrap; margin-top:10px; }
+    .ok { color:#7ee787; white-space:pre-wrap; margin-top:10px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Staff Login</h1>
+    <div class="card">
+      <form id="form">
+        <label>Email</label>
+        <input id="email" type="email" autocomplete="username" required />
+
+        <label>Password</label>
+        <input id="password" type="password" autocomplete="current-password" required />
+
+        <button id="btn" type="submit">Log in</button>
+
+        <div id="msg" class="muted">Use the staff credentials for this restaurant.</div>
+        <div id="err" class="err"></div>
+        <div id="ok" class="ok"></div>
+      </form>
+    </div>
+  </div>
+
+<script>
+  const form = document.getElementById("form");
+  const btn = document.getElementById("btn");
+  const errEl = document.getElementById("err");
+  const okEl = document.getElementById("ok");
+  const msgEl = document.getElementById("msg");
+
+  function setBusy(b) {
+    btn.disabled = b;
+    btn.textContent = b ? "Logging in…" : "Log in";
+  }
+
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    errEl.textContent = "";
+    okEl.textContent = "";
+    msgEl.textContent = "Contacting server…";
+    setBusy(true);
+
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+
+    try {
+      const res = await fetch("/staff/login", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ email, password })
+      });
+
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(`Login failed: ${res.status}\n${t}`);
+      }
+
+      const data = await res.json();
+      const token = data.token;
+      const slug = (data.restaurant_slug || "").toString().trim();
+
+      if (!token || !slug) throw new Error("Login response missing token/restaurant_slug");
+
+      // Store token keyed by slug so one browser can handle multiple restaurants
+      localStorage.setItem(`staff_token:${slug}`, token);
+      localStorage.setItem("staff_last_slug", slug);
+
+      okEl.textContent = "Logged in ✅ Redirecting…";
+      msgEl.textContent = "";
+
+      // Send them to their restaurant dashboard
+      location.href = `/r/${slug}/staff`;
+    } catch (err) {
+      errEl.textContent = String(err.stack || err);
+      msgEl.textContent = "Error";
+    } finally {
+      setBusy(false);
+    }
+  };
+</script>
+</body>
+</html>

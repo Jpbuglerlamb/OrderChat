@@ -8,11 +8,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 from uuid import uuid4
-from .cart_api import router as cart_router
+
 from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
+
+from .cart_api import router as cart_router
+from .db import Base, engine, get_db
+from .emailer import send_order_email
+from .menu import load_menu  # legacy single-menu loader
+from .models import Order, StaffUser, User
+from .ordering.brain import handle_message
+from .ordering.cart import build_summary
+from .ordering.menu_store import load_menu_by_slug  # multi-restaurant loader
 
 # Load .env locally (safe in prod too)
 try:
@@ -22,14 +31,14 @@ try:
 except Exception:
     pass
 
-from .auth import create_token, decode_token, hash_password, verify_password
-from .db import Base, engine, get_db
-from .emailer import send_order_email
-from .menu import load_menu  # legacy single-menu loader
-from .models import Order, User
-from .ordering.brain import handle_message
-from .ordering.cart import build_summary
-from .ordering.menu_store import load_menu_by_slug  # multi-restaurant loader
+from .auth import (
+    create_token,
+    decode_token,
+    hash_password,
+    verify_password,
+    create_staff_token,
+    decode_staff_token,
+)
 
 try:
     from .ai_intent import interpret_message_llm
@@ -37,10 +46,12 @@ except Exception:
     interpret_message_llm = None
 
 
+# -------------------------
+# Settings
+# -------------------------
 class Settings(BaseModel):
     llm_enabled: bool = os.getenv("LLM_ENABLED", "1").strip().lower() not in {"0", "false"}
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "").strip()
-
     orders_email_to: str = os.getenv("ORDERS_EMAIL_TO", "Lambjoan11@gmail.com")
     currency_default: str = os.getenv("CURRENCY", "GBP")
 
@@ -54,13 +65,19 @@ app = FastAPI(
     openapi_url=None,
 )
 app.include_router(cart_router)
+
 Base.metadata.create_all(bind=engine)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]  # TakeawayDemo/
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 CHAT_HTML_PATH = FRONTEND_DIR / "chat.html"
+BASKET_HTML_PATH = FRONTEND_DIR / "basket.html"
+STAFF_HTML_PATH = FRONTEND_DIR / "staff.html"
 
 
+# -------------------------
+# Schemas
+# -------------------------
 class SignupIn(BaseModel):
     name: str
     email: EmailStr
@@ -77,6 +94,14 @@ class ChatIn(BaseModel):
     message: str
 
 
+class StaffLoginIn(BaseModel):
+    email: EmailStr
+    password: str
+
+
+# -------------------------
+# Helpers
+# -------------------------
 def _safe_json_dict(raw: str | None) -> Dict[str, Any]:
     if not raw:
         return {}
@@ -106,6 +131,61 @@ def _normalize_slug(slug: str) -> str:
     return (slug or "").strip().lower()
 
 
+def _business_order_email(menu_dict: Dict[str, Any]) -> str:
+    meta = menu_dict.get("meta") or {}
+    if isinstance(meta, dict):
+        for k in ("order_email", "email", "contact_email"):
+            v = meta.get(k)
+            if isinstance(v, str) and "@" in v:
+                return v.strip()
+    return settings.orders_email_to
+
+
+def _llm_ready() -> bool:
+    return bool(settings.llm_enabled and settings.openai_api_key and interpret_message_llm)
+
+
+def _cmd_to_brain_text(cmd: Dict[str, Any], original_text: str) -> str:
+    intent = (cmd.get("intent") or "unknown").strip()
+    category = (cmd.get("category") or "").strip()
+    item_name = (cmd.get("item_name") or "").strip()
+    qty = cmd.get("qty")
+
+    if intent == "show_menu":
+        return "menu"
+    if intent == "show_basket":
+        return "basket"
+    if intent == "show_category" and category:
+        return category
+    if intent == "add_item" and item_name:
+        if isinstance(qty, int) and qty > 1:
+            return f"{qty} {item_name}"
+        return item_name
+    if intent == "remove_item" and item_name:
+        return f"remove {item_name}"
+
+    return original_text
+
+
+async def _apply_optional_llm_rewrite(text: str, menu_dict: Dict[str, Any], state_json: str) -> str:
+    if not _llm_ready():
+        return text
+    try:
+        cmd = await interpret_message_llm(
+            message=text,
+            menu=menu_dict,
+            state=_safe_json_dict(state_json),
+        )
+        return _cmd_to_brain_text(cmd, text)
+    except Exception as e:
+        print("[LLM] rewrite failed:", repr(e), flush=True)
+        traceback.print_exc()
+        return text
+
+
+# -------------------------
+# Auth dependencies
+# -------------------------
 def require_user_id(authorization: str | None = Header(default=None)) -> int:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Missing Bearer token")
@@ -160,6 +240,26 @@ def require_user_id_or_guest(
     return u.id
 
 
+def require_staff(authorization: str | None = Header(default=None)) -> Dict[str, Any]:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing Bearer token")
+
+    token = authorization.split(" ", 1)[1].strip()
+    payload = decode_staff_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid staff token")
+
+    rs = payload.get("restaurant_slug")
+    if not isinstance(rs, str) or not rs.strip():
+        raise HTTPException(status_code=401, detail="Staff token missing restaurant")
+
+    payload["restaurant_slug"] = _normalize_slug(rs)
+    return payload
+
+
+# -------------------------
+# Order helpers
+# -------------------------
 def get_or_create_draft(db: Session, user_id: int) -> Order:
     order = (
         db.query(Order)
@@ -202,76 +302,23 @@ def _ensure_order_scoped_to_restaurant(order: Order, slug: str) -> None:
     state["restaurant_slug"] = curr_slug
     order.state_json = json.dumps(state)
 
-def _business_order_email(menu_dict: Dict[str, Any]) -> str:
-    meta = menu_dict.get("meta") or {}
-    if isinstance(meta, dict):
-        for k in ("order_email", "email", "contact_email"):
-            v = meta.get(k)
-            if isinstance(v, str) and "@" in v:
-                return v.strip()
-    return settings.orders_email_to
 
-def _llm_ready() -> bool:
-    return bool(settings.llm_enabled and settings.openai_api_key and interpret_message_llm)
-
-
-def _cmd_to_brain_text(cmd: Dict[str, Any], original_text: str) -> str:
-    """
-    Convert structured command into simple text that the deterministic brain understands.
-    Keep it conservative.
-    """
-    intent = (cmd.get("intent") or "unknown").strip()
-    category = (cmd.get("category") or "").strip()
-    item_name = (cmd.get("item_name") or "").strip()
-    qty = cmd.get("qty")
-
-    if intent == "show_menu":
-        return "menu"
-    if intent == "show_basket":
-        return "basket"
-    if intent == "show_category" and category:
-        # could be a real category OR a keyword like "beef" (brain can handle both)
-        return category
-
-    if intent == "add_item" and item_name:
-        if isinstance(qty, int) and qty > 1:
-            return f"{qty} {item_name}"
-        return item_name
-
-    if intent == "remove_item" and item_name:
-        return f"remove {item_name}"
-
-    return original_text
-
-
-async def _apply_optional_llm_rewrite(text: str, menu_dict: Dict[str, Any], state_json: str) -> str:
-    if not _llm_ready():
-        return text
-
-    try:
-        cmd = await interpret_message_llm(
-            message=text,
-            menu=menu_dict,
-            state=_safe_json_dict(state_json),
-        )
-        return _cmd_to_brain_text(cmd, text)
-    except Exception as e:
-        print("[LLM] rewrite failed:", repr(e), flush=True)
-        traceback.print_exc()
-        return text
-
-
+# -------------------------
+# Routes: health
+# -------------------------
 @app.get("/")
 def root():
     return {"ok": True, "service": "takeaway-api"}
 
 
-# Render/load balancers sometimes send HEAD. Avoid 405.
 @app.head("/")
 def root_head():
     return Response(status_code=200)
 
 
+# -------------------------
+# Routes: customer auth
+# -------------------------
 @app.post("/auth/signup")
 def signup(payload: SignupIn, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == payload.email).first():
@@ -297,6 +344,27 @@ def login(payload: LoginIn, db: Session = Depends(get_db)):
     return {"token": create_token(u.id)}
 
 
+# -------------------------
+# Routes: staff auth
+# -------------------------
+@app.post("/staff/login")
+def staff_login(payload: StaffLoginIn, db: Session = Depends(get_db)):
+    s = db.query(StaffUser).filter(StaffUser.email == payload.email).first()
+    if not s or not verify_password(payload.password, s.password_hash):
+        raise HTTPException(status_code=401, detail="Bad credentials")
+
+    token = create_staff_token(
+        {
+            "staff_id": s.id,
+            "restaurant_slug": _normalize_slug(s.restaurant_slug),
+        }
+    )
+    return {"token": token, "restaurant_slug": _normalize_slug(s.restaurant_slug)}
+
+
+# -------------------------
+# Routes: restaurant frontend + menu
+# -------------------------
 @app.get("/r/{slug}", response_class=HTMLResponse)
 def restaurant_page(slug: str):
     slug = _normalize_slug(slug)
@@ -333,6 +401,45 @@ def menu():
     return load_menu()
 
 
+# -------------------------
+# Routes: basket + staff HTML
+# -------------------------
+@app.get("/r/{slug}/basket", response_class=HTMLResponse)
+def basket_page(slug: str):
+    slug = _normalize_slug(slug)
+    menu = load_menu_by_slug(slug)
+    if not menu:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    if not BASKET_HTML_PATH.exists():
+        raise HTTPException(status_code=500, detail=f"Missing frontend file: {BASKET_HTML_PATH}")
+
+    return BASKET_HTML_PATH.read_text(encoding="utf-8")
+
+
+@app.get("/r/{slug}/staff", response_class=HTMLResponse)
+def staff_page(slug: str):
+    slug = _normalize_slug(slug)
+    menu = load_menu_by_slug(slug)
+    if not menu:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    if not STAFF_HTML_PATH.exists():
+        raise HTTPException(status_code=500, detail=f"Missing frontend file: {STAFF_HTML_PATH}")
+
+    return STAFF_HTML_PATH.read_text(encoding="utf-8")
+
+STAFF_LOGIN_HTML_PATH = FRONTEND_DIR / "staff_login.html"
+
+@app.get("/staff/login", response_class=HTMLResponse)
+def staff_login_page():
+    if not STAFF_LOGIN_HTML_PATH.exists():
+        raise HTTPException(status_code=500, detail=f"Missing frontend file: {STAFF_LOGIN_HTML_PATH}")
+    return STAFF_LOGIN_HTML_PATH.read_text(encoding="utf-8")
+
+# -------------------------
+# Routes: order reset (legacy)
+# -------------------------
 @app.post("/order/reset")
 def reset_order(user_id: int = Depends(require_user_id), db: Session = Depends(get_db)):
     order = (
@@ -356,6 +463,9 @@ def reset_order(user_id: int = Depends(require_user_id), db: Session = Depends(g
     return {"ok": True, "message": "Draft reset"}
 
 
+# -------------------------
+# Routes: chat (legacy single menu)
+# -------------------------
 @app.post("/chat")
 async def chat(payload: ChatIn, user_id: int = Depends(require_user_id), db: Session = Depends(get_db)):
     order = get_or_create_draft(db, user_id)
@@ -387,6 +497,9 @@ async def chat(payload: ChatIn, user_id: int = Depends(require_user_id), db: Ses
     return {"reply": reply, "order_id": order.id, "summary": order.summary_text, "items": items}
 
 
+# -------------------------
+# Routes: chat per restaurant
+# -------------------------
 @app.post("/r/{slug}/chat")
 async def chat_for_restaurant(
     slug: str,
@@ -452,6 +565,9 @@ async def chat_for_restaurant(
     }
 
 
+# -------------------------
+# Routes: confirm (legacy)
+# -------------------------
 @app.post("/order/confirm")
 def confirm(user_id: int = Depends(require_user_id), db: Session = Depends(get_db)):
     order = (
@@ -490,6 +606,10 @@ def confirm(user_id: int = Depends(require_user_id), db: Session = Depends(get_d
     send_order_email(to_email=settings.orders_email_to, subject=subject, body=body)
     return {"ok": True, "order_id": order.id, "status": order.status}
 
+
+# -------------------------
+# Routes: confirm per restaurant
+# -------------------------
 @app.post("/r/{slug}/order/confirm")
 def confirm_restaurant_order(
     slug: str,
@@ -510,7 +630,6 @@ def confirm_restaurant_order(
     if not order:
         raise HTTPException(status_code=400, detail="No draft order to confirm")
 
-    # Ensure it belongs to this restaurant
     _ensure_order_scoped_to_restaurant(order, slug)
 
     items = _safe_json_list(order.items_json)
@@ -524,6 +643,7 @@ def confirm_restaurant_order(
     order.status = "confirmed"
     order.updated_at = datetime.utcnow()
     order.state_json = "{}"
+
     db.add(order)
     db.commit()
     db.refresh(order)
@@ -543,37 +663,20 @@ def confirm_restaurant_order(
     send_order_email(to_email=to_email, subject=subject, body=body)
     return {"ok": True, "order_id": order.id, "status": order.status}
 
-BASKET_HTML_PATH = FRONTEND_DIR / "basket.html"
 
-@app.get("/r/{slug}/basket", response_class=HTMLResponse)
-def basket_page(slug: str):
-    slug = _normalize_slug(slug)
-    menu = load_menu_by_slug(slug)
-    if not menu:
-        raise HTTPException(status_code=404, detail="Restaurant not found")
-
-    if not BASKET_HTML_PATH.exists():
-        raise HTTPException(status_code=500, detail=f"Missing frontend file: {BASKET_HTML_PATH}")
-
-    return BASKET_HTML_PATH.read_text(encoding="utf-8")
-
-STAFF_HTML_PATH = FRONTEND_DIR / "staff.html"
-
-@app.get("/r/{slug}/staff", response_class=HTMLResponse)
-def staff_page(slug: str):
-    slug = _normalize_slug(slug)
-    menu = load_menu_by_slug(slug)
-    if not menu:
-        raise HTTPException(status_code=404, detail="Restaurant not found")
-
-    if not STAFF_HTML_PATH.exists():
-        raise HTTPException(status_code=500, detail=f"Missing frontend file: {STAFF_HTML_PATH}")
-
-    return STAFF_HTML_PATH.read_text(encoding="utf-8")
-
+# -------------------------
+# Routes: staff API (PROTECTED)
+# -------------------------
 @app.get("/r/{slug}/staff/orders")
-def staff_orders(slug: str, db: Session = Depends(get_db)):
+def staff_orders(
+    slug: str,
+    db: Session = Depends(get_db),
+    staff: Dict[str, Any] = Depends(require_staff),
+):
     slug = _normalize_slug(slug)
+
+    if _normalize_slug(staff.get("restaurant_slug", "")) != slug:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     orders = (
         db.query(Order)
@@ -588,22 +691,40 @@ def staff_orders(slug: str, db: Session = Depends(get_db)):
             "name": o.customer_name,
             "phone": o.customer_phone,
             "summary": o.summary_text,
-            "status": o.kitchen_status
+            "status": o.kitchen_status,
         }
         for o in orders
     ]
 
+
 @app.post("/r/{slug}/staff/orders/{order_id}/status")
-def update_order_status(slug: str, order_id: int, data: dict, db: Session = Depends(get_db)):
+def update_order_status(
+    slug: str,
+    order_id: int,
+    data: dict,
+    db: Session = Depends(get_db),
+    staff: Dict[str, Any] = Depends(require_staff),
+):
+    slug = _normalize_slug(slug)
 
-    order = db.query(Order).filter(Order.id == order_id).first()
+    if _normalize_slug(staff.get("restaurant_slug", "")) != slug:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
+    order = (
+        db.query(Order)
+        .filter(Order.id == order_id, Order.restaurant_slug == slug)
+        .first()
+    )
     if not order:
-        raise HTTPException(status_code=404)
+        raise HTTPException(status_code=404, detail="Order not found")
 
-    order.kitchen_status = data.get("status")
+    new_status = data.get("status")
+    if isinstance(new_status, str) and new_status.strip():
+        order.kitchen_status = new_status.strip()
 
+    order.updated_at = datetime.utcnow()
+    db.add(order)
     db.commit()
+    db.refresh(order)
 
-    return {"ok": True}
-
+    return {"ok": True, "id": order.id, "status": order.kitchen_status}
