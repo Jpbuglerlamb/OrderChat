@@ -257,6 +257,66 @@ _ARTICLES_RE = re.compile(r"^\s*(?:and\s+)?(?:a|an|the)\b[,\s]*", re.IGNORECASE)
 _TRAILING_POLITE_RE = re.compile(r"\b(?:please|pls|plz)\b\.?\s*$", re.IGNORECASE)
 
 # ----------------------------
+# Order status (customer asking kitchen updates)
+# ----------------------------
+
+# High-signal "where is my order" / "status" questions
+_STATUS_QUERY_RE = re.compile(
+    r"^\s*(?:"
+    r"(?:what|whats|what's)\s+(?:the\s+)?status\b|"
+    r"(?:what|whats|what's)\s+happening\b|"
+    r"(?:where'?s|where\s+is)\s+(?:my\s+)?order\b|"
+    r"(?:is|has)\s+(?:my\s+)?order\s+(?:been\s+)?(?:accepted|confirmed|started|ready|completed)\b|"
+    r"(?:is\s+it\s+)?(?:ready|accepted|confirmed|preparing|completed)\b\s*(?:yet)?\s*[?.!]*|"
+    r"order\s+status\b|"
+    r"track\s+(?:my\s+)?order\b|"
+    r"any\s+update(?:s)?\b|"
+    r"update\s+on\s+(?:my\s+)?order\b"
+    r")\s*$",
+    re.IGNORECASE,
+)
+
+# If user mentions a target stage, capture it (optional)
+_STATUS_TARGET_RE = re.compile(
+    r"\b(new|accepted|confirmed|preparing|ready|completed|complete|done)\b",
+    re.IGNORECASE,
+)
+
+def is_order_status_query(raw: str) -> bool:
+    """
+    True if user is asking about kitchen/order progress.
+    Keep this separate from menu/category/item parsing.
+    """
+    s = (raw or "").strip()
+    if not s:
+        return False
+
+    s0 = _basic_normalize(s)
+    s0 = strip_filler_prefix(s0)
+    s0 = strip_question_wrapper(s0)
+    s0 = _basic_normalize(s0)
+
+    return bool(_STATUS_QUERY_RE.match(s0))
+
+def extract_status_target(raw: str) -> Optional[str]:
+    """
+    Optional: if user asks 'is it ready?', return 'ready' etc.
+    Otherwise None.
+    """
+    s = _basic_normalize(strip_question_wrapper(strip_filler_prefix(raw or "")))
+    m = _STATUS_TARGET_RE.search(s)
+    if not m:
+        return None
+    t = m.group(1).lower().strip()
+    if t in {"complete", "done"}:
+        return "completed"
+    if t == "confirmed":
+        # customers often say confirmed; kitchen uses accepted/preparing/ready/completed.
+        # map it to accepted-ish, or keep 'confirmed' and handle upstream.
+        return "accepted"
+    return t
+
+# ----------------------------
 # Category / browse question stripping
 # ----------------------------
 

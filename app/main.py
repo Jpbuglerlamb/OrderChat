@@ -98,7 +98,22 @@ class StaffLoginIn(BaseModel):
     email: EmailStr
     password: str
 
+# --- Order status intent ---
+_STATUS_Q_RE = re.compile(
+    r"\b(status|order status|progress|update|ready yet|is it ready|where is my order|how long)\b",
+    re.IGNORECASE,
+)
 
+def is_order_status_query(raw: str) -> bool:
+    s = (raw or "").strip().lower()
+    if not s:
+        return False
+
+    # common short forms
+    if s in {"status", "order status", "update", "progress"}:
+        return True
+
+    return bool(_STATUS_Q_RE.search(s))
 # -------------------------
 # Helpers
 # -------------------------
@@ -515,6 +530,40 @@ async def chat_for_restaurant(
 
     order = get_or_create_draft(db, user_id)
     _ensure_order_scoped_to_restaurant(order, slug)
+
+    # -------------------------
+    # Customer asking for order status (kitchen progress)
+    # -------------------------
+    if is_order_status_query(payload.message):
+        # No confirmed order yet
+        if (order.status or "").lower() != "confirmed":
+            return {
+                "reply": "You haven’t placed an order yet. Type “checkout” when you’re ready 🙂",
+                "order_id": order.id,
+                "summary": order.summary_text,
+                "items": _safe_json_list(order.items_json),
+                "restaurant_slug": slug,
+                "kitchen_status": None,
+            }
+
+        status = (order.kitchen_status or "new").strip().lower()
+
+        nice = {
+            "new": "New (not started yet)",
+            "accepted": "Accepted ✅",
+            "preparing": "Preparing 🍳",
+            "ready": "Ready ✅",
+            "completed": "Completed ✅",
+        }.get(status, status)
+
+        return {
+            "reply": f"Order status: {nice}",
+            "order_id": order.id,
+            "summary": order.summary_text,
+            "items": _safe_json_list(order.items_json),
+            "restaurant_slug": slug,
+            "kitchen_status": status,
+        }
 
     text = await _apply_optional_llm_rewrite(payload.message, menu_dict, order.state_json)
 
