@@ -8,3 +8,7 @@ passlib[argon2]
 email-validator
 python-dotenv
 qrcode[pil]
+passlib[bcrypt]
+itsdangerous
+jinja2
+python-multipart
