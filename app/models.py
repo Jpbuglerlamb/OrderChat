@@ -6,15 +6,6 @@ from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from .db import Base
 
 
-class User(Base):
-    __tablename__ = "users"
-    id = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False)
-    email = Column(String, unique=True, index=True, nullable=False)
-    phone = Column(String, nullable=True)
-    password_hash = Column(String, nullable=False)
-
-
 class Order(Base):
     __tablename__ = "orders"
     id = Column(Integer, primary_key=True)
@@ -39,14 +30,28 @@ class Order(Base):
     items_json = Column(Text, default="[]")
     state_json = Column(Text, default="{}")
 
-    class StaffUser(Base):
-        __tablename__ = "staff_users"
 
-        id = Column(Integer, primary_key=True)
-        email = Column(String, unique=True, index=True, nullable=False)
-        password_hash = Column(String, nullable=False)
+class StaffUser(Base):
+    __tablename__ = "staff_users"
 
-        restaurant_slug = Column(String, index=True, nullable=False)  # ties login to dataset
-        role = Column(String, default="staff")  # optional: staff/admin
+    id = Column(Integer, primary_key=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    password_hash = Column(String, nullable=False)
 
-        created_at = Column(DateTime, default=datetime.utcnow)
+    restaurant_slug = Column(String, index=True, nullable=False)  # ties login to dataset
+    role = Column(String, default="staff")  # optional: staff/admin
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
+    phone = Column(String, nullable=True)
+    password_hash = Column(String, nullable=False)
+
+
+
+
+
