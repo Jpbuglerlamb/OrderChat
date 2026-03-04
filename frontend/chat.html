@@ -467,7 +467,7 @@
 
   // NEW: who-am-I
   async function apiMe(){
-    const res = await fetch(`/me`, { method:"GET" });
+    const res = await fetch(`/r/${slug}/me`, { method:"GET" });
     const data = await res.json().catch(() => ({}));
     if(!res.ok) throw new Error(data.detail || "Failed to load profile");
     return data;
@@ -475,7 +475,7 @@
 
   // NEW: save name
   async function apiSaveName(name){
-    const res = await fetch(`/me/name`, {
+    const res = await fetch(`/r/${slug}/me/name`, {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ name })
@@ -630,14 +630,17 @@
 
   // Boot
   (async function init(){
+    // Always show the welcome card immediately (guest fallback)
+    renderWelcomeCard({ is_guest: true, name: "" });
+
     try{
       const me = await apiMe();
+      // Re-render with real profile if endpoint works
       renderWelcomeCard(me);
     }catch(e){
-      // If /me isn’t implemented yet, still load chat normally
-      console.warn("No /me endpoint yet:", e);
-      addMsg("Hi! What can I get you today?", "bot");
+      console.warn("No /me endpoint yet (showing guest welcome):", e);
     }
+
     inputEl.focus();
   })();
 </script>
