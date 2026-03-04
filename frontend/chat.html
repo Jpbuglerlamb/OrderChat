@@ -11,9 +11,7 @@
       --text:#0b0b0b;
       --muted:#6b7280;
       --line:#e5e7eb;
-
       --chipBg:#f3f4f6;
-
       --primary:#2b6cff;
 
       --userBg:#111111;
@@ -34,10 +32,8 @@
         --text:#f9fafb;
         --muted:#a1a1aa;
         --line:rgba(255,255,255,.10);
-
         --chipBg:rgba(255,255,255,.08);
 
-        /* softer dark-mode bubbles */
         --userBg:#2a2a2e;
         --userText:#ffffff;
 
@@ -67,7 +63,6 @@
       min-height:0;
     }
 
-    /* --- Top header --- */
     header{
       padding:12px 16px 10px;
       border-bottom:1px solid var(--line);
@@ -77,7 +72,6 @@
       z-index:10;
     }
 
-    /* grid keeps title perfectly centered even with different button widths */
     .topbar{
       display:grid;
       grid-template-columns: 1fr auto 1fr;
@@ -122,7 +116,7 @@
       width:7px;
       height:7px;
       border-radius:999px;
-      background: #20c997; /* “online” dot */
+      background: #20c997;
       box-shadow: 0 0 0 4px rgba(32,201,151,.14);
       flex:0 0 auto;
     }
@@ -135,7 +129,6 @@
       text-overflow:ellipsis;
     }
 
-    /* content */
     .content{
       flex:1;
       min-height:0;
@@ -150,6 +143,64 @@
       padding:18px var(--padX) calc(18px + var(--kb));
     }
 
+    /* Welcome card */
+    .welcome{
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.03);
+      border-radius:18px;
+      padding:14px;
+      box-shadow:var(--shadow);
+      margin-bottom:14px;
+    }
+    .welcomeTitle{
+      font-weight:900;
+      font-size:16px;
+      letter-spacing:-0.2px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .welcomeSub{
+      margin-top:6px;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.35;
+    }
+    .welcomeRow{
+      margin-top:10px;
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .pillBtn{
+      border:1px solid var(--line);
+      background:var(--chipBg);
+      color:var(--text);
+      border-radius:999px;
+      padding:8px 12px;
+      font-weight:800;
+      font-size:13px;
+      cursor:pointer;
+      user-select:none;
+    }
+    .pillBtn.primary{
+      border:0;
+      background:var(--primary);
+      color:#fff;
+    }
+    .nameInput{
+      flex:1;
+      min-width:180px;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid var(--line);
+      background:transparent;
+      color:var(--text);
+      outline:none;
+    }
+
     .row{ display:flex; margin:10px 0; }
     .row.user{ justify-content:flex-end; }
     .row.bot{ justify-content:flex-start; }
@@ -161,7 +212,6 @@
       gap:6px;
     }
 
-    /* --- Bubble fixes (prevents “Co / ke”) --- */
     .bubble{
       flex: 0 1 auto;
       width: fit-content;
@@ -171,7 +221,6 @@
       border-radius: 18px;
       line-height: 1.35;
       font-size: 15px;
-
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       word-break: normal;
@@ -181,9 +230,6 @@
       background:var(--userBg);
       color:var(--userText);
       border-top-right-radius: 10px;
-      border-bottom-right-radius: 18px;
-      border-bottom-left-radius: 18px;
-      border-top-left-radius: 18px;
     }
 
     .bubble.bot{
@@ -206,7 +252,6 @@
       box-shadow:var(--shadow);
     }
 
-    /* composer */
     .composer{
       position:fixed;
       left:0; right:0; bottom:0;
@@ -223,10 +268,9 @@
     }
 
     .composerInner{ max-width:880px; margin:0 auto; }
-
     .inputRow{ display:flex; gap:10px; align-items:center; }
 
-    input{
+    input#input{
       flex:1;
       padding:12px 12px;
       border-radius:14px;
@@ -239,7 +283,7 @@
       appearance:none;
       box-shadow:none;
     }
-    input:focus{
+    input#input:focus{
       border-color: rgba(43,108,255,.55);
       box-shadow: 0 0 0 3px rgba(43,108,255,.14);
     }
@@ -297,7 +341,12 @@
     </header>
 
     <div class="content">
-      <div class="chat" id="chat"></div>
+      <div class="chat" id="chat">
+
+        <!-- Welcome card injected by JS; placeholder keeps layout stable -->
+        <div id="welcomeMount"></div>
+
+      </div>
     </div>
 
     <div class="composer" id="composer">
@@ -323,6 +372,7 @@
   const sendBtn = document.getElementById("send");
   const btnText = document.querySelector(".btnText");
   const restaurantLine = document.getElementById("restaurantLine");
+  const welcomeMount = document.getElementById("welcomeMount");
 
   restaurantLine.textContent = `Restaurant: ${slug}`;
 
@@ -415,6 +465,112 @@
     return data;
   }
 
+  // NEW: who-am-I
+  async function apiMe(){
+    const res = await fetch(`/me`, { method:"GET" });
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(data.detail || "Failed to load profile");
+    return data;
+  }
+
+  // NEW: save name
+  async function apiSaveName(name){
+    const res = await fetch(`/me/name`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ name })
+    });
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(data.detail || "Failed to save name");
+    return data;
+  }
+
+  // NEW: welcome card
+  function renderWelcomeCard(profile){
+    const isGuest = !!profile.is_guest;
+    const name = String(profile.name || "").trim();
+
+    const card = document.createElement("div");
+    card.className = "welcome";
+
+    const title = document.createElement("div");
+    title.className = "welcomeTitle";
+    title.innerHTML = `<span id="welcomeTitleText">Welcome to JP AI</span><span style="font-size:12px; color: var(--muted); font-weight:800;">${isGuest ? "Guest" : "Saved"}</span>`;
+
+    const sub = document.createElement("div");
+    sub.className = "welcomeSub";
+    sub.id = "welcomeSubText";
+    sub.textContent = isGuest
+      ? "Sign up or log in to save your orders and have your name remembered."
+      : "You’re logged in. Your orders and name are saved.";
+
+    const row = document.createElement("div");
+    row.className = "welcomeRow";
+
+    const nameInput = document.createElement("input");
+    nameInput.className = "nameInput";
+    nameInput.id = "nameInput";
+    nameInput.placeholder = "Your name (e.g. JP)";
+    nameInput.value = name;
+
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "pillBtn primary";
+    saveBtn.textContent = "Save name";
+    saveBtn.onclick = async () => {
+      const n = String(nameInput.value || "").trim();
+      if(!n){
+        alert("Type a name first 🙂");
+        return;
+      }
+      try{
+        saveBtn.textContent = "Saving…";
+        saveBtn.disabled = true;
+        const out = await apiSaveName(n);
+        // Refresh UI label
+        document.getElementById("welcomeTitleText").textContent = `Welcome, ${out.name || n}`;
+        saveBtn.textContent = "Saved ✅";
+        setTimeout(()=> { saveBtn.textContent = "Save name"; saveBtn.disabled = false; }, 900);
+      }catch(e){
+        saveBtn.textContent = "Save name";
+        saveBtn.disabled = false;
+        alert(String(e.message || e));
+      }
+    };
+
+    const loginBtn = document.createElement("button");
+    loginBtn.className = "pillBtn";
+    loginBtn.textContent = "Log in";
+    loginBtn.onclick = () => location.href = "/auth/login";
+
+    const signupBtn = document.createElement("button");
+    signupBtn.className = "pillBtn";
+    signupBtn.textContent = "Sign up";
+    signupBtn.onclick = () => location.href = "/auth/signup";
+
+    row.appendChild(nameInput);
+    row.appendChild(saveBtn);
+
+    if(isGuest){
+      row.appendChild(loginBtn);
+      row.appendChild(signupBtn);
+    }
+
+    card.appendChild(title);
+    card.appendChild(sub);
+    card.appendChild(row);
+
+    welcomeMount.innerHTML = "";
+    welcomeMount.appendChild(card);
+
+    // Bot hello uses name if available
+    const greetName = (name || "").trim();
+    if(greetName){
+      addMsg(`Hi ${greetName}! What can I get you today?`, "bot");
+    }else{
+      addMsg("Hi! What can I get you today?", "bot");
+    }
+  }
+
   async function sendMessage(raw){
     const text = (raw ?? inputEl.value ?? "").trim();
     if(!text) return;
@@ -472,8 +628,18 @@
     update();
   })();
 
-  addMsg("Hi! What can I get you today?", "bot");
-  inputEl.focus();
+  // Boot
+  (async function init(){
+    try{
+      const me = await apiMe();
+      renderWelcomeCard(me);
+    }catch(e){
+      // If /me isn’t implemented yet, still load chat normally
+      console.warn("No /me endpoint yet:", e);
+      addMsg("Hi! What can I get you today?", "bot");
+    }
+    inputEl.focus();
+  })();
 </script>
 </body>
 </html>
