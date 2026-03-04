@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Kitchen Orders</title>
+
+<style>
+body{
+  font-family: sans-serif;
+  background:#111;
+  color:white;
+  padding:20px;
+}
+
+.order{
+  border:1px solid #444;
+  padding:15px;
+  margin-bottom:15px;
+  border-radius:8px;
+}
+
+button{
+  padding:10px 16px;
+  margin-right:10px;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+.accept{background:#2ecc71;}
+.ready{background:#3498db;}
+.complete{background:#888;}
+</style>
+</head>
+
+<body>
+
+<h1>Kitchen Orders</h1>
+
+<div id="orders"></div>
+
+<script>
+
+const slug = "chinese-demo"; // change per restaurant
+
+async function loadOrders(){
+
+  const res = await fetch(`/r/${slug}/staff/orders`);
+  const orders = await res.json();
+
+  const container = document.getElementById("orders");
+  container.innerHTML = "";
+
+  orders.forEach(o=>{
+
+    const div = document.createElement("div");
+    div.className="order";
+
+    div.innerHTML = `
+      <h3>Order #${o.id}</h3>
+      <p><b>${o.name}</b></p>
+      <p>${o.phone || ""}</p>
+      <pre>${o.summary}</pre>
+
+      <button class="accept" onclick="updateStatus(${o.id},'accepted')">Accept</button>
+      <button class="ready" onclick="updateStatus(${o.id},'ready')">Ready</button>
+      <button class="complete" onclick="updateStatus(${o.id},'completed')">Complete</button>
+    `;
+
+    container.appendChild(div);
+  });
+
+}
+
+async function updateStatus(id,status){
+
+  await fetch(`/r/${slug}/staff/orders/${id}/status`,{
+    method:"POST",
+    headers:{ "Content-Type":"application/json"},
+    body:JSON.stringify({status})
+  });
+
+  loadOrders();
+}
+
+setInterval(loadOrders,2000);
+loadOrders();
+
+</script>
+
+</body>
+</html>

@@ -19,12 +19,30 @@ class User(Base):
 
 class Order(Base):
     __tablename__ = "orders"
+
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    status = Column(String, default="draft")  # draft | confirmed
+
+    # restaurant
+    restaurant_slug = Column(String, index=True)
+
+    # optional user account (future feature)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # customer info
+    customer_name = Column(String)
+    customer_phone = Column(String)
+    customer_email = Column(String)
+
+    # order lifecycle
+    status = Column(String, default="draft")       # draft | confirmed
+    kitchen_status = Column(String, default="new") # new | accepted | ready | completed
+
+    # timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
+
+    # order data
     summary_text = Column(Text, default="")
     items_json = Column(Text, default="[]")
-    state_json = Column(Text, default="{}")  # chat state (pending option/extras)
+    state_json = Column(Text, default="{}")
 

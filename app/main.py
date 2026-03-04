@@ -535,3 +535,40 @@ def basket_page(slug: str):
         raise HTTPException(status_code=500, detail=f"Missing frontend file: {BASKET_HTML_PATH}")
 
     return BASKET_HTML_PATH.read_text(encoding="utf")
+
+@app.get("/r/{slug}/staff/orders")
+def staff_orders(slug: str, db: Session = Depends(get_db)):
+
+    orders = (
+        db.query(Order)
+        .filter(Order.restaurant_slug == slug)
+        .filter(Order.kitchen_status != "completed")
+        .order_by(Order.created_at.desc())
+        .all()
+    )
+
+    return [
+        {
+            "id": o.id,
+            "name": o.customer_name,
+            "phone": o.customer_phone,
+            "summary": o.summary_text,
+            "status": o.kitchen_status
+        }
+        for o in orders
+    ]
+
+@app.post("/r/{slug}/staff/orders/{order_id}/status")
+def update_order_status(slug: str, order_id: int, data: dict, db: Session = Depends(get_db)):
+
+    order = db.query(Order).filter(Order.id == order_id).first()
+
+    if not order:
+        raise HTTPException(status_code=404)
+
+    order.kitchen_status = data.get("status")
+
+    db.commit()
+
+    return {"ok": True}
+
