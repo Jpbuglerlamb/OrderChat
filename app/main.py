@@ -35,7 +35,8 @@ def create_app() -> FastAPI:
     # Your CSS lives in /frontend/styles.css
     PROJECT_ROOT = Path(__file__).resolve().parents[1]  # TakeawayDemo/
     FRONTEND_DIR = PROJECT_ROOT / "frontend"
-    app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+    STATIC_DIR = FRONTEND_DIR / "static"
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     # ---------- Routers ----------
     app.include_router(cart_router)
