@@ -188,6 +188,10 @@ def get_or_create_draft(db: Session, user_id: int) -> Order:
 
 def _ensure_order_scoped_to_restaurant(order: Order, slug: str) -> None:
     curr_slug = _normalize_slug(slug)
+
+    # store on the row for staff queries
+    order.restaurant_slug = curr_slug
+
     state = _safe_json_dict(order.state_json)
     prev_slug = _normalize_slug(str(state.get("restaurant_slug") or ""))
 
@@ -416,6 +420,23 @@ async def chat_for_restaurant(
     summary, _total = build_summary(items, currency_symbol=symbol)
 
     order.summary_text = summary
+
+    if reply.lower().startswith("order placed"):
+        st = _safe_json_dict(order.state_json)
+
+        order.status = "confirmed"
+        order.kitchen_status = "new"
+        order.customer_name = str(st.get("customer_name") or "")
+        order.customer_email = str(st.get("customer_email") or "")
+        order.customer_phone = str(st.get("customer_phone") or "")
+        order.updated_at = datetime.utcnow()
+
+        db.add(order)
+        db.commit()
+        db.refresh(order)
+
+        # Optional: start a new draft automatically next message
+        # (Leave as-is for now if you want one draft at a time.)
     order.updated_at = datetime.utcnow()
 
     db.add(order)
@@ -534,10 +555,11 @@ def basket_page(slug: str):
     if not BASKET_HTML_PATH.exists():
         raise HTTPException(status_code=500, detail=f"Missing frontend file: {BASKET_HTML_PATH}")
 
-    return BASKET_HTML_PATH.read_text(encoding="utf")
+    return BASKET_HTML_PATH.read_text(encoding="utf-8")
 
 @app.get("/r/{slug}/staff/orders")
 def staff_orders(slug: str, db: Session = Depends(get_db)):
+    slug = _normalize_slug(slug)
 
     orders = (
         db.query(Order)
@@ -546,6 +568,7 @@ def staff_orders(slug: str, db: Session = Depends(get_db)):
         .order_by(Order.created_at.desc())
         .all()
     )
+    ...
 
     return [
         {

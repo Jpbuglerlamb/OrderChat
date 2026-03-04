@@ -576,11 +576,6 @@ def handle_message(
             pass
 
         cart = []
-        # clear customer details after order (optional, but recommended)
-        state.pop("customer_name", None)
-        state.pop("customer_email", None)
-        state.pop("customer_phone", None)
-
         return "Order placed ✅\n\n" + summary, dump_cart(cart), dump_state(state)
 
     # 2.6) Checkout flow: capture name/contact
