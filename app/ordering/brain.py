@@ -238,6 +238,35 @@ def _resolve_selection(msg_norm: str, candidates: List[Dict[str, Any]]) -> Dict[
 
     return None
 
+def _split_with_then_intents(msg_norm: str) -> List[str]:
+    """
+    Split on 'with' first (common in takeaway ordering),
+    then use split_intents() (which already protects 'salt and pepper', etc.).
+    """
+    s = (msg_norm or "").strip()
+    if not s:
+        return [""]
+
+    # Split on 'with' as an extra separator
+    chunks = [c.strip() for c in re.split(r"\s+\bwith\b\s+", s, flags=re.IGNORECASE) if c and c.strip()]
+
+    parts: List[str] = []
+    for c in chunks:
+        parts.extend(split_intents(c))
+
+    # de-dup while preserving order
+    out: List[str] = []
+    seen = set()
+    for p in parts:
+        p = (p or "").strip()
+        if not p:
+            continue
+        if p in seen:
+            continue
+        seen.add(p)
+        out.append(p)
+
+    return out or [s]
 
 # -------------------------
 # Formatting helpers
@@ -646,7 +675,8 @@ def handle_message(
 
     # 7) Add items (multi-item natural language)
     # Key change: use your split_intents() which already protects "salt and pepper" etc.
-    parts = split_intents(msg_norm)
+    parts = _split_with_then_intents(msg_norm)
+
 
     added_any = False
     matched_count = 0
