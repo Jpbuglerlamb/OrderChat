@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="panel">
+  <h2 style="margin-top:0;">Create account</h2>
+
+  {% if error == "exists" %}
+    <p class="error">That email is already registered. Try logging in instead.</p>
+  {% endif %}
+
+  <form class="form" method="post" action="/auth/signup">
+    <div>
+      <div class="small">Full name</div>
+      <input class="input" name="name" type="text" required />
+    </div>
+
+    <div>
+      <div class="small">Email</div>
+      <input class="input" name="email" type="email" required />
+    </div>
+
+    <div>
+      <div class="small">Phone number</div>
+      <input class="input" name="phone" type="tel" required />
+    </div>
+
+    <div>
+      <div class="small">Delivery address</div>
+      <input class="input" name="address" type="text" required />
+    </div>
+
+    <div>
+      <div class="small">Password</div>
+      <input class="input" name="password" type="password" required />
+    </div>
+    <button class="btn primary" type="submit">Sign up</button>
+  </form>
+  <form method="post" action="/auth/dev/reset-users" style="margin-top:12px;">
+    <button class="btn" type="submit">Dev: reset users</button>
+  </form>
+
+  <p class="small" style="margin-top:12px;">
+    Already have an account? <a href="/auth/login">Log in</a>
+  </p>
+</div>
+
+{% endblock %}

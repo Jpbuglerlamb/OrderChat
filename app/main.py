@@ -23,6 +23,9 @@ from .models import Order, StaffUser, User
 from .ordering.brain import handle_message
 from .ordering.cart import build_summary
 from .ordering.menu_store import load_menu_by_slug  # multi-restaurant loader
+from .db import Base, engine
+from . import models_platform  # noqa: F401
+from .auth_routes import router as auth_router
 
 # Load .env locally (safe in prod too)
 try:
@@ -46,7 +49,8 @@ try:
 except Exception:
     interpret_message_llm = None
 
-
+Base.metadata.create_all(bind=engine)
+app.include_router(auth_router)
 # -------------------------
 # Settings
 # -------------------------
