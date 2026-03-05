@@ -5,13 +5,12 @@ import os
 from typing import Optional
 
 from fastapi import Request, Response
-from itsdangerous import URLSafeSerializer, BadSignature
-from sqlalchemy.orm import Session
+from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 from app.models import User
 from app.security.auth import hash_password, verify_password
-
 
 COOKIE_NAME = os.getenv("WEB_SESSION_COOKIE", "jpai_session")
 COOKIE_TTL_DAYS = int(os.getenv("WEB_SESSION_TTL_DAYS", "14"))
@@ -36,6 +35,16 @@ def _unsign_email(token: str) -> Optional[str]:
         return None
 
 
+def _cookie_secure() -> bool:
+    """
+    Render is HTTPS, localhost often isn't.
+    Control via env:
+      WEB_SESSION_SECURE=1  -> Secure cookies
+      WEB_SESSION_SECURE=0  -> Non-secure cookies (default)
+    """
+    return os.getenv("WEB_SESSION_SECURE", "0").strip() == "1"
+
+
 def set_session_cookie(resp: Response, email: str) -> None:
     token = _sign_email(email.strip().lower())
     resp.set_cookie(
@@ -43,7 +52,7 @@ def set_session_cookie(resp: Response, email: str) -> None:
         value=token,
         httponly=True,
         samesite="lax",
-        secure=False,  # Render uses HTTPS, but localhost is HTTP. If you force True, local breaks.
+        secure=_cookie_secure(),
         max_age=60 * 60 * 24 * COOKIE_TTL_DAYS,
     )
 
@@ -68,6 +77,7 @@ def create_user(
     address: str,
 ) -> User:
     email_norm = email.strip().lower()
+
     existing = db.query(User).filter(func.lower(User.email) == email_norm).first()
     if existing:
         raise ValueError("User already exists")
@@ -75,9 +85,9 @@ def create_user(
     u = User(
         email=email_norm,
         password_hash=hash_password(password),
-        name=name.strip(),
-        phone=phone.strip(),
-        address=address.strip(),
+        name=name.strip() or "User",
+        phone=(phone.strip() or None),
+        address=(address.strip() or None),
     )
     db.add(u)
     db.commit()

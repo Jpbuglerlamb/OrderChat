@@ -14,10 +14,14 @@ class User(Base):
 
     id = Column(Integer, primary_key=True)
 
-    name = Column(String, nullable=False)
-    email = Column(String, unique=True, index=True, nullable=False)
-    phone = Column(String, nullable=True)
-    password_hash = Column(String, nullable=False)
+    # Basic profile
+    name = Column(String(120), nullable=False)
+    email = Column(String(320), unique=True, index=True, nullable=False)
+    phone = Column(String(40), nullable=True)
+    address = Column(String(255), nullable=True)
+
+    # IMPORTANT: store hashes in TEXT so they never truncate
+    password_hash = Column(Text, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
@@ -27,7 +31,6 @@ class User(Base):
         nullable=False,
     )
 
-    # optional convenience relationship
     orders = relationship("Order", back_populates="user", cascade="all, delete-orphan")
 
 
@@ -38,20 +41,19 @@ class Order(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
     # ordering lifecycle
-    status = Column(String, default="draft", nullable=False)  # draft | confirmed
+    status = Column(String(20), default="draft", nullable=False)  # draft | confirmed
 
-    # kitchen lifecycle
-    restaurant_slug = Column(String, index=True, default="", nullable=False)
-    kitchen_status = Column(
-        String,
-        default="new",
-        nullable=False,
-    )  # new | accepted | preparing | ready | completed
+    # restaurant + kitchen lifecycle
+    restaurant_slug = Column(String(120), index=True, default="", nullable=False)
+
+    # allow NULL so your staff query that includes NULL kitchen_status can work
+    # (you set it to "new" on confirmation anyway)
+    kitchen_status = Column(String(30), default=None, nullable=True)  # new|accepted|preparing|ready|completed
 
     # customer details captured during checkout
-    customer_name = Column(String, default="", nullable=False)
-    customer_email = Column(String, default="", nullable=False)
-    customer_phone = Column(String, default="", nullable=False)
+    customer_name = Column(String(120), default="", nullable=False)
+    customer_email = Column(String(320), default="", nullable=False)
+    customer_phone = Column(String(40), default="", nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
@@ -65,7 +67,6 @@ class Order(Base):
     items_json = Column(Text, default="[]", nullable=False)
     state_json = Column(Text, default="{}", nullable=False)
 
-    # optional convenience relationship
     user = relationship("User", back_populates="orders")
 
 
@@ -74,11 +75,13 @@ class StaffUser(Base):
 
     id = Column(Integer, primary_key=True)
 
-    email = Column(String, unique=True, index=True, nullable=False)
-    password_hash = Column(String, nullable=False)
+    email = Column(String(320), unique=True, index=True, nullable=False)
 
-    restaurant_slug = Column(String, index=True, nullable=False)  # ties login to dataset
-    role = Column(String, default="staff", nullable=False)  # staff | admin (optional)
+    # IMPORTANT: store hashes in TEXT so they never truncate
+    password_hash = Column(Text, nullable=False)
+
+    restaurant_slug = Column(String(120), index=True, nullable=False)
+    role = Column(String(30), default="staff", nullable=False)  # staff | admin
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
@@ -87,7 +90,3 @@ class StaffUser(Base):
         onupdate=datetime.utcnow,
         nullable=False,
     )
-
-
-
-
