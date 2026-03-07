@@ -1,16 +1,17 @@
-# app/routes/auth_platform.py
 from __future__ import annotations
 
 import os
 from typing import Optional
 
-from fastapi import Request, Response
+from fastapi import APIRouter, Request, Response
 from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import User
 from app.security.auth import hash_password, verify_password
+
+router = APIRouter(tags=["auth-platform"])
 
 COOKIE_NAME = os.getenv("WEB_SESSION_COOKIE", "jpai_session")
 COOKIE_TTL_DAYS = int(os.getenv("WEB_SESSION_TTL_DAYS", "14"))
@@ -101,3 +102,9 @@ def verify_user(db: Session, email: str, password: str) -> bool:
     if not u:
         return False
     return verify_password(password, u.password_hash)
+
+
+@router.post("/auth/logout")
+def logout(response: Response):
+    clear_session_cookie(response)
+    return {"ok": True}

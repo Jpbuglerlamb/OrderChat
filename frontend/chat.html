@@ -73,6 +73,13 @@
       padding:12px 16px 10px;
     }
 
+    .topbarRight{
+      justify-self:end;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+
     .iconBtn{
       justify-self:start;
       width:fit-content;
@@ -96,7 +103,9 @@
       transform:none;
     }
 
-    #basketBtn{ justify-self:end; }
+    #logoutBtn{
+      display:none;
+    }
 
     .brandCenter{
       justify-self:center;
@@ -445,7 +454,10 @@
           <div class="brandSub" id="restaurantLine">Ordering</div>
         </div>
 
-        <button class="iconBtn" id="basketBtn" type="button">Basket</button>
+        <div class="topbarRight">
+          <button class="iconBtn" id="basketBtn" type="button">Basket</button>
+          <button class="iconBtn" id="logoutBtn" type="button">Logout</button>
+        </div>
       </div>
     </header>
 
@@ -482,6 +494,7 @@
     const chatEl = document.getElementById("chat");
     const inputEl = document.getElementById("input");
     const sendBtn = document.getElementById("send");
+    const logoutBtn = document.getElementById("logoutBtn");
     const btnText = document.querySelector(".btnText");
     const restaurantLine = document.getElementById("restaurantLine");
     const welcomeMount = document.getElementById("welcomeMount");
@@ -648,11 +661,22 @@
       return data;
     }
 
+    async function apiLogout() {
+      const res = await fetch("/auth/logout", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "Failed to log out");
+      return data;
+    }
+
     function renderWelcomeCard(profile) {
       const isGuest = !!profile.is_guest;
       const rawName = String(profile.name || "").trim();
       const realName = isRealName(rawName) ? rawName : "";
       const email = String(profile.email || "").trim();
+
+      if (logoutBtn) {
+        logoutBtn.style.display = isGuest ? "none" : "inline-flex";
+      }
 
       const card = document.createElement("div");
       card.className = "welcome";
@@ -779,6 +803,17 @@
     document.getElementById("basketBtn").addEventListener("click", () => {
       window.location.href = `/r/${slug}/basket`;
     });
+
+    if (logoutBtn) {
+      logoutBtn.addEventListener("click", async () => {
+        try {
+          await apiLogout();
+          window.location.reload();
+        } catch (e) {
+          alert(String(e.message || e));
+        }
+      });
+    }
 
     sendBtn.addEventListener("click", () => sendMessage());
     inputEl.addEventListener("keydown", (e) => {
