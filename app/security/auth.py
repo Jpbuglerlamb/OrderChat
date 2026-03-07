@@ -1,4 +1,4 @@
-# app/auth.py
+# app/security/auth.py
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
