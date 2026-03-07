@@ -19,6 +19,7 @@ from .menu import (
     currency_symbol,
     all_category_names,
     find_item,
+    find_item_with_score,
     find_category_name,
     items_in_category,
     extract_category_from_text,
@@ -674,12 +675,12 @@ def handle_message(
         return "Removed ✅\n\n" + summary, dump_cart(cart), dump_state(state)
 
     # 7) Add items (multi-item natural language)
-    # Key change: use your split_intents() which already protects "salt and pepper" etc.
     parts = _split_with_then_intents(msg_norm)
-
 
     added_any = False
     matched_count = 0
+    low_confidence_item = None
+    low_confidence_score = 0.0
 
     for part in parts:
         qty, text = parse_qty_prefix(part)
@@ -688,34 +689,58 @@ def handle_message(
             continue
 
         text_clean = _clean_order_phrase(text)
-        # Normalize each candidate phrase again (helps after cleaning)
-        text_norm = normalize_text(text, synonyms)
-        text_clean_norm = normalize_text(text_clean, synonyms)
 
-        item = (
-            find_item(menu, text_clean_norm, synonyms)
-            or find_item(menu, text_norm, synonyms)
-            or find_item(menu, text_clean, synonyms)
-            or find_item(menu, text, synonyms)
-        )
-        if not item:
+        # Try a few forms, best score wins
+        candidates = [
+            text_clean,
+            normalize_text(text_clean, synonyms),
+            text,
+            normalize_text(text, synonyms),
+        ]
+
+        best_item = None
+        best_score = 0.0
+
+        for candidate in candidates:
+            if not candidate:
+                continue
+            item, score = find_item_with_score(menu, candidate, synonyms)
+            if score > best_score:
+                best_item = item
+                best_score = score
+
+        # Strong confidence: add directly
+        if best_item and best_score >= 0.84:
+            _add_item_to_cart(cart, best_item, qty=qty)
+            added_any = True
+            matched_count += 1
             continue
 
-        _add_item_to_cart(cart, item, qty=qty)
-        added_any = True
-        matched_count += 1
+        # Medium confidence: store best guess for clarification
+        if best_item and best_score >= 0.68:
+            if best_score > low_confidence_score:
+                low_confidence_item = best_item
+                low_confidence_score = best_score
 
-    # 7.5) If nothing matched, offer keyword suggestions for short inputs
-    if not added_any and msg_norm and len(msg_norm.split()) <= 2:
-        hits = _keyword_matches(menu, msg_norm, synonyms)
-        if hits:
-            _set_suggestions(state, hits, reason=f"keyword:{msg_norm}")
-            return _format_suggestions_list(hits, cur, f"Here are {msg_norm} options:"), dump_cart(cart), dump_state(state)
-
+    # If we added at least one item, return basket summary
     if added_any:
         summary, _ = build_summary(cart, currency_symbol=cur)
         if matched_count > 1:
             return "Added ✅ (multiple items)\n\n" + summary, dump_cart(cart), dump_state(state)
         return "Added ✅\n\n" + summary, dump_cart(cart), dump_state(state)
 
-    return "I didn’t catch that. Try 'menu', ask for a category, or type an item name.", dump_cart(cart), dump_state(state)
+    # If nothing was confidently added, but we have a decent guess, ask to confirm
+    if low_confidence_item:
+        return (
+            f"Did you mean {low_confidence_item['name']}?",
+            dump_cart(cart),
+            dump_state(state),
+        )
+
+    # 7.5) If nothing matched, offer keyword suggestions for short inputs
+    if msg_norm and len(msg_norm.split()) <= 2:
+        hits = _keyword_matches(menu, msg_norm, synonyms)
+        if hits:
+            _set_suggestions(state, hits, reason=f"keyword:{msg_norm}")
+            return _format_suggestions_list(hits, cur, f"Here are {msg_norm} options:"), dump_cart(cart), dump_state(
+                state)
