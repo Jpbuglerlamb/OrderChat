@@ -1,4 +1,3 @@
-# app/routes/command_router.py
 from __future__ import annotations
 
 import json
@@ -47,7 +46,7 @@ except Exception:
 router = APIRouter(tags=["commands"])
 
 # ---------- Frontend paths ----------
-PROJECT_ROOT = Path(__file__).resolve().parents[2]  # TakeawayDemo/
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 CHAT_HTML_PATH = FRONTEND_DIR / "chat.html"
 BASKET_HTML_PATH = FRONTEND_DIR / "basket.html"
@@ -177,7 +176,7 @@ def require_user_id_or_guest(
         if uid:
             return uid
 
-    # 2) Then try the website session cookie from auth_platform.py
+    # 2) Then try normal website session cookie
     session_email = get_session_email(request)
     if session_email:
         u = db.query(User).filter(User.email == session_email).first()
@@ -264,7 +263,6 @@ def _ensure_order_scoped_to_restaurant(order: Order, slug: str) -> None:
     state = _safe_json_dict(order.state_json)
     prev_slug = _normalize_slug(str(state.get("restaurant_slug") or ""))
 
-    # If user switched restaurant mid-order, wipe cart/state
     if prev_slug and prev_slug != curr_slug:
         order.items_json = "[]"
         state = {}
@@ -278,7 +276,7 @@ def _is_guest_email(email: str | None) -> bool:
     return e.endswith("@demo.local") and e.startswith("guest+")
 
 
-# ---------- "Me" endpoints for welcome + remembering name ----------
+# ---------- "Me" endpoints ----------
 class MeOut(BaseModel):
     user_id: int
     is_guest: bool
@@ -399,9 +397,6 @@ def staff_login_page():
 
 
 # ---------- Staff auth ----------
-# Supports BOTH:
-# - JSON fetch: { "email": "...", "password": "..." }
-# - HTML form submit: email=...&password=...
 @router.post("/staff/login")
 async def staff_login(
     request: Request,
@@ -429,7 +424,7 @@ async def staff_login(
     return {"token": token, "restaurant_slug": _normalize_slug(s.restaurant_slug)}
 
 
-# ---------- Staff API (protected) ----------
+# ---------- Staff API ----------
 @router.get("/r/{slug}/staff/orders")
 def staff_orders(
     slug: str,
@@ -441,8 +436,6 @@ def staff_orders(
     if staff.get("restaurant_slug") != slug:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    # KEY FIX: only show CONFIRMED orders to staff
-    # Also include NULL kitchen_status so new orders appear.
     orders = (
         db.query(Order)
         .filter(Order.restaurant_slug == slug)
@@ -511,7 +504,6 @@ async def chat_for_restaurant(
     order = get_or_create_draft(db, user_id)
     _ensure_order_scoped_to_restaurant(order, slug)
 
-    # Customer asking for status
     if is_order_status_query(msg):
         if (order.status or "").lower() != "confirmed":
             return {
@@ -541,7 +533,6 @@ async def chat_for_restaurant(
             "kitchen_status": status,
         }
 
-    # Optional LLM rewrite to command-like text
     text = await _apply_optional_llm_rewrite(msg, menu_dict, order.state_json)
 
     reply, updated_items_json, updated_state_json = handle_message(
@@ -551,21 +542,17 @@ async def chat_for_restaurant(
         state_json=order.state_json,
     )
 
-    # Persist cart/state
     order.items_json = updated_items_json
 
-    # Normalize state into dict so we can inspect flags safely
     state = _safe_json_dict(updated_state_json)
     order.state_json = json.dumps(state)
 
-    # Build summary
     items = _safe_json_list(order.items_json)
     symbol = _currency_symbol_from_menu(menu_dict)
     summary, _total = build_summary(items, currency_symbol=symbol)
     order.summary_text = summary
     order.updated_at = datetime.utcnow()
 
-    # Finalize if the brain says "submitted"
     if state.get("order_submitted"):
         order.status = "confirmed"
         order.kitchen_status = "new"
@@ -575,7 +562,6 @@ async def chat_for_restaurant(
         order.customer_email = str(state.get("customer_email") or "")
         order.customer_phone = str(state.get("customer_phone") or "")
 
-        # Prevent re-submit loop
         state.pop("order_submitted", None)
         order.state_json = json.dumps(state)
 

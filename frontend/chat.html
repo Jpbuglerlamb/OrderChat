@@ -88,23 +88,15 @@
       box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
     }
 
-    .iconBtn:hover{
-      background:rgba(255,255,255,.09);
-    }
-
-    .iconBtn:active{
-      transform:scale(.98);
-    }
-
+    .iconBtn:hover{ background:rgba(255,255,255,.09); }
+    .iconBtn:active{ transform:scale(.98); }
     .iconBtn:disabled{
       opacity:.55;
       cursor:not-allowed;
       transform:none;
     }
 
-    #basketBtn{
-      justify-self:end;
-    }
+    #basketBtn{ justify-self:end; }
 
     .brandCenter{
       justify-self:center;
@@ -133,14 +125,8 @@
       flex:0 0 auto;
     }
 
-    .brandDotSep{
-      opacity:.4;
-    }
-
-    .brandPowered{
-      font-weight:700;
-      opacity:.94;
-    }
+    .brandDotSep{ opacity:.4; }
+    .brandPowered{ font-weight:700; opacity:.94; }
 
     .dot{
       width:8px;
@@ -282,13 +268,8 @@
       margin:12px 0;
     }
 
-    .row.user{
-      justify-content:flex-end;
-    }
-
-    .row.bot{
-      justify-content:flex-start;
-    }
+    .row.user{ justify-content:flex-end; }
+    .row.bot{ justify-content:flex-start; }
 
     .stack{
       max-width:80%;
@@ -404,10 +385,7 @@
       box-shadow:0 10px 24px rgba(79,140,255,.22);
     }
 
-    #send:active{
-      transform:scale(.98);
-    }
-
+    #send:active{ transform:scale(.98); }
     #send:disabled{
       opacity:.55;
       cursor:not-allowed;
@@ -424,26 +402,16 @@
       display:none;
     }
 
-    .sending .spinner{
-      display:inline-block;
-    }
+    .sending .spinner{ display:inline-block; }
 
     @keyframes spin{
       to{ transform:rotate(360deg); }
     }
 
     @media (max-width: 640px){
-      .topbar{
-        padding:12px 12px 10px;
-      }
-
-      .brandTitle{
-        font-size:16px;
-      }
-
-      .stack{
-        max-width:86%;
-      }
+      .topbar{ padding:12px 12px 10px; }
+      .brandTitle{ font-size:16px; }
+      .stack{ max-width:86%; }
 
       .welcomeRow{
         flex-direction:column;
@@ -455,9 +423,7 @@
         width:100%;
       }
 
-      #send{
-        min-width:88px;
-      }
+      #send{ min-width:88px; }
     }
   </style>
 </head>
@@ -524,7 +490,7 @@
 
     let summaryRow = null;
     let introRow = null;
-    let currentProfile = { is_guest: true, name: "" };
+    let currentProfile = { is_guest: true, name: "", email: "" };
 
     function nowTime() {
       const d = new Date();
@@ -686,9 +652,15 @@
       const isGuest = !!profile.is_guest;
       const rawName = String(profile.name || "").trim();
       const realName = isRealName(rawName) ? rawName : "";
+      const email = String(profile.email || "").trim();
 
       const card = document.createElement("div");
       card.className = "welcome";
+
+      const badgeText = isGuest ? "Guest" : "Signed in";
+      const subText = isGuest
+        ? "Save your name or sign in to keep your orders remembered across visits."
+        : `Signed in as ${email || "your account"}. Your orders and name are saved.`;
 
       const title = document.createElement("div");
       title.className = "welcomeTitle";
@@ -697,14 +669,12 @@
           <span class="welcomeLogo" aria-hidden="true"></span>
           <span id="welcomeTitleText">${realName ? `Welcome, ${realName}` : "Welcome to JP AI"}</span>
         </div>
-        <span class="welcomeBadge">${isGuest ? "Guest" : "Saved"}</span>
+        <span class="welcomeBadge">${badgeText}</span>
       `;
 
       const sub = document.createElement("div");
       sub.className = "welcomeSub";
-      sub.textContent = isGuest
-        ? "Save your name or sign in to keep your orders remembered across visits."
-        : "You’re signed in. Your orders and name are saved.";
+      sub.textContent = subText;
 
       const row = document.createElement("div");
       row.className = "welcomeRow";
@@ -847,7 +817,7 @@
 
       try {
         const me = await apiMe();
-        currentProfile = me || { is_guest: true, name: "" };
+        currentProfile = me || { is_guest: true, name: "", email: "" };
         renderWelcomeCard(currentProfile);
         renderIntro(currentProfile);
       } catch (e) {
