@@ -29,6 +29,7 @@ from app.models import Order, StaffUser, User
 from app.ordering.brain import handle_message
 from app.ordering.cart import build_summary
 from app.ordering.menu_store import load_menu_by_slug
+from app.routes.auth_platform import get_session_email
 from app.security.auth import (
     create_staff_token,
     decode_staff_token,
@@ -169,14 +170,21 @@ def require_user_id_or_guest(
     authorization: str | None = Header(default=None),
     guest_id: str | None = Cookie(default=None, alias="guest_id"),
 ) -> int:
-    # 1) Prefer authenticated token if present
+    # 1) Prefer authenticated API token if present
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()
         uid = decode_token(token)
         if uid:
             return uid
 
-    # 2) Otherwise cookie-based guest
+    # 2) Then try the website session cookie from auth_platform.py
+    session_email = get_session_email(request)
+    if session_email:
+        u = db.query(User).filter(User.email == session_email).first()
+        if u:
+            return u.id
+
+    # 3) Otherwise fall back to guest cookie
     if not guest_id:
         guest_id = uuid4().hex
 
