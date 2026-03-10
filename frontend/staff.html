@@ -1,236 +1,752 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Staff Dashboard</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>JP · Staff Dashboard</title>
+
   <style>
-    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; background:#0b0c0f; color:#eee; }
-    .wrap { max-width: 980px; margin: 20px auto; }
-    .top { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-    .title { font-size:20px; font-weight:900; }
-    .muted { color:#aaa; font-size:13px; }
-    .btn { border:1px solid #333; background:#1a1a1a; color:#eee; padding:10px 12px; border-radius:12px; cursor:pointer; font-weight:800; }
-    .btn.primary { background:#2f81f7; border:0; }
-    .card { border:1px solid #333; border-radius:16px; padding:14px; background:#111217; margin-top:14px; }
-    .row { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
-    .left { min-width:0; }
-    .name { font-weight:900; }
-    .summary { color:#cfcfcf; margin-top:6px; white-space:pre-wrap; }
-    .pill { display:inline-block; padding:6px 10px; border-radius:999px; background:#1a1a1a; border:1px solid #333; font-size:12px; font-weight:800; }
-    select { background:#0f0f0f; color:#eee; border:1px solid #333; padding:10px; border-radius:12px; font-weight:800; }
-    .err { color:#ff6b6b; white-space:pre-wrap; margin-top:10px; }
-    .ok { color:#7ee787; white-space:pre-wrap; margin-top:10px; }
-    .grid { display:flex; flex-direction:column; gap:10px; }
+    :root{
+      --bg:#081120;
+      --bg2:#101a34;
+      --text:#eef2ff;
+      --muted:#b8c0d9;
+      --line:rgba(255,255,255,.12);
+
+      --primaryA:#7b61ff;
+      --primaryB:#4f8cff;
+      --primaryC:#22c7a9;
+
+      --shadow:0 18px 50px rgba(0,0,0,.28);
+      --kb:0px;
+    }
+
+    *{ box-sizing:border-box; }
+    html, body{ height:100%; }
+
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      background:
+        radial-gradient(circle at top right, rgba(79,140,255,.18), transparent 28%),
+        radial-gradient(circle at bottom left, rgba(34,199,169,.14), transparent 24%),
+        linear-gradient(135deg, var(--bg), var(--bg2));
+      color:var(--text);
+      -webkit-text-size-adjust:100%;
+    }
+
+    button, select{
+      font:inherit;
+    }
+
+    .shell{
+      width:min(100%, 980px);
+      margin:0 auto;
+    }
+
+    .app{
+      min-height:100svh;
+      min-height:100dvh;
+      display:flex;
+      flex-direction:column;
+    }
+
+    .appHeader{
+      position:sticky;
+      top:0;
+      z-index:20;
+      border-bottom:1px solid var(--line);
+      background:rgba(8,17,32,.72);
+      backdrop-filter:blur(16px);
+      -webkit-backdrop-filter:blur(16px);
+    }
+
+    .topbar{
+      display:grid;
+      grid-template-columns:1fr auto 1fr;
+      align-items:center;
+      gap:12px;
+      padding:12px 16px 10px;
+    }
+
+    .brandCenter{
+      justify-self:center;
+      text-align:center;
+      min-width:0;
+    }
+
+    .brandTitle{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      font-weight:800;
+      letter-spacing:-0.3px;
+      font-size:18px;
+      line-height:1.1;
+    }
+
+    .brandMark{
+      width:18px;
+      height:42px;
+      border-radius:14px;
+      background:linear-gradient(180deg, var(--primaryA), var(--primaryB), var(--primaryC));
+      box-shadow:0 8px 24px rgba(79,140,255,.25);
+      display:inline-block;
+      flex:0 0 auto;
+    }
+
+    .brandDotSep{ opacity:.4; }
+    .brandPowered{ font-weight:700; opacity:.94; }
+
+    .dot{
+      width:8px;
+      height:8px;
+      border-radius:999px;
+      background:#9cf2c4;
+      box-shadow:0 0 0 5px rgba(156,242,196,.12);
+      flex:0 0 auto;
+    }
+
+    .brandSub{
+      margin-top:4px;
+      font-size:12px;
+      color:var(--muted);
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    .headerSide{
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+
+    .headerSide.right{
+      justify-self:end;
+    }
+
+    .ghostSpacer{
+      height:1px;
+      width:1px;
+      opacity:0;
+    }
+
+    .iconBtn{
+      width:fit-content;
+      padding:10px 14px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.05);
+      color:var(--text);
+      font-size:13px;
+      font-weight:700;
+      cursor:pointer;
+      transition:transform .08s ease, opacity .15s ease, background .2s ease;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+    }
+
+    .iconBtn:hover{ background:rgba(255,255,255,.09); }
+    .iconBtn:active{ transform:scale(.98); }
+    .iconBtn:disabled{
+      opacity:.55;
+      cursor:not-allowed;
+      transform:none;
+    }
+
+    .content{
+      flex:1;
+      padding:20px 14px 28px;
+    }
+
+    .heroCard{
+      border:1px solid var(--line);
+      background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border-radius:24px;
+      padding:18px;
+      box-shadow:var(--shadow);
+      backdrop-filter:blur(12px);
+      -webkit-backdrop-filter:blur(12px);
+      margin-bottom:18px;
+    }
+
+    .heroTop{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:14px;
+    }
+
+    .heroTitleWrap{
+      display:flex;
+      align-items:center;
+      gap:14px;
+      min-width:0;
+    }
+
+    .heroLogo{
+      width:20px;
+      height:50px;
+      border-radius:16px;
+      background:linear-gradient(180deg, var(--primaryA), var(--primaryB), var(--primaryC));
+      box-shadow:0 8px 24px rgba(79,140,255,.25);
+      flex:0 0 auto;
+    }
+
+    .heroTitle{
+      font-size:28px;
+      font-weight:900;
+      letter-spacing:-0.5px;
+      line-height:1.05;
+    }
+
+    .heroSub{
+      margin-top:8px;
+      color:var(--muted);
+      font-size:14px;
+      line-height:1.45;
+    }
+
+    .heroMeta{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      margin-top:14px;
+    }
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:9px 12px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.04);
+      color:var(--muted);
+      font-size:13px;
+      font-weight:800;
+    }
+
+    .liveDot{
+      width:8px;
+      height:8px;
+      border-radius:999px;
+      background:#9cf2c4;
+      box-shadow:0 0 0 5px rgba(156,242,196,.12);
+      flex:0 0 auto;
+    }
+
+    .statsCard{
+      border:1px solid var(--line);
+      background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.025));
+      border-radius:24px;
+      padding:16px;
+      box-shadow:var(--shadow);
+      backdrop-filter:blur(12px);
+      -webkit-backdrop-filter:blur(12px);
+    }
+
+    .statsTop{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:10px;
+    }
+
+    .statsTitle{
+      font-size:18px;
+      font-weight:900;
+      letter-spacing:-0.2px;
+    }
+
+    .statsSub{
+      color:var(--muted);
+      font-size:13px;
+      margin-top:2px;
+    }
+
+    .orders{
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+      margin-top:16px;
+    }
+
+    .orderCard{
+      border:1px solid var(--line);
+      background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border-radius:24px;
+      padding:16px;
+      box-shadow:var(--shadow);
+      backdrop-filter:blur(12px);
+      -webkit-backdrop-filter:blur(12px);
+    }
+
+    .orderTop{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:14px;
+      margin-bottom:10px;
+    }
+
+    .orderName{
+      font-size:20px;
+      font-weight:900;
+      letter-spacing:-0.2px;
+      line-height:1.1;
+    }
+
+    .orderPhone{
+      color:var(--muted);
+      font-size:13px;
+      margin-top:6px;
+    }
+
+    .statusPill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 12px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.04);
+      color:var(--text);
+      font-size:12px;
+      font-weight:800;
+      white-space:nowrap;
+    }
+
+    .statusDot{
+      width:8px;
+      height:8px;
+      border-radius:999px;
+      background:#9cf2c4;
+      flex:0 0 auto;
+    }
+
+    .summaryBox{
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.03);
+      border-radius:18px;
+      padding:14px;
+      white-space:pre-wrap;
+      line-height:1.45;
+      font-size:14px;
+      margin:12px 0 14px;
+    }
+
+    .orderActions{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      align-items:center;
+      justify-content:flex-end;
+    }
+
+    .selectWrap{
+      position:relative;
+      min-width:180px;
+    }
+
+    .statusSelect{
+      width:100%;
+      padding:11px 14px;
+      border-radius:16px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.05);
+      color:var(--text);
+      outline:none;
+      appearance:none;
+      -webkit-appearance:none;
+      cursor:pointer;
+    }
+
+    .primaryBtn{
+      border:0;
+      background:linear-gradient(135deg, var(--primaryA), var(--primaryB), var(--primaryC));
+      color:#fff;
+      box-shadow:0 8px 24px rgba(79,140,255,.22);
+      padding:11px 16px;
+      border-radius:16px;
+      font-weight:800;
+      cursor:pointer;
+    }
+
+    .primaryBtn:disabled{
+      opacity:.55;
+      cursor:not-allowed;
+    }
+
+    .emptyState{
+      border:1px dashed var(--line);
+      background:rgba(255,255,255,.03);
+      border-radius:24px;
+      padding:24px 18px;
+      text-align:center;
+      color:var(--muted);
+    }
+
+    .emptyTitle{
+      color:var(--text);
+      font-size:18px;
+      font-weight:900;
+      margin-bottom:8px;
+    }
+
+    .footerNote{
+      margin-top:16px;
+      color:var(--muted);
+      font-size:12px;
+      text-align:center;
+    }
+
+    @media (max-width: 720px){
+      .topbar{
+        grid-template-columns:1fr;
+        gap:10px;
+      }
+
+      .brandCenter,
+      .headerSide.right,
+      .headerSide.left{
+        justify-self:stretch;
+      }
+
+      .headerSide.right,
+      .headerSide.left{
+        justify-content:space-between;
+      }
+
+      .heroTop,
+      .orderTop{
+        flex-direction:column;
+        align-items:flex-start;
+      }
+
+      .orderActions{
+        justify-content:stretch;
+        flex-direction:column;
+        align-items:stretch;
+      }
+
+      .selectWrap,
+      .primaryBtn{
+        width:100%;
+      }
+
+      .heroTitle{
+        font-size:24px;
+      }
+    }
   </style>
 </head>
+
 <body>
-  <div class="wrap">
-    <div class="top">
-      <div>
-        <div class="title" id="title">Staff Dashboard</div>
-        <div class="muted" id="subtitle">Loading…</div>
-      </div>
-      <div style="display:flex; gap:10px; align-items:center;">
-        <button class="btn" id="refreshBtn" type="button">Refresh</button>
-        <button class="btn" id="logoutBtn" type="button">Log out</button>
-      </div>
-    </div>
+  <div class="app">
+    <header class="appHeader">
+      <div class="topbar shell">
+        <div class="headerSide left">
+          <button class="iconBtn" id="backBtn" type="button">Back</button>
+        </div>
 
-    <div id="err" class="err"></div>
-    <div id="ok" class="ok"></div>
+        <div class="brandCenter">
+          <div class="brandTitle">
+            <span class="brandMark" aria-hidden="true"></span>
+            <span>JP</span>
+            <span class="brandDotSep">·</span>
+            <span class="brandPowered">Staff</span>
+            <span class="dot" aria-hidden="true"></span>
+          </div>
+          <div class="brandSub" id="restaurantLine">Dashboard</div>
+        </div>
 
-    <div class="card">
-      <div class="muted">Orders</div>
-      <div class="grid" id="orders"></div>
-    </div>
+        <div class="headerSide right">
+          <button class="iconBtn" id="refreshBtn" type="button">Refresh</button>
+          <button class="iconBtn" id="logoutBtn" type="button">Log out</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="content shell">
+      <section class="heroCard">
+        <div class="heroTop">
+          <div>
+            <div class="heroTitleWrap">
+              <span class="heroLogo" aria-hidden="true"></span>
+              <div>
+                <div class="heroTitle">Staff Dashboard</div>
+                <div class="heroSub" id="heroSub">Live order control for your restaurant.</div>
+              </div>
+            </div>
+
+            <div class="heroMeta">
+              <span class="badge"><span class="liveDot"></span><span id="liveLabel">Live</span></span>
+              <span class="badge" id="restaurantBadge">Restaurant</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="statsCard">
+        <div class="statsTop">
+          <div>
+            <div class="statsTitle">Orders</div>
+            <div class="statsSub" id="ordersCountText">Loading…</div>
+          </div>
+        </div>
+
+        <div class="orders" id="ordersMount"></div>
+      </section>
+
+      <div class="footerNote">
+        JP AI staff view · refreshes on demand
+      </div>
+    </main>
   </div>
 
-<script>
-  const errEl = document.getElementById("err");
-  const okEl = document.getElementById("ok");
-  const ordersEl = document.getElementById("orders");
-  const titleEl = document.getElementById("title");
-  const subtitleEl = document.getElementById("subtitle");
-
-  function getSlugFromPath(){
+  <script>
     const parts = location.pathname.split("/").filter(Boolean);
-    // /r/{slug}/staff
-    if(parts.length >= 3 && parts[0] === "r" && parts[2] === "staff") return parts[1];
-    return "";
-  }
+    const slug = (parts.length >= 3 && parts[0] === "r" && parts[2] === "staff")
+      ? parts[1]
+      : "unknown";
 
-  const slug = getSlugFromPath();
-  titleEl.textContent = `Staff Dashboard · ${slug || "unknown"}`;
+    const restaurantLine = document.getElementById("restaurantLine");
+    const restaurantBadge = document.getElementById("restaurantBadge");
+    const heroSub = document.getElementById("heroSub");
+    const ordersMount = document.getElementById("ordersMount");
+    const ordersCountText = document.getElementById("ordersCountText");
+    const refreshBtn = document.getElementById("refreshBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const backBtn = document.getElementById("backBtn");
 
-  function tokenKey(slug){ return `staff_token:${slug}`; }
+    restaurantLine.textContent = `Restaurant: ${slug}`;
+    restaurantBadge.textContent = slug;
+    heroSub.textContent = `Live order control for ${slug}.`;
 
-  function setError(msg){
-    errEl.textContent = msg || "";
-    okEl.textContent = "";
-  }
-  function setOk(msg){
-    okEl.textContent = msg || "";
-    errEl.textContent = "";
-  }
-
-  async function apiGetOrders(){
-    const token = localStorage.getItem(tokenKey(slug));
-    if(!token) throw new Error("No staff token found. Please log in again.");
-
-    const res = await fetch(`/r/${slug}/staff/orders`, {
-      headers: { "Authorization": `Bearer ${token}` }
-    });
-
-    const raw = await res.text();
-    let data = null;
-    try { data = raw ? JSON.parse(raw) : null; } catch {}
-
-    if(!res.ok){
-      const detail = (data && (data.detail || data.error)) || raw || `HTTP ${res.status}`;
-      throw new Error(`Failed to load orders (${res.status})\n${detail}`);
-    }
-    return data;
-  }
-
-  async function apiSetStatus(orderId, status){
-    const token = localStorage.getItem(tokenKey(slug));
-    if(!token) throw new Error("No staff token found. Please log in again.");
-
-    const res = await fetch(`/r/${slug}/staff/orders/${orderId}/status`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ status })
-    });
-
-    const raw = await res.text();
-    let data = null;
-    try { data = raw ? JSON.parse(raw) : null; } catch {}
-
-    if(!res.ok){
-      const detail = (data && (data.detail || data.error)) || raw || `HTTP ${res.status}`;
-      throw new Error(`Failed to update status (${res.status})\n${detail}`);
-    }
-    return data;
-  }
-
-  function renderOrders(list){
-    ordersEl.innerHTML = "";
-
-    const orders = Array.isArray(list) ? list : [];
-    subtitleEl.textContent = `${orders.length} active order${orders.length===1?"":"s"}`;
-
-    if(orders.length === 0){
-      const empty = document.createElement("div");
-      empty.className = "muted";
-      empty.style.padding = "10px 0";
-      empty.textContent = "No orders right now.";
-      ordersEl.appendChild(empty);
-      return;
+    function getStaffToken() {
+      return (
+        localStorage.getItem("staff_token") ||
+        localStorage.getItem("staffToken") ||
+        sessionStorage.getItem("staff_token") ||
+        sessionStorage.getItem("staffToken") ||
+        ""
+      );
     }
 
-    for(const o of orders){
-      const card = document.createElement("div");
-      card.className = "card";
-      card.style.marginTop = "10px";
+    function clearStaffToken() {
+      localStorage.removeItem("staff_token");
+      localStorage.removeItem("staffToken");
+      sessionStorage.removeItem("staff_token");
+      sessionStorage.removeItem("staffToken");
+    }
 
-      const row = document.createElement("div");
-      row.className = "row";
+    function statusDotColor(status) {
+      const s = String(status || "").toLowerCase();
+      if (s === "ready") return "#9cf2c4";
+      if (s === "preparing") return "#7cc7ff";
+      if (s === "accepted") return "#ffd166";
+      if (s === "completed") return "#c2c7d0";
+      return "#b39dff";
+    }
 
-      const left = document.createElement("div");
-      left.className = "left";
+    function prettyStatus(status) {
+      const s = String(status || "new").toLowerCase();
+      if (s === "new") return "New";
+      if (s === "accepted") return "Accepted";
+      if (s === "preparing") return "Preparing";
+      if (s === "ready") return "Ready";
+      if (s === "completed") return "Completed";
+      return s;
+    }
 
-      const name = document.createElement("div");
-      name.className = "name";
-      name.textContent = `${o.name || "Customer"}  ·  ${o.phone || ""}`;
+    function escapeHtml(text) {
+      return String(text || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
 
-      const summary = document.createElement("div");
-      summary.className = "summary";
-      summary.textContent = o.summary || "";
-
-      const status = document.createElement("div");
-      status.style.marginTop = "10px";
-      status.innerHTML = `<span class="pill">Status: ${o.status || "new"}</span>`;
-
-      left.appendChild(name);
-      left.appendChild(summary);
-      left.appendChild(status);
-
-      const right = document.createElement("div");
-
-      const sel = document.createElement("select");
-      const opts = ["new","accepted","preparing","ready","completed"];
-      for(const s of opts){
-        const opt = document.createElement("option");
-        opt.value = s;
-        opt.textContent = s;
-        if(String(o.status||"new").toLowerCase() === s) opt.selected = true;
-        sel.appendChild(opt);
+    async function apiStaffOrders() {
+      const token = getStaffToken();
+      if (!token) {
+        throw new Error("No staff token found");
       }
 
-      const btn = document.createElement("button");
-      btn.className = "btn primary";
-      btn.style.marginTop = "10px";
-      btn.textContent = "Update";
-      btn.onclick = async () => {
-        try{
-          btn.disabled = true;
-          const out = await apiSetStatus(o.id, sel.value);
-          setOk(`Updated order #${o.id} → ${out.status}`);
-          await refresh();
-        }catch(e){
-          setError(String(e.message || e));
-        }finally{
-          btn.disabled = false;
+      const res = await fetch(`/r/${slug}/staff/orders`, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${token}`
         }
-      };
+      });
 
-      right.appendChild(sel);
-      right.appendChild(btn);
+      const data = await res.json().catch(() => ({}));
 
-      row.appendChild(left);
-      row.appendChild(right);
-      card.appendChild(row);
-      ordersEl.appendChild(card);
+      if (res.status === 401 || res.status === 403) {
+        clearStaffToken();
+        window.location.href = "/staff/login";
+        return [];
+      }
+
+      if (!res.ok) {
+        throw new Error(data.detail || "Failed to load staff orders");
+      }
+
+      return data;
     }
-  }
 
-  async function refresh(){
-    try{
-      setError("");
-      const list = await apiGetOrders();
-      renderOrders(list);
-    }catch(e){
-      renderOrders([]);
-      setError(String(e.message || e));
-      // If token missing/expired, bounce to login
-      if(String(e.message || e).toLowerCase().includes("token")){
-        // keep it gentle: give them a second to read
-        setTimeout(() => location.href = "/staff/login", 600);
+    async function apiUpdateStatus(orderId, status) {
+      const token = getStaffToken();
+      if (!token) {
+        throw new Error("No staff token found");
+      }
+
+      const res = await fetch(`/r/${slug}/staff/orders/${orderId}/status`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ status })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 401 || res.status === 403) {
+        clearStaffToken();
+        window.location.href = "/staff/login";
+        return null;
+      }
+
+      if (!res.ok) {
+        throw new Error(data.detail || "Failed to update order status");
+      }
+
+      return data;
+    }
+
+    function renderEmpty() {
+      ordersMount.innerHTML = `
+        <div class="emptyState">
+          <div class="emptyTitle">No active orders</div>
+          <div>Fresh air. Quiet kitchen. Nothing waiting right now.</div>
+        </div>
+      `;
+      ordersCountText.textContent = "0 active orders";
+    }
+
+    function renderOrders(orders) {
+      if (!Array.isArray(orders) || orders.length === 0) {
+        renderEmpty();
+        return;
+      }
+
+      ordersCountText.textContent = `${orders.length} active order${orders.length === 1 ? "" : "s"}`;
+
+      ordersMount.innerHTML = orders.map((o) => {
+        const status = String(o.status || "new").toLowerCase();
+        const phone = String(o.phone || "").trim();
+        const summary = String(o.summary || "").trim();
+
+        return `
+          <article class="orderCard" data-order-id="${o.id}">
+            <div class="orderTop">
+              <div>
+                <div class="orderName">${escapeHtml(o.name || "Customer")}</div>
+                <div class="orderPhone">${phone ? escapeHtml(phone) : "No phone provided"}</div>
+              </div>
+
+              <div class="statusPill">
+                <span class="statusDot" style="background:${statusDotColor(status)}"></span>
+                <span>${escapeHtml(prettyStatus(status))}</span>
+              </div>
+            </div>
+
+            <div class="summaryBox">${escapeHtml(summary || "No summary available.")}</div>
+
+            <div class="orderActions">
+              <div class="selectWrap">
+                <select class="statusSelect">
+                  <option value="new" ${status === "new" ? "selected" : ""}>New</option>
+                  <option value="accepted" ${status === "accepted" ? "selected" : ""}>Accepted</option>
+                  <option value="preparing" ${status === "preparing" ? "selected" : ""}>Preparing</option>
+                  <option value="ready" ${status === "ready" ? "selected" : ""}>Ready</option>
+                  <option value="completed" ${status === "completed" ? "selected" : ""}>Completed</option>
+                </select>
+              </div>
+
+              <button class="primaryBtn updateBtn" type="button">Update status</button>
+            </div>
+          </article>
+        `;
+      }).join("");
+
+      document.querySelectorAll(".updateBtn").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          const card = e.currentTarget.closest(".orderCard");
+          const orderId = card?.getAttribute("data-order-id");
+          const select = card?.querySelector(".statusSelect");
+
+          if (!orderId || !select) return;
+
+          const newStatus = select.value;
+          const oldText = btn.textContent;
+
+          try {
+            btn.disabled = true;
+            btn.textContent = "Updating…";
+            await apiUpdateStatus(orderId, newStatus);
+            await loadOrders();
+          } catch (err) {
+            alert(String(err.message || err));
+          } finally {
+            btn.disabled = false;
+            btn.textContent = oldText;
+          }
+        });
+      });
+    }
+
+    async function loadOrders() {
+      try {
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = "Refreshing…";
+        const orders = await apiStaffOrders();
+        renderOrders(orders);
+      } catch (err) {
+        ordersMount.innerHTML = `
+          <div class="emptyState">
+            <div class="emptyTitle">Couldn’t load orders</div>
+            <div>${escapeHtml(err.message || "Something went wrong.")}</div>
+          </div>
+        `;
+        ordersCountText.textContent = "Error loading orders";
+      } finally {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = "Refresh";
       }
     }
-  }
 
-  document.getElementById("refreshBtn").onclick = refresh;
+    refreshBtn.addEventListener("click", loadOrders);
 
-  document.getElementById("logoutBtn").onclick = () => {
-    if(slug) localStorage.removeItem(tokenKey(slug));
-    localStorage.removeItem("staff_last_slug");
-    location.href = "/staff/login";
-  };
+    logoutBtn.addEventListener("click", () => {
+      clearStaffToken();
+      window.location.href = "/staff/login";
+    });
 
-  // If slug missing, go to login
-  if(!slug){
-    subtitleEl.textContent = "Bad URL";
-    setError("This page must be opened as /r/{slug}/staff");
-  }else{
-    refresh();
-    // auto-refresh every 6 seconds
-    setInterval(refresh, 6000);
-  }
-</script>
+    backBtn.addEventListener("click", () => {
+      window.location.href = `/r/${slug}`;
+    });
+
+    (function init() {
+      if (!getStaffToken()) {
+        window.location.href = "/staff/login";
+        return;
+      }
+      loadOrders();
+    })();
+  </script>
 </body>
 </html>
