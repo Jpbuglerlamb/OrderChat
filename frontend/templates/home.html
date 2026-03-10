@@ -1,23 +1,22 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div style="text-align:center; margin-top:80px;">
+<section class="hero">
+  <div class="card">
     <h1>JP AI Takeaway Platform</h1>
-    <p>Order food with AI or manage your takeaway.</p>
+    <p class="subtitle">
+      Order food with AI or manage your takeaway through one platform.
+    </p>
 
-    <div style="margin-top:40px;">
-        <a href="/customer">
-            <button>I'm a Customer</button>
-        </a>
-
-        <a href="/business">
-            <button>I'm a Business</button>
-        </a>
+    <div class="button-row">
+      <a href="/customer" class="btn btn-primary">I’m a Customer</a>
+      <a href="/business" class="btn btn-secondary">I’m a Business</a>
     </div>
 
-    <div style="margin-top:20px;">
-        <a href="/login">Login</a> |
-        <a href="/signup">Sign up</a>
+    <div class="button-row">
+      <a href="/login">Login</a>
+      <a href="/signup">Sign up</a>
     </div>
-</div>
+  </div>
+</section>
 {% endblock %}

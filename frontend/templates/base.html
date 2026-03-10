@@ -1,42 +1,33 @@
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{{ title or "JP AI Platform" }}</title>
-    <link rel="stylesheet" href="/static/styles.css" />
-  </head>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JP AI Platform</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="site-shell">
+    <header class="topbar">
+      <div class="brand">JP AI Platform</div>
 
-  <body>
-    <div class="container">
+      <nav class="nav">
+        <a href="/">Home</a>
+        <a href="/customer">Customer</a>
+        <a href="/business">Business</a>
+        <a href="/staff">Dashboard</a>
+        <a href="/login">Log in</a>
+        <a href="/signup">Sign up</a>
+      </nav>
+    </header>
 
-      <div class="nav">
-        <div class="brand">
-          <div class="logo"></div>
-          <div>JP AI Platform</div>
-        </div>
-
-        <div class="navlinks">
-          <a class="pill" href="/">Home</a>
-          <a class="pill" href="/dashboard">Dashboard</a>
-          {% if email %}
-            <span class="pill">🟢 {{ email }}</span>
-            <form method="post" action="/auth/logout" style="display:inline;">
-              <button class="btn" type="submit">Log out</button>
-            </form>
-          {% else %}
-            <a class="btn" href="/auth/login">Log in</a>
-            <a class="btn primary" href="/auth/signup">Sign up</a>
-          {% endif %}
-        </div>
-      </div>
-
+    <main class="main">
       {% block content %}{% endblock %}
+    </main>
 
-      <div class="footer">
-        <div>© {{ year }} JP AI · Universal login for chat ordering</div>
-      </div>
-
-    </div>
-  </body>
+    <footer class="footer">
+      © JP AI · Universal login for chat ordering
+    </footer>
+  </div>
+</body>
 </html>

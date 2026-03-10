@@ -1,13 +1,101 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div style="text-align:center; margin-top:80px;">
-    <h2>Start Ordering</h2>
+<section class="hero narrow">
+  <div class="card">
+    <h1>Start Ordering</h1>
+    <p class="subtitle">
+      Scan the restaurant QR code to begin chatting with the AI ordering assistant.
+    </p>
 
-    <p>Scan the restaurant QR code to start chatting with the AI ordering assistant.</p>
+    <div class="button-row">
+      <button id="start-scan-btn" class="btn btn-primary">Scan QR Code</button>
+      <a href="/" class="btn btn-secondary">Back</a>
+    </div>
 
-    <p>Or open the restaurant link directly.</p>
+    <div id="scanner-section" class="scanner-section hidden">
+      <div id="qr-reader" class="scanner-box"></div>
+      <p id="scan-status" class="muted">Point your camera at a restaurant QR code.</p>
+    </div>
 
-    <a href="/">← Back</a>
-</div>
+    <div class="divider"><span>or</span></div>
+
+    <form id="manual-link-form" class="manual-form">
+      <label for="restaurant-link">Paste restaurant link or code</label>
+      <input
+        id="restaurant-link"
+        name="restaurant-link"
+        type="text"
+        placeholder="e.g. /r/pizzapalace or full link"
+      />
+      <button type="submit" class="btn btn-primary">Open Restaurant</button>
+    </form>
+  </div>
+</section>
+
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script>
+  let html5QrCode = null;
+
+  const startBtn = document.getElementById("start-scan-btn");
+  const scannerSection = document.getElementById("scanner-section");
+  const scanStatus = document.getElementById("scan-status");
+  const manualForm = document.getElementById("manual-link-form");
+  const manualInput = document.getElementById("restaurant-link");
+
+  function normalizeTarget(value) {
+    const raw = value.trim();
+    if (!raw) return null;
+
+    if (raw.startsWith("http://") || raw.startsWith("https://")) {
+      return raw;
+    }
+
+    if (raw.startsWith("/")) {
+      return raw;
+    }
+
+    return "/r/" + raw;
+  }
+
+  startBtn.addEventListener("click", async () => {
+    scannerSection.classList.remove("hidden");
+    scanStatus.textContent = "Opening camera...";
+
+    try {
+      html5QrCode = new Html5Qrcode("qr-reader");
+
+      await html5QrCode.start(
+        { facingMode: "environment" },
+        {
+          fps: 10,
+          qrbox: { width: 240, height: 240 }
+        },
+        async (decodedText) => {
+          scanStatus.textContent = "QR detected. Opening restaurant...";
+
+          try {
+            await html5QrCode.stop();
+          } catch (e) {}
+
+          window.location.href = normalizeTarget(decodedText) || decodedText;
+        },
+        () => {}
+      );
+
+      scanStatus.textContent = "Point your camera at a restaurant QR code.";
+    } catch (err) {
+      scanStatus.textContent = "Camera could not be opened. You can paste the restaurant link manually.";
+      console.error(err);
+    }
+  });
+
+  manualForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const target = normalizeTarget(manualInput.value);
+    if (target) {
+      window.location.href = target;
+    }
+  });
+</script>
 {% endblock %}
