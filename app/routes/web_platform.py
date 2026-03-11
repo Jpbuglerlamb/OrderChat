@@ -1,7 +1,7 @@
 # app/routes/web_platform.py
 from pathlib import Path
 import re
-import shutil
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -11,14 +11,13 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import User, Restaurant
 from app.security.auth import hash_password
+from app.services.storage import upload_file_bytes, file_exists
+
 router = APIRouter()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATES_DIR = PROJECT_ROOT / "frontend" / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-
-RESTAURANTS_DATA_DIR = PROJECT_ROOT / "data" / "restaurants"
-RESTAURANTS_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def slugify(value: str) -> str:
@@ -37,6 +36,11 @@ def unique_slug(db: Session, base_slug: str) -> str:
         counter += 1
 
     return slug
+
+
+def build_s3_menu_key(slug: str, filename: str) -> str:
+    safe_name = (filename or "menu_upload.bin").replace(" ", "_")
+    return f"restaurants/{slug}/uploads/{uuid4()}_{safe_name}"
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -91,19 +95,19 @@ async def business_signup_submit(
     base_slug = slugify(business_name)
     slug = unique_slug(db, base_slug)
 
-    # 3. Create restaurant folder
-    restaurant_dir = RESTAURANTS_DATA_DIR / slug
-    restaurant_dir.mkdir(parents=True, exist_ok=True)
+    # 3. Upload menu file to S3
+    original_filename = menu_file.filename or "menu_upload.bin"
+    s3_key = build_s3_menu_key(slug, original_filename)
 
-    # 4. Save uploaded file
-    original_filename = menu_file.filename or "menu_upload"
-    ext = Path(original_filename).suffix.lower() or ".bin"
-    menu_upload_path = restaurant_dir / f"menu_original{ext}"
+    file_bytes = await menu_file.read()
 
-    with menu_upload_path.open("wb") as buffer:
-        shutil.copyfileobj(menu_file.file, buffer)
+    upload_file_bytes(
+        data=file_bytes,
+        key=s3_key,
+        content_type=menu_file.content_type or "application/octet-stream",
+    )
 
-    # 5. Create user
+    # 4. Create user
     user = User(
         name=name,
         email=email,
@@ -112,9 +116,9 @@ async def business_signup_submit(
         password_hash=hash_password(password),
     )
     db.add(user)
-    db.flush()  # gets user.id before commit
+    db.flush()
 
-    # 6. Create restaurant
+    # 5. Create restaurant
     restaurant = Restaurant(
         owner_user_id=user.id,
         name=business_name,
@@ -122,15 +126,15 @@ async def business_signup_submit(
         phone=phone or "",
         address=address,
         opening_hours=opening_hours,
-        menu_upload_path=str(menu_upload_path),
-        menu_json_path=str(restaurant_dir / "menu.json"),
-        qr_code_path=str(restaurant_dir / "qr.png"),
+        menu_upload_path=s3_key,
+        menu_json_path=f"restaurants/{slug}/menu.json",
+        qr_code_path=f"restaurants/{slug}/qr.png",
     )
     db.add(restaurant)
     db.commit()
 
-    # 7. Redirect to next step
     return RedirectResponse(url=f"/business/onboarding-complete?slug={slug}", status_code=303)
+
 
 @router.get("/business/onboarding-complete", response_class=HTMLResponse)
 def onboarding_complete(request: Request, slug: str = ""):
@@ -138,6 +142,7 @@ def onboarding_complete(request: Request, slug: str = ""):
         "business_onboarding_complete.html",
         {"request": request, "slug": slug},
     )
+
 
 @router.get("/debug/users")
 def debug_users(db: Session = Depends(get_db)):
@@ -179,11 +184,11 @@ def debug_restaurant_files(db: Session = Depends(get_db)):
         {
             "slug": r.slug,
             "menu_upload_path": r.menu_upload_path,
-            "menu_exists": bool(r.menu_upload_path) and Path(r.menu_upload_path).exists(),
+            "menu_exists_in_s3": file_exists(r.menu_upload_path) if r.menu_upload_path else False,
             "menu_json_path": r.menu_json_path,
-            "menu_json_exists": bool(r.menu_json_path) and Path(r.menu_json_path).exists(),
+            "menu_json_exists_in_s3": file_exists(r.menu_json_path) if r.menu_json_path else False,
             "qr_code_path": r.qr_code_path,
-            "qr_exists": bool(r.qr_code_path) and Path(r.qr_code_path).exists(),
+            "qr_exists_in_s3": file_exists(r.qr_code_path) if r.qr_code_path else False,
         }
         for r in rows
     ]
