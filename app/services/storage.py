@@ -2,6 +2,7 @@
 import os
 import boto3
 from botocore.exceptions import ClientError
+import json
 
 AWS_REGION = os.getenv("AWS_REGION")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
@@ -60,3 +61,21 @@ def delete_file(key: str):
         Bucket=S3_BUCKET_NAME,
         Key=key,
     )
+
+def get_file_bytes(key: str) -> bytes:
+    """
+    Download raw bytes from S3.
+    """
+    response = s3.get_object(
+        Bucket=S3_BUCKET_NAME,
+        Key=key,
+    )
+    return response["Body"].read()
+
+
+def get_json_file(key: str) -> dict:
+    """
+    Download and parse JSON file from S3.
+    """
+    raw = get_file_bytes(key)
+    return json.loads(raw.decode("utf-8"))

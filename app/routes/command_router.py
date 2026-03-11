@@ -14,7 +14,6 @@ from fastapi import (
     Depends,
     Form,
     Header,
-    HTTPException,
     Request,
     Response,
 )
@@ -36,6 +35,9 @@ from app.security.auth import (
     hash_password,
     verify_password,
 )
+from fastapi import HTTPException
+from app.models import Restaurant
+from app.services.storage import get_json_file
 
 try:
     from app.ai_intent import interpret_message_llm
@@ -339,15 +341,44 @@ def set_name_for_restaurant(
 
 # ---------- Pages / menus ----------
 @router.get("/r/{slug}", response_class=HTMLResponse)
-def restaurant_page(slug: str):
-    slug = _normalize_slug(slug)
-    menu = load_menu_by_slug(slug)
-    if not menu:
-        raise HTTPException(status_code=404, detail="Restaurant not found")
-    if not CHAT_HTML_PATH.exists():
-        raise HTTPException(status_code=500, detail=f"Missing frontend file: {CHAT_HTML_PATH}")
-    return CHAT_HTML_PATH.read_text(encoding="utf-8")
+def restaurant_chat(
+    slug: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    restaurant = db.query(Restaurant).filter(Restaurant.slug == slug).first()
 
+    if not restaurant:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    if not restaurant.menu_json_path:
+        raise HTTPException(status_code=404, detail="Menu not found")
+
+    try:
+        menu_data = get_json_file(restaurant.menu_json_path)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Menu could not be loaded")
+
+    response = templates.TemplateResponse(
+        "chat.html",
+        {
+            "request": request,
+            "restaurant": restaurant,
+            "restaurant_slug": slug,
+            "menu_data": menu_data,
+        },
+    )
+
+    # store slug so auth redirects work properly
+    response.set_cookie(
+        "last_slug",
+        slug,
+        max_age=60 * 60 * 24 * 30,
+        httponly=True,
+        samesite="lax",
+    )
+
+    return response
 
 @router.get("/r/{slug}/health")
 def restaurant_health(slug: str):
