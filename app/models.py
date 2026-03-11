@@ -8,19 +8,16 @@ from sqlalchemy.orm import relationship
 
 from .db import Base
 
-
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True)
 
-    # Basic profile
     name = Column(String(120), nullable=False)
     email = Column(String(320), unique=True, index=True, nullable=False)
     phone = Column(String(40), nullable=True)
     address = Column(String(255), nullable=True)
 
-    # IMPORTANT: store hashes in TEXT so they never truncate
     password_hash = Column(Text, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -32,7 +29,36 @@ class User(Base):
     )
 
     orders = relationship("Order", back_populates="user", cascade="all, delete-orphan")
+    restaurants = relationship("Restaurant", back_populates="owner", cascade="all, delete-orphan")
 
+
+class Restaurant(Base):
+    __tablename__ = "restaurants"
+
+    id = Column(Integer, primary_key=True)
+
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    name = Column(String(120), nullable=False)
+    slug = Column(String(120), unique=True, index=True, nullable=False)
+
+    phone = Column(String(40), nullable=True)
+    address = Column(String(255), nullable=True)
+    opening_hours = Column(Text, default="", nullable=False)
+
+    menu_upload_path = Column(String(255), default="", nullable=False)
+    menu_json_path = Column(String(255), default="", nullable=False)
+    qr_code_path = Column(String(255), default="", nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    owner = relationship("User", back_populates="restaurants")
 
 class Order(Base):
     __tablename__ = "orders"
@@ -46,8 +72,6 @@ class Order(Base):
     # restaurant + kitchen lifecycle
     restaurant_slug = Column(String(120), index=True, default="", nullable=False)
 
-    # allow NULL so your staff query that includes NULL kitchen_status can work
-    # (you set it to "new" on confirmation anyway)
     kitchen_status = Column(String(30), default=None, nullable=True)  # new|accepted|preparing|ready|completed
 
     # customer details captured during checkout

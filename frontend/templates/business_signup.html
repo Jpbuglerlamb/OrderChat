@@ -8,7 +8,16 @@
       Set up your restaurant account to start onboarding your takeaway.
     </p>
 
-    <form class="manual-form" method="post" action="/business/signup">
+    {% if error %}
+      <p class="muted" style="color:#ffb4b4;">{{ error }}</p>
+    {% endif %}
+
+    <form
+      class="manual-form"
+      method="post"
+      action="/business/signup"
+      enctype="multipart/form-data"
+    >
       <label for="name">Your name</label>
       <input id="name" name="name" type="text" placeholder="e.g. Joan Lamb" required>
 
@@ -20,6 +29,30 @@
 
       <label for="password">Password</label>
       <input id="password" name="password" type="password" placeholder="Create a password" required>
+
+      <label for="phone">Phone</label>
+      <input id="phone" name="phone" type="text" placeholder="e.g. 07700 900123">
+
+      <label for="address">Address</label>
+      <input id="address" name="address" type="text" placeholder="e.g. 123 High Street, Dundee" required>
+
+      <label for="opening_hours">Opening hours</label>
+      <textarea
+        id="opening_hours"
+        name="opening_hours"
+        rows="4"
+        placeholder="Mon-Fri: 11:00-22:00&#10;Sat-Sun: 12:00-23:00"
+        required
+      ></textarea>
+
+      <label for="menu_file">Upload menu</label>
+      <input
+        id="menu_file"
+        name="menu_file"
+        type="file"
+        accept=".pdf,.csv,.txt,image/*"
+        required
+      >
 
       <div class="button-row">
         <button type="submit" class="btn btn-primary">Create Account</button>
