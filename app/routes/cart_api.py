@@ -11,14 +11,40 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import User, Order
+from app.models import User, Order, Restaurant
 from app.security.auth import decode_token, hash_password
 
 from app.ordering.cart import load_cart, dump_cart, recalc_line_total
 from app.ordering.menu import build_menu_index, menu_synonyms, currency_symbol, find_item
-from app.ordering.menu_store import load_menu_by_slug
+from app.services.storage import get_json_file
+
 
 router = APIRouter()
+
+
+# -------------------------
+# Restaurant + menu loader
+# -------------------------
+def _normalize_slug(slug: str) -> str:
+    return (slug or "").strip().lower()
+
+
+def get_restaurant_and_menu(db: Session, slug: str) -> tuple[Restaurant, Dict[str, Any]]:
+    slug = _normalize_slug(slug)
+
+    restaurant = db.query(Restaurant).filter(Restaurant.slug == slug).first()
+    if not restaurant:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    if not restaurant.menu_json_path:
+        raise HTTPException(status_code=404, detail="Menu not found")
+
+    try:
+        menu_dict = get_json_file(restaurant.menu_json_path)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Menu could not be loaded")
+
+    return restaurant, menu_dict
 
 
 # -------------------------
@@ -104,7 +130,7 @@ def get_or_create_draft(db: Session, user_id: int) -> Order:
 
 
 def _ensure_order_scoped_to_restaurant(order: Order, slug: str) -> None:
-    slug = (slug or "").strip().lower()
+    slug = _normalize_slug(slug)
     state = _safe_json_dict(order.state_json)
     prev_slug = (str(state.get("restaurant_slug") or "")).strip().lower()
 
@@ -114,6 +140,7 @@ def _ensure_order_scoped_to_restaurant(order: Order, slug: str) -> None:
         state = {}
 
     state["restaurant_slug"] = slug
+    order.restaurant_slug = slug
     order.state_json = json.dumps(state, ensure_ascii=False)
 
 
@@ -158,7 +185,7 @@ def _cart_payload(menu_dict: Dict[str, Any], cart: List[Dict[str, Any]]) -> Dict
 
 
 # -------------------------
-# Routes (DB-backed)
+# Routes (DB-backed + S3 menu)
 # -------------------------
 @router.get("/r/{slug}/cart")
 def get_cart(
@@ -168,10 +195,8 @@ def get_cart(
     db: Session = Depends(get_db),
     user_id: int = Depends(require_user_id_or_guest),
 ):
-    slug = (slug or "").strip().lower()
-    menu_dict = load_menu_by_slug(slug)
-    if not menu_dict:
-        raise HTTPException(status_code=404, detail="Unknown restaurant")
+    slug = _normalize_slug(slug)
+    _restaurant, menu_dict = get_restaurant_and_menu(db, slug)
 
     order = get_or_create_draft(db, user_id)
     _ensure_order_scoped_to_restaurant(order, slug)
@@ -191,10 +216,8 @@ def update_qty(
     db: Session = Depends(get_db),
     user_id: int = Depends(require_user_id_or_guest),
 ):
-    slug = (slug or "").strip().lower()
-    menu_dict = load_menu_by_slug(slug)
-    if not menu_dict:
-        raise HTTPException(status_code=404, detail="Unknown restaurant")
+    slug = _normalize_slug(slug)
+    _restaurant, menu_dict = get_restaurant_and_menu(db, slug)
 
     order = get_or_create_draft(db, user_id)
     _ensure_order_scoped_to_restaurant(order, slug)
@@ -225,7 +248,7 @@ def update_qty(
     if delta > 0:
         synonyms = menu_synonyms(menu_dict)
         menu = build_menu_index(menu_dict, synonyms)
-        item = find_item(menu, item_id, synonyms)  # assumes item_id works
+        item = find_item(menu, item_id, synonyms)
         if not item:
             raise HTTPException(status_code=404, detail="Item not found")
 
@@ -257,10 +280,8 @@ def remove_line(
     db: Session = Depends(get_db),
     user_id: int = Depends(require_user_id_or_guest),
 ):
-    slug = (slug or "").strip().lower()
-    menu_dict = load_menu_by_slug(slug)
-    if not menu_dict:
-        raise HTTPException(status_code=404, detail="Unknown restaurant")
+    slug = _normalize_slug(slug)
+    _restaurant, menu_dict = get_restaurant_and_menu(db, slug)
 
     order = get_or_create_draft(db, user_id)
     _ensure_order_scoped_to_restaurant(order, slug)
@@ -285,10 +306,8 @@ def clear_cart(
     db: Session = Depends(get_db),
     user_id: int = Depends(require_user_id_or_guest),
 ):
-    slug = (slug or "").strip().lower()
-    menu_dict = load_menu_by_slug(slug)
-    if not menu_dict:
-        raise HTTPException(status_code=404, detail="Unknown restaurant")
+    slug = _normalize_slug(slug)
+    _restaurant, menu_dict = get_restaurant_and_menu(db, slug)
 
     order = get_or_create_draft(db, user_id)
     _ensure_order_scoped_to_restaurant(order, slug)

@@ -14,19 +14,20 @@ from fastapi import (
     Depends,
     Form,
     Header,
+    HTTPException,
     Request,
     Response,
 )
 from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Order, StaffUser, User
+from app.models import Order, Restaurant, StaffUser, User
 from app.ordering.brain import handle_message
 from app.ordering.cart import build_summary
-from app.ordering.menu_store import load_menu_by_slug
 from app.routes.auth_platform import get_session_email
 from app.security.auth import (
     create_staff_token,
@@ -35,8 +36,6 @@ from app.security.auth import (
     hash_password,
     verify_password,
 )
-from fastapi import HTTPException
-from app.models import Restaurant
 from app.services.storage import get_json_file
 
 try:
@@ -50,7 +49,9 @@ router = APIRouter(tags=["commands"])
 # ---------- Frontend paths ----------
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
-CHAT_HTML_PATH = FRONTEND_DIR / "chat.html"
+TEMPLATES_DIR = FRONTEND_DIR / "templates"
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
 BASKET_HTML_PATH = FRONTEND_DIR / "basket.html"
 STAFF_HTML_PATH = FRONTEND_DIR / "staff.html"
 STAFF_LOGIN_HTML_PATH = FRONTEND_DIR / "staff_login.html"
@@ -96,7 +97,8 @@ def _normalize_slug(slug: str) -> str:
 
 
 def _currency_symbol_from_menu(menu_dict: Dict[str, Any], default: str = "GBP") -> str:
-    cur = ((menu_dict.get("meta") or {}).get("currency") or default).upper()
+    restaurant = menu_dict.get("restaurant") or {}
+    cur = str(restaurant.get("currency") or default).upper()
     return "£" if cur == "GBP" else ""
 
 
@@ -150,6 +152,25 @@ async def _apply_optional_llm_rewrite(text: str, menu_dict: Dict[str, Any], stat
         print("[LLM] rewrite failed:", repr(e), flush=True)
         traceback.print_exc()
         return text
+
+
+def get_restaurant_and_menu(db: Session, slug: str) -> tuple[Restaurant, Dict[str, Any]]:
+    slug = _normalize_slug(slug)
+
+    restaurant = db.query(Restaurant).filter(Restaurant.slug == slug).first()
+    if not restaurant:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    if not restaurant.menu_json_path:
+        raise HTTPException(status_code=404, detail="Menu not found")
+
+    try:
+        menu_dict = get_json_file(restaurant.menu_json_path)
+    except Exception as e:
+        print("[MENU LOAD ERROR]", slug, restaurant.menu_json_path, repr(e), flush=True)
+        raise HTTPException(status_code=404, detail="Menu could not be loaded")
+
+    return restaurant, menu_dict
 
 
 # ---------- Auth dependencies ----------
@@ -346,18 +367,8 @@ def restaurant_chat(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    restaurant = db.query(Restaurant).filter(Restaurant.slug == slug).first()
-
-    if not restaurant:
-        raise HTTPException(status_code=404, detail="Restaurant not found")
-
-    if not restaurant.menu_json_path:
-        raise HTTPException(status_code=404, detail="Menu not found")
-
-    try:
-        menu_data = get_json_file(restaurant.menu_json_path)
-    except Exception:
-        raise HTTPException(status_code=404, detail="Menu could not be loaded")
+    slug = _normalize_slug(slug)
+    restaurant, menu_data = get_restaurant_and_menu(db, slug)
 
     response = templates.TemplateResponse(
         "chat.html",
@@ -369,7 +380,6 @@ def restaurant_chat(
         },
     )
 
-    # store slug so auth redirects work properly
     response.set_cookie(
         "last_slug",
         slug,
@@ -380,41 +390,34 @@ def restaurant_chat(
 
     return response
 
+
 @router.get("/r/{slug}/health")
-def restaurant_health(slug: str):
+def restaurant_health(slug: str, db: Session = Depends(get_db)):
     slug = _normalize_slug(slug)
-    menu = load_menu_by_slug(slug)
-    if not menu:
-        raise HTTPException(status_code=404, detail="Restaurant not found")
-    return {"ok": True, "restaurant_slug": slug}
+    restaurant, _menu = get_restaurant_and_menu(db, slug)
+    return {"ok": True, "restaurant_slug": restaurant.slug}
 
 
 @router.get("/r/{slug}/menu")
-def restaurant_menu(slug: str):
+def restaurant_menu(slug: str, db: Session = Depends(get_db)):
     slug = _normalize_slug(slug)
-    menu = load_menu_by_slug(slug)
-    if not menu:
-        raise HTTPException(status_code=404, detail="Restaurant not found")
+    _restaurant, menu = get_restaurant_and_menu(db, slug)
     return menu
 
 
 @router.get("/r/{slug}/basket", response_class=HTMLResponse)
-def basket_page(slug: str):
+def basket_page(slug: str, db: Session = Depends(get_db)):
     slug = _normalize_slug(slug)
-    menu = load_menu_by_slug(slug)
-    if not menu:
-        raise HTTPException(status_code=404, detail="Restaurant not found")
+    _restaurant, _menu = get_restaurant_and_menu(db, slug)
     if not BASKET_HTML_PATH.exists():
         raise HTTPException(status_code=500, detail=f"Missing frontend file: {BASKET_HTML_PATH}")
     return BASKET_HTML_PATH.read_text(encoding="utf-8")
 
 
 @router.get("/r/{slug}/staff", response_class=HTMLResponse)
-def staff_page(slug: str):
+def staff_page(slug: str, db: Session = Depends(get_db)):
     slug = _normalize_slug(slug)
-    menu = load_menu_by_slug(slug)
-    if not menu:
-        raise HTTPException(status_code=404, detail="Restaurant not found")
+    _restaurant, _menu = get_restaurant_and_menu(db, slug)
     if not STAFF_HTML_PATH.exists():
         raise HTTPException(status_code=500, detail=f"Missing frontend file: {STAFF_HTML_PATH}")
     return STAFF_HTML_PATH.read_text(encoding="utf-8")
@@ -528,9 +531,7 @@ async def chat_for_restaurant(
     msg = str(payload.get("message") or "")
     slug = _normalize_slug(slug)
 
-    menu_dict = load_menu_by_slug(slug)
-    if not menu_dict:
-        raise HTTPException(status_code=404, detail="Restaurant not found")
+    _restaurant, menu_dict = get_restaurant_and_menu(db, slug)
 
     order = get_or_create_draft(db, user_id)
     _ensure_order_scoped_to_restaurant(order, slug)
