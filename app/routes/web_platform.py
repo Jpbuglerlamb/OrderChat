@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import User, Restaurant
 from app.security.auth import hash_password
-
 router = APIRouter()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -139,3 +138,52 @@ def onboarding_complete(request: Request, slug: str = ""):
         "business_onboarding_complete.html",
         {"request": request, "slug": slug},
     )
+
+@router.get("/debug/users")
+def debug_users(db: Session = Depends(get_db)):
+    rows = db.query(User).all()
+    return [
+        {
+            "id": u.id,
+            "name": u.name,
+            "email": u.email,
+            "phone": u.phone,
+            "address": u.address,
+        }
+        for u in rows
+    ]
+
+
+@router.get("/debug/restaurants")
+def debug_restaurants(db: Session = Depends(get_db)):
+    rows = db.query(Restaurant).all()
+    return [
+        {
+            "id": r.id,
+            "name": r.name,
+            "slug": r.slug,
+            "address": r.address,
+            "opening_hours": r.opening_hours,
+            "menu_upload_path": r.menu_upload_path,
+            "menu_json_path": r.menu_json_path,
+            "qr_code_path": r.qr_code_path,
+        }
+        for r in rows
+    ]
+
+
+@router.get("/debug/restaurant-files")
+def debug_restaurant_files(db: Session = Depends(get_db)):
+    rows = db.query(Restaurant).all()
+    return [
+        {
+            "slug": r.slug,
+            "menu_upload_path": r.menu_upload_path,
+            "menu_exists": bool(r.menu_upload_path) and Path(r.menu_upload_path).exists(),
+            "menu_json_path": r.menu_json_path,
+            "menu_json_exists": bool(r.menu_json_path) and Path(r.menu_json_path).exists(),
+            "qr_code_path": r.qr_code_path,
+            "qr_exists": bool(r.qr_code_path) and Path(r.qr_code_path).exists(),
+        }
+        for r in rows
+    ]
