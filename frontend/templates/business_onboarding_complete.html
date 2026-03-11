@@ -2,15 +2,42 @@
 
 {% block content %}
 <section class="hero narrow">
-  <div class="card">
+  <div class="card" style="text-align:center;">
     <h1>Business Registered</h1>
-    <p class="subtitle">
-      Your restaurant has been saved successfully.
-    </p>
+    <p class="subtitle">Your restaurant has been saved successfully.</p>
 
-    <p class="muted">Restaurant slug: <strong>{{ slug }}</strong></p>
+    <p><strong>Restaurant slug:</strong> {{ slug }}</p>
 
-    <div class="button-row">
+    {% if qr_download_url %}
+      <div style="margin: 24px 0;">
+        <p style="margin-bottom: 12px;"><strong>Your QR code is ready</strong></p>
+
+        <img
+          src="{{ qr_download_url }}"
+          alt="Restaurant QR code"
+          style="max-width: 260px; width: 100%; border-radius: 16px; background: white; padding: 12px;"
+        >
+
+        <p class="muted" style="margin-top: 14px;">
+          Download this QR code, print it, and place it where customers can scan it to start ordering.
+        </p>
+
+        <div class="button-row" style="justify-content:center; margin-top: 18px;">
+          <a href="{{ qr_download_url }}" class="btn btn-primary" download>
+            Download QR Code
+          </a>
+          <a href="{{ qr_download_url }}" class="btn btn-secondary" target="_blank">
+            Open QR
+          </a>
+        </div>
+      </div>
+    {% else %}
+      <p class="muted" style="margin-top: 18px;">
+        QR code not available yet.
+      </p>
+    {% endif %}
+
+    <div class="button-row" style="justify-content:center; margin-top: 20px;">
       <a href="/business" class="btn btn-primary">Back to Business</a>
       <a href="/" class="btn btn-secondary">Home</a>
     </div>
