@@ -32,18 +32,3 @@ def business_signup_page(request: Request):
         {"request": request}
     )
 
-@router.post("/business/signup")
-def business_signup_submit(
-    name: str = Form(...),
-    business_name: str = Form(...),
-    email: str = Form(...),
-    password: str = Form(...),
-):
-    # Temporary placeholder:
-    # later this will:
-    # 1. create business user
-    # 2. create restaurant record
-    # 3. generate slug
-    # 4. redirect to onboarding
-
-    return RedirectResponse(url="/business", status_code=303)
