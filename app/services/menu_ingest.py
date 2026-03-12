@@ -111,10 +111,7 @@ def normalize_modifiers_from_options(
     return out
 
 
-def normalize_modifiers(
-    item: dict[str, Any],
-) -> list[dict[str, Any]]:
-    # New format already has modifiers
+def normalize_modifiers(item: dict[str, Any]) -> list[dict[str, Any]]:
     raw_modifiers = item.get("modifiers")
     if isinstance(raw_modifiers, list):
         out: list[dict[str, Any]] = []
@@ -142,7 +139,6 @@ def normalize_modifiers(
             )
         return out
 
-    # Old format had options dict
     raw_options = item.get("options")
     if isinstance(raw_options, dict):
         return normalize_modifiers_from_options(raw_options)
@@ -156,7 +152,6 @@ def normalize_item(item: dict[str, Any], category_id: str) -> dict[str, Any]:
         raise ValueError("Item is missing name")
 
     item_id = clean_text(item.get("id")) or slugify(name)
-
     base_price_raw = item.get("base_price", item.get("price", 0))
 
     return {
@@ -192,7 +187,7 @@ def categories_items_to_canonical(
 
     for category in categories:
         cat_name = clean_text(category.get("name"))
-        if not cat_name:
+        if not cat_name or is_ignorable_menu_line(cat_name):
             continue
 
         cat_id = clean_text(category.get("id")) or slugify(cat_name)
@@ -207,7 +202,6 @@ def categories_items_to_canonical(
 
             item = normalize_item(raw_item, cat_id)
 
-            # Prevent duplicate ids by suffixing
             original_id = item["id"]
             counter = 2
             while item["id"] in seen_item_ids:
@@ -223,7 +217,6 @@ def categories_items_to_canonical(
             "currency": currency,
             "notes_allowed": notes_allowed,
             "order_email": email,
-            # Kept for convenience, harmless for consumers that ignore them
             "business_name": business_name,
             "phone": phone,
             "address": address,
@@ -299,13 +292,69 @@ OPTION_HINT_RE = re.compile(
     re.I,
 )
 
+IGNORABLE_MENU_LINES = {
+    "item",
+    "price",
+    "item price",
+    "items price",
+    "description price",
+    "qty",
+    "quantity",
+    "tel",
+    "telephone",
+    "phone",
+}
+
+IGNORABLE_LINE_CONTAINS = {
+    "authentic cantonese",
+    "szechuan cuisine",
+    "minimum order",
+    "delivery charge",
+    "free delivery",
+    "opening hours",
+}
+
+
+def normalize_line_for_compare(line: str) -> str:
+    s = clean_text(line).lower()
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+def is_ignorable_menu_line(line: str) -> bool:
+    s = normalize_line_for_compare(line)
+    if not s:
+        return True
+
+    if s in IGNORABLE_MENU_LINES:
+        return True
+
+    if re.fullmatch(r"item\s+price", s):
+        return True
+
+    if any(chunk in s for chunk in IGNORABLE_LINE_CONTAINS):
+        return True
+
+    if re.fullmatch(r"page\s+\d+", s):
+        return True
+
+    if re.search(r"\b(?:tel|phone|mob|mobile)\b", s):
+        return True
+
+    return False
+
 
 def looks_like_category(line: str) -> bool:
-    line = line.strip()
+    line = clean_text(line)
     if not line:
         return False
+
+    if is_ignorable_menu_line(line):
+        return False
+
     if PRICE_RE.search(line):
         return False
+
     if len(line) > 40:
         return False
 
@@ -325,9 +374,29 @@ def looks_like_category(line: str) -> bool:
         "rice and noodles",
         "noodles",
         "desserts",
+        "chicken dishes",
+        "beef dishes",
+        "pork dishes",
+        "duck dishes",
+        "seafood dishes",
+        "vegetarian dishes",
+        "chef specials",
+        "special dishes",
+        "set meals",
     }
 
-    return line.isupper() or line.istitle() or line.lower() in known
+    ll = line.lower().strip()
+
+    if ll in known:
+        return True
+
+    if line.isupper() or line.istitle():
+        return True
+
+    if re.fullmatch(r"[A-Za-z& ]+\s+dishes", line, flags=re.I):
+        return True
+
+    return False
 
 
 def clean_item_name(name: str) -> str:
@@ -366,29 +435,8 @@ def option_name_to_key(option_name: str) -> str:
 # ----------------------------
 
 def parse_existing_json_menu(raw: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any], list[str]]:
-    """
-    Returns:
-      categories_in_nested_form,
-      extracted_meta,
-      warnings
-
-    Supports:
-    1. Old format:
-       {
-         "restaurant": {...},
-         "categories": [{"name": "...", "items": [...]}]
-       }
-
-    2. New format:
-       {
-         "meta": {...},
-         "categories": [{"id": "...", "name": "..."}],
-         "items": [{"category_id": "...", ...}]
-       }
-    """
     warnings: list[str] = []
 
-    # Old nested format
     if (
         isinstance(raw.get("categories"), list)
         and raw["categories"]
@@ -412,7 +460,6 @@ def parse_existing_json_menu(raw: dict[str, Any]) -> tuple[list[dict[str, Any]],
 
         return raw["categories"], extracted_meta, raw.get("warnings", []) or warnings
 
-    # New flat format
     if isinstance(raw.get("categories"), list) and isinstance(raw.get("items"), list):
         categories_by_id: dict[str, dict[str, Any]] = {}
 
@@ -546,6 +593,9 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
         return current_category
 
     for line in lines:
+        if is_ignorable_menu_line(line):
+            continue
+
         if looks_like_category(line):
             current_category = {"name": line.title(), "items": []}
             categories.append(current_category)
@@ -579,6 +629,11 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
             item_name = clean_item_name(item_match.group(1))
             price = item_match.group(2)
 
+            if not item_name or is_ignorable_menu_line(item_name):
+                warnings.append(f"Ignored header-like item line: {line}")
+                last_item = None
+                continue
+
             last_item = {
                 "name": item_name,
                 "base_price": price,
@@ -611,7 +666,7 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
             raw_price = price_match.group(1)
             item_name = clean_item_name(line[:price_match.start()] or line.replace(price_match.group(0), ""))
 
-            if item_name:
+            if item_name and not is_ignorable_menu_line(item_name):
                 last_item = {
                     "name": item_name,
                     "base_price": raw_price,
@@ -620,7 +675,7 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
                 }
                 category["items"].append(last_item)
             else:
-                warnings.append(f"Could not determine item name from line: {line}")
+                warnings.append(f"Could not determine usable item name from line: {line}")
             continue
 
         if last_item is not None:
