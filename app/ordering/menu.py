@@ -56,7 +56,7 @@ def build_menu_index(menu: Dict[str, Any], synonyms: Dict[str, str]) -> Dict[str
             "aliases": aliases,
             "category": category_name,
             "category_norm": normalize_text(category_name, synonyms) if category_name else "",
-            "price": item.get("price"),
+            "price": item.get("base_price", item.get("price")),
         }
         searchable_items.append(enriched)
 

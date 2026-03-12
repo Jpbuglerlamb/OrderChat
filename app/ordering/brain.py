@@ -138,9 +138,11 @@ _CAT_Q_PATTERNS = [
 _EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)
 _PHONE_RE = re.compile(r"\b(?:\+?\d[\d\s().-]{7,}\d)\b")
 
+
 def _extract_email(text: str) -> str | None:
     m = _EMAIL_RE.search(text or "")
     return m.group(0).strip() if m else None
+
 
 def _extract_phone(text: str) -> str | None:
     m = _PHONE_RE.search(text or "")
@@ -148,6 +150,7 @@ def _extract_phone(text: str) -> str | None:
         return None
     p = re.sub(r"[^\d+]", "", m.group(0))
     return p if len(re.sub(r"\D", "", p)) >= 8 else None
+
 
 def _is_cancel(text_norm: str) -> bool:
     return text_norm in {"cancel", "stop", "nevermind", "never mind", "back"}
@@ -167,6 +170,7 @@ def _tick_suggestions(state: Dict[str, Any]) -> None:
         s["ttl"] = ttl
         state["suggestions"] = s
 
+
 def _set_suggestions(state: Dict[str, Any], items: List[Dict[str, Any]], reason: str) -> None:
     candidates: List[Dict[str, Any]] = []
     for it in items[:SUGGESTION_MAX]:
@@ -178,12 +182,14 @@ def _set_suggestions(state: Dict[str, Any], items: List[Dict[str, Any]], reason:
         )
     state["suggestions"] = {"reason": reason, "items": candidates, "ttl": SUGGESTION_TTL_TURNS}
 
+
 def _suggestions_items(state: Dict[str, Any]) -> List[Dict[str, Any]]:
     s = state.get("suggestions")
     if not isinstance(s, dict):
         return []
     items = s.get("items")
     return items if isinstance(items, list) else []
+
 
 def _looks_like_selection(msg_norm: str) -> bool:
     if not msg_norm:
@@ -200,6 +206,7 @@ def _looks_like_selection(msg_norm: str) -> bool:
         if k in msg_norm:
             return True
     return False
+
 
 def _resolve_selection(msg_norm: str, candidates: List[Dict[str, Any]]) -> Dict[str, Any] | None:
     if not candidates:
@@ -239,6 +246,7 @@ def _resolve_selection(msg_norm: str, candidates: List[Dict[str, Any]]) -> Dict[
 
     return None
 
+
 def _split_with_then_intents(msg_norm: str) -> List[str]:
     """
     Split on 'with' first (common in takeaway ordering),
@@ -248,14 +256,12 @@ def _split_with_then_intents(msg_norm: str) -> List[str]:
     if not s:
         return [""]
 
-    # Split on 'with' as an extra separator
     chunks = [c.strip() for c in re.split(r"\s+\bwith\b\s+", s, flags=re.IGNORECASE) if c and c.strip()]
 
     parts: List[str] = []
     for c in chunks:
         parts.extend(split_intents(c))
 
-    # de-dup while preserving order
     out: List[str] = []
     seen = set()
     for p in parts:
@@ -268,6 +274,7 @@ def _split_with_then_intents(msg_norm: str) -> List[str]:
         out.append(p)
 
     return out or [s]
+
 
 # -------------------------
 # Formatting helpers
@@ -295,6 +302,7 @@ def _format_category_items(cat_name: str, items: list[dict], currency: str) -> s
 
     return f"{cat_name}:\n" + "\n".join(lines) + more
 
+
 def _format_suggestions_list(items: List[Dict[str, Any]], currency: str, intro: str) -> str:
     lines = [intro]
     for i, it in enumerate(items[:SUGGESTION_MAX], start=1):
@@ -311,6 +319,7 @@ def _format_suggestions_list(items: List[Dict[str, Any]], currency: str, intro: 
     lines.append("Reply with a number (e.g. “1”) or say “I’ll have that”.")
     return "\n".join(lines)
 
+
 def _clean_order_phrase(text: str) -> str:
     t = (text or "").strip()
     t = re.sub(r"^(?:okay|ok|alright|right)\b[,\s]*", "", t, flags=re.I)
@@ -322,7 +331,6 @@ def _clean_order_phrase(text: str) -> str:
         flags=re.I,
     )
     t = re.sub(r"^(?:give\s+me)\b[,\s]*", "", t, flags=re.I)
-
     t = re.sub(r"\b(?:please|pls|plz)\b\.?$", "", t, flags=re.I).strip()
     t = re.sub(r"\b(?:then)\b\.?$", "", t, flags=re.I).strip()
     return t.strip()
@@ -333,6 +341,7 @@ def _clean_order_phrase(text: str) -> str:
 # -------------------------
 def _all_items_flat(menu: Dict[str, Any]) -> List[Dict[str, Any]]:
     flat: List[Dict[str, Any]] = []
+
     for c in (menu.get("categories") or []):
         for key in ("items", "menu_items", "products"):
             items = c.get(key)
@@ -351,17 +360,21 @@ def _all_items_flat(menu: Dict[str, Any]) -> List[Dict[str, Any]]:
                 items = sec.get(key)
                 if isinstance(items, list):
                     flat.extend([it for it in items if isinstance(it, dict)])
+
     return flat
+
 
 def _item_text_blob(it: Dict[str, Any]) -> str:
     name = str(it.get("name") or it.get("title") or it.get("item") or "").strip()
     desc = str(it.get("description") or it.get("desc") or "").strip()
     return (name + " " + desc).strip()
 
+
 def _keyword_matches(menu: Dict[str, Any], keyword: str, synonyms: Dict[str, str]) -> List[Dict[str, Any]]:
     kw_raw = (keyword or "").strip().lower()
     if not kw_raw:
         return []
+
     kw_norm = normalize_text(kw_raw, synonyms).lower().strip()
 
     hits: List[Dict[str, Any]] = []
@@ -372,7 +385,9 @@ def _keyword_matches(menu: Dict[str, Any], keyword: str, synonyms: Dict[str, str
         blob_norm = normalize_text(blob_raw, synonyms).lower()
         if kw_raw in blob_raw or (kw_norm and kw_norm in blob_norm):
             hits.append(it)
+
     return hits
+
 
 def _try_keyword_query(msg_norm: str) -> str | None:
     for pat in _KEYWORD_Q_PATTERNS:
@@ -420,18 +435,24 @@ def _try_category_lookup(menu: Dict[str, Any], msg_norm: str, synonyms: Dict[str
 # -------------------------
 # Cart + email helpers
 # -------------------------
-def _add_item_to_cart(cart: List[Dict[str, Any]], item: Dict[str, Any], qty: int) -> None:
+def _add_item_to_cart(
+    cart: List[Dict[str, Any]],
+    item: Dict[str, Any],
+    qty: int,
+    choices: Dict[str, Any] | None = None,
+) -> None:
     new_line = {
         "item_id": str(item.get("id", "")),
         "name": str(item.get("name") or item.get("title") or item.get("item") or "Item"),
         "qty": max(1, int(qty or 1)),
         "base_price": float(item.get("base_price", 0.0) or 0.0),
-        "choices": {},
+        "choices": choices or {},
         "extras": [],
         "line_total": 0.0,
     }
     recalc_line_total(new_line)
     cart.append(new_line)
+
 
 def _business_order_email(menu_dict: Dict[str, Any]) -> str:
     meta = menu_dict.get("meta") or {}
@@ -442,11 +463,72 @@ def _business_order_email(menu_dict: Dict[str, Any]) -> str:
                 return v.strip()
     return "orders@example.com"
 
+
 def _send_business_order_email(menu_dict: Dict[str, Any], summary: str, total: float, currency: str) -> None:
     to_email = _business_order_email(menu_dict)
     subject = f"New order received ({currency}{float(total or 0.0):.2f})"
     body = "New order:\n\n" + (summary or "")
     send_order_email(to_email=to_email, subject=subject, body=body)
+
+
+# -------------------------
+# Modifier helpers
+# -------------------------
+def _required_modifiers(item: Dict[str, Any]) -> List[Dict[str, Any]]:
+    mods = item.get("modifiers") or []
+    if not isinstance(mods, list):
+        return []
+    return [m for m in mods if isinstance(m, dict) and m.get("required")]
+
+
+def _modifier_prompt_text(mod: Dict[str, Any]) -> str:
+    prompt = str(mod.get("prompt") or "Choose an option:").strip()
+    options = mod.get("options") or []
+    lines = [prompt]
+    for opt in options:
+        opt_str = str(opt).strip()
+        if opt_str:
+            lines.append(f"• {opt_str}")
+    return "\n".join(lines)
+
+
+def _match_modifier_option(user_text: str, options: List[str], synonyms: Dict[str, str]) -> str | None:
+    raw = (user_text or "").strip()
+    if not raw:
+        return None
+
+    norm = normalize_text(raw, synonyms)
+
+    for opt in options:
+        opt_str = str(opt).strip()
+        opt_norm = normalize_text(opt_str, synonyms)
+        if norm == opt_norm or norm in opt_norm or opt_norm in norm:
+            return opt_str
+
+    normalized_options = [normalize_text(str(opt).strip(), synonyms) for opt in options if str(opt).strip()]
+    best = difflib.get_close_matches(norm, normalized_options, n=1, cutoff=0.6)
+    if best:
+        chosen_norm = best[0]
+        for opt in options:
+            opt_str = str(opt).strip()
+            if normalize_text(opt_str, synonyms) == chosen_norm:
+                return opt_str
+
+    return None
+
+
+def _begin_modifier_flow(state: Dict[str, Any], item: Dict[str, Any], qty: int) -> str | None:
+    mods = _required_modifiers(item)
+    if not mods:
+        return None
+
+    state["pending_item"] = {
+        "item_id": str(item.get("id") or ""),
+        "qty": max(1, int(qty or 1)),
+        "modifier_index": 0,
+        "choices": {},
+    }
+    return _modifier_prompt_text(mods[0])
 
 
 # -------------------------
@@ -470,7 +552,55 @@ def handle_message(
 
     _tick_suggestions(state)
 
-    # 0) Suggestion follow-up selection
+    # 0) Pending modifier flow
+    pending = state.get("pending_item")
+    if isinstance(pending, dict):
+        if _is_cancel(msg_norm):
+            state.pop("pending_item", None)
+            return "No problem. I cancelled that item. What would you like instead?", dump_cart(cart), dump_state(state)
+
+        item_id = str(pending.get("item_id") or "").strip()
+        qty = max(1, int(pending.get("qty") or 1))
+        modifier_index = int(pending.get("modifier_index") or 0)
+        choices = dict(pending.get("choices") or {})
+
+        item = find_item(menu, item_id, synonyms)
+        if not item:
+            state.pop("pending_item", None)
+            return "That item is no longer available. Please choose something else.", dump_cart(cart), dump_state(state)
+
+        mods = _required_modifiers(item)
+        if not mods or modifier_index >= len(mods):
+            _add_item_to_cart(cart, item, qty=qty, choices=choices)
+            state.pop("pending_item", None)
+            summary, _ = build_summary(cart, currency_symbol=cur)
+            return "Added ✅\n\n" + summary, dump_cart(cart), dump_state(state)
+
+        current_mod = mods[modifier_index]
+        options = [str(x).strip() for x in (current_mod.get("options") or []) if str(x).strip()]
+        selected = _match_modifier_option(raw, options, synonyms)
+
+        if not selected:
+            return _modifier_prompt_text(current_mod), dump_cart(cart), dump_state(state)
+
+        mod_key = str(current_mod.get("key") or f"modifier_{modifier_index}").strip()
+        choices[mod_key] = selected
+
+        modifier_index += 1
+        pending["modifier_index"] = modifier_index
+        pending["choices"] = choices
+        state["pending_item"] = pending
+
+        if modifier_index < len(mods):
+            next_mod = mods[modifier_index]
+            return _modifier_prompt_text(next_mod), dump_cart(cart), dump_state(state)
+
+        _add_item_to_cart(cart, item, qty=qty, choices=choices)
+        state.pop("pending_item", None)
+        summary, _ = build_summary(cart, currency_symbol=cur)
+        return "Added ✅\n\n" + summary, dump_cart(cart), dump_state(state)
+
+    # 1) Suggestion follow-up selection
     candidates = _suggestions_items(state)
     if candidates and _looks_like_selection(msg_norm):
         chosen = _resolve_selection(msg_norm, candidates)
@@ -485,8 +615,13 @@ def handle_message(
                 item = find_item(menu, cname, synonyms)
 
             if item:
-                _add_item_to_cart(cart, item, qty=1)
                 state.pop("suggestions", None)
+
+                modifier_reply = _begin_modifier_flow(state, item, qty=1)
+                if modifier_reply:
+                    return modifier_reply, dump_cart(cart), dump_state(state)
+
+                _add_item_to_cart(cart, item, qty=1)
                 summary, _ = build_summary(cart, currency_symbol=cur)
                 return "Added ✅\n\n" + summary, dump_cart(cart), dump_state(state)
 
@@ -496,18 +631,18 @@ def handle_message(
                 lines.append(f"{i}) {c.get('name')}")
             return "\n".join(lines), dump_cart(cart), dump_state(state)
 
-    # 1) Reset
+    # 2) Reset
     if msg_norm in {"reset", "clear", "start over", "new order"}:
         return "Cleared ✅ Starting fresh.", dump_cart([]), dump_state({})
 
-    # 2) Basket
+    # 3) Basket
     if (msg_norm in _BASKET_INTENTS) or ("my basket" in msg_norm):
         summary, _ = build_summary(cart, currency_symbol=cur)
         return summary, dump_cart(cart), dump_state(state)
 
-    # 2.2) Status query (uses your nlp.py)
+    # 4) Status query
     if is_order_status_query(raw):
-        target = extract_status_target(raw)  # optional
+        target = extract_status_target(raw)
         if state.get("order_submitted"):
             if target:
                 return (
@@ -527,7 +662,7 @@ def handle_message(
             dump_state(state),
         )
 
-    # 2.5) Confirm / checkout
+    # 5) Confirm / checkout
     if msg_norm in _CONFIRM_INTENTS:
         if not cart:
             return "Your basket is empty. Add something first 🙂", dump_cart(cart), dump_state(state)
@@ -540,9 +675,9 @@ def handle_message(
             state["checkout_stage"] = "need_contact"
             return "Nice. What’s best: an email address or phone number?", dump_cart(cart), dump_state(state)
 
-        # Place order
         state.pop("suggestions", None)
         state.pop("checkout_stage", None)
+
         summary, total = build_summary(cart, currency_symbol=cur)
 
         try:
@@ -563,7 +698,7 @@ def handle_message(
         state["order_submitted"] = True
         return "Order placed\n\n" + summary, dump_cart(cart), dump_state(state)
 
-    # 2.6) Checkout flow capture
+    # 6) Checkout flow capture
     stage = str(state.get("checkout_stage") or "")
     if stage:
         if _is_cancel(msg_norm):
@@ -596,7 +731,6 @@ def handle_message(
             if not (state.get("customer_email") or state.get("customer_phone")):
                 return "Could you send an email address or phone number? (Either one is fine.)", dump_cart(cart), dump_state(state)
 
-            # Place order automatically
             state.pop("checkout_stage", None)
             summary, total = build_summary(cart, currency_symbol=cur)
 
@@ -618,14 +752,14 @@ def handle_message(
             state["order_submitted"] = True
             return "Order placed\n\n" + summary, dump_cart(cart), dump_state(state)
 
-    # 3) Menu
+    # 7) Menu
     if (msg_norm in _MENU_INTENTS) or ("menu" in msg_norm):
         cats = all_category_names(menu)
         if cats:
             return "We have: " + ", ".join(cats), dump_cart(cart), dump_state(state)
         return "Tell me what you'd like.", dump_cart(cart), dump_state(state)
 
-    # 4) Category browsing
+    # 8) Category browsing
     cat = _try_category_lookup(menu, msg_norm, synonyms)
     if cat:
         items = items_in_category(menu, cat, synonyms)
@@ -635,7 +769,7 @@ def handle_message(
             return reply, dump_cart(cart), dump_state(state)
         return _format_category_items(cat, items, cur), dump_cart(cart), dump_state(state)
 
-    # 5) Keyword query like “do you have beef?”
+    # 9) Keyword query like “do you have beef?”
     kw = _try_keyword_query(msg_norm)
     if kw:
         hits = _keyword_matches(menu, kw, synonyms)
@@ -646,7 +780,7 @@ def handle_message(
             reply = f"I couldn’t find any {kw} dishes on this menu."
         return reply, dump_cart(cart), dump_state(state)
 
-    # 6) Remove
+    # 10) Remove
     if msg_norm.startswith("remove ") or msg_norm.startswith("delete "):
         target_text = msg_norm.split(" ", 1)[1].strip()
         target = find_item(menu, target_text, synonyms)
@@ -656,6 +790,7 @@ def handle_message(
         target_id = str(target.get("id") or "")
         removed = False
         new_cart: List[Dict[str, Any]] = []
+
         for ln in cart:
             if (not removed) and target_id and str(ln.get("item_id") or "") == target_id:
                 qty = int(ln.get("qty", 1) or 1)
@@ -674,7 +809,7 @@ def handle_message(
         summary, _ = build_summary(cart, currency_symbol=cur)
         return "Removed ✅\n\n" + summary, dump_cart(cart), dump_state(state)
 
-    # 7) Add items (multi-item natural language)
+    # 11) Add items (multi-item natural language)
     parts = _split_with_then_intents(msg_norm)
 
     added_any = False
@@ -690,7 +825,6 @@ def handle_message(
 
         text_clean = _clean_order_phrase(text)
 
-        # Try a few forms, best score wins
         candidates = [
             text_clean,
             normalize_text(text_clean, synonyms),
@@ -709,27 +843,27 @@ def handle_message(
                 best_item = item
                 best_score = score
 
-        # Strong confidence: add directly
         if best_item and best_score >= 0.84:
+            modifier_reply = _begin_modifier_flow(state, best_item, qty=qty)
+            if modifier_reply:
+                return modifier_reply, dump_cart(cart), dump_state(state)
+
             _add_item_to_cart(cart, best_item, qty=qty)
             added_any = True
             matched_count += 1
             continue
 
-        # Medium confidence: store best guess for clarification
         if best_item and best_score >= 0.68:
             if best_score > low_confidence_score:
                 low_confidence_item = best_item
                 low_confidence_score = best_score
 
-    # If we added at least one item, return basket summary
     if added_any:
         summary, _ = build_summary(cart, currency_symbol=cur)
         if matched_count > 1:
             return "Added ✅ (multiple items)\n\n" + summary, dump_cart(cart), dump_state(state)
         return "Added ✅\n\n" + summary, dump_cart(cart), dump_state(state)
 
-    # If nothing was confidently added, but we have a decent guess, ask to confirm
     if low_confidence_item:
         return (
             f"Did you mean {low_confidence_item['name']}?",
@@ -737,10 +871,24 @@ def handle_message(
             dump_state(state),
         )
 
-    # 7.5) If nothing matched, offer keyword suggestions for short inputs
+    # 12) If nothing matched, offer keyword suggestions for short inputs
     if msg_norm and len(msg_norm.split()) <= 2:
         hits = _keyword_matches(menu, msg_norm, synonyms)
         if hits:
             _set_suggestions(state, hits, reason=f"keyword:{msg_norm}")
-            return _format_suggestions_list(hits, cur, f"Here are {msg_norm} options:"), dump_cart(cart), dump_state(
-                state)
+            return (
+                _format_suggestions_list(hits, cur, f"Here are {msg_norm} options:"),
+                dump_cart(cart),
+                dump_state(state),
+            )
+
+    return (
+        "I didn’t catch that. You can say things like:\n"
+        "• menu\n"
+        "• basket\n"
+        "• sweet and sour chicken\n"
+        "• remove egg fried rice\n"
+        "• confirm",
+        dump_cart(cart),
+        dump_state(state),
+    )
