@@ -2,83 +2,324 @@
 
 {% block content %}
 <section class="hero narrow">
-  <div class="card">
-    <h1>Create Business Account</h1>
+  <div class="card signup-shell">
+    <div id="signup-panel">
+      <h1>Create Business Account</h1>
 
-    <p class="subtitle">
-      Set up your restaurant account and start onboarding your takeaway.
-    </p>
-
-    {% if plan %}
-      <p class="success-card-meta">
-        Selected plan:
-        <strong>
-          {% if plan == "starter" %}
-            Starter · £200/month for 12 months or £2,400 annually
-          {% elif plan == "growth" %}
-            Growth · £300/month
-          {% elif plan == "pro" %}
-            Pro · £500/month
-          {% else %}
-            {{ plan|capitalize }}
-          {% endif %}
-        </strong>
+      <p class="subtitle">
+        Set up your restaurant account and start onboarding your takeaway.
       </p>
-    {% endif %}
 
-    {% if error %}
-      <p class="muted error-text">{{ error }}</p>
-    {% endif %}
+      {% if plan %}
+        <p class="success-card-meta">
+          Selected plan:
+          <strong>
+            {% if plan == "starter" %}
+              Starter · £200/month for 12 months or £2,400 annually
+            {% elif plan == "growth" %}
+              Growth · £300/month
+            {% elif plan == "pro" %}
+              Pro · £500/month
+            {% else %}
+              {{ plan|capitalize }}
+            {% endif %}
+          </strong>
+        </p>
+      {% endif %}
 
-    <form
-      class="manual-form"
-      method="post"
-      action="/business/signup"
-      enctype="multipart/form-data"
-    >
-      <input type="hidden" name="plan" value="{{ plan }}">
+      {% if error %}
+        <p class="muted error-text">{{ error }}</p>
+      {% endif %}
 
-      <label for="name">Your name</label>
-      <input id="name" name="name" type="text" placeholder="e.g. Joan Lamb" required>
-
-      <label for="business_name">Business name</label>
-      <input id="business_name" name="business_name" type="text" placeholder="e.g. Pizza Palace" required>
-
-      <label for="email">Email</label>
-      <input id="email" name="email" type="email" placeholder="you@restaurant.com" required>
-
-      <label for="password">Password</label>
-      <input id="password" name="password" type="password" placeholder="Create a password" required>
-
-      <label for="phone">Phone</label>
-      <input id="phone" name="phone" type="text" placeholder="e.g. 07700 900123">
-
-      <label for="address">Address</label>
-      <input id="address" name="address" type="text" placeholder="e.g. 123 High Street, Dundee" required>
-
-      <label for="opening_hours">Opening hours</label>
-      <textarea
-        id="opening_hours"
-        name="opening_hours"
-        rows="4"
-        placeholder="Mon-Fri: 11:00-22:00&#10;Sat-Sun: 12:00-23:00"
-        required
-      ></textarea>
-
-      <label for="menu_file">Upload menu</label>
-      <input
-        id="menu_file"
-        name="menu_file"
-        type="file"
-        accept=".pdf,.csv,.txt,image/*"
-        required
+      <form
+        id="business-signup-form"
+        class="manual-form"
+        method="post"
+        action="/business/signup"
+        enctype="multipart/form-data"
       >
+        <input type="hidden" name="plan" value="{{ plan }}">
 
-      <div class="button-row">
-        <button type="submit" class="btn btn-primary">Create Account</button>
-        <a href="/business/pricing" class="btn btn-secondary">Back</a>
+        <label for="name">Your name</label>
+        <input
+          id="name"
+          name="name"
+          type="text"
+          placeholder="e.g. Joan Lamb"
+          required
+        >
+
+        <label for="business_name">Business name</label>
+        <input
+          id="business_name"
+          name="business_name"
+          type="text"
+          placeholder="e.g. Pizza Palace"
+          required
+        >
+
+        <label for="email">Email</label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          placeholder="you@restaurant.com"
+          required
+        >
+
+        <label for="password">Password</label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          placeholder="Create a password"
+          required
+        >
+
+        <label for="phone">Phone</label>
+        <input
+          id="phone"
+          name="phone"
+          type="text"
+          placeholder="e.g. 07700 900123"
+        >
+
+        <label for="address">Address</label>
+        <input
+          id="address"
+          name="address"
+          type="text"
+          placeholder="e.g. 123 High Street, Dundee"
+          required
+        >
+
+        <label for="opening_hours">Opening hours</label>
+        <textarea
+          id="opening_hours"
+          name="opening_hours"
+          rows="4"
+          placeholder="Mon-Fri: 11:00-22:00&#10;Sat-Sun: 12:00-23:00"
+          required
+        ></textarea>
+
+        <label for="menu_file">Upload menu</label>
+        <input
+          id="menu_file"
+          name="menu_file"
+          type="file"
+          accept=".pdf,.csv,.txt,.json,image/*"
+          required
+        >
+
+        <p class="muted" id="file-help">
+          Accepted formats: PDF, CSV, TXT, JSON, or image files.
+        </p>
+
+        <p class="muted error-text" id="client-error" style="display:none;"></p>
+
+        <div class="button-row">
+          <button id="submit-btn" type="submit" class="btn btn-primary">
+            Create Account
+          </button>
+          <a href="/business/pricing" class="btn btn-secondary" id="back-btn">Back</a>
+        </div>
+      </form>
+    </div>
+
+    <div id="processing-panel" class="processing-panel" style="display:none;" aria-live="polite">
+      <div class="processing-orb-wrap">
+        <div class="processing-orb"></div>
       </div>
-    </form>
+
+      <h2>Setting up your restaurant</h2>
+      <p class="subtitle">
+        Uploading your menu and building your ordering system. This usually takes a few seconds.
+      </p>
+
+      <div class="processing-steps">
+        <div class="processing-step is-active">
+          <span class="step-dot"></span>
+          <span>Uploading menu</span>
+        </div>
+        <div class="processing-step" id="step-2">
+          <span class="step-dot"></span>
+          <span>Reading menu items</span>
+        </div>
+        <div class="processing-step" id="step-3">
+          <span class="step-dot"></span>
+          <span>Building ordering system</span>
+        </div>
+        <div class="processing-step" id="step-4">
+          <span class="step-dot"></span>
+          <span>Generating QR code</span>
+        </div>
+      </div>
+
+      <p class="muted processing-note" id="processing-note">
+        Please don’t close this page while setup is in progress.
+      </p>
+    </div>
   </div>
 </section>
+
+<style>
+  .signup-shell {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .processing-panel {
+    text-align: center;
+    padding: 1rem 0 0.25rem;
+  }
+
+  .processing-orb-wrap {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1rem;
+  }
+
+  .processing-orb {
+    width: 72px;
+    height: 72px;
+    border-radius: 999px;
+    border: 6px solid rgba(255,255,255,0.12);
+    border-top-color: rgba(255,255,255,0.9);
+    animation: processing-spin 1s linear infinite;
+  }
+
+  @keyframes processing-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .processing-steps {
+    margin: 1.5rem auto 0;
+    max-width: 340px;
+    text-align: left;
+  }
+
+  .processing-step {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.55rem 0;
+    opacity: 0.65;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+
+  .processing-step.is-active,
+  .processing-step.is-done {
+    opacity: 1;
+  }
+
+  .processing-step.is-active {
+    transform: translateX(2px);
+  }
+
+  .step-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.35);
+    flex: 0 0 10px;
+  }
+
+  .processing-step.is-active .step-dot {
+    background: #7dd3fc;
+    box-shadow: 0 0 0 6px rgba(125, 211, 252, 0.12);
+  }
+
+  .processing-step.is-done .step-dot {
+    background: #86efac;
+    box-shadow: 0 0 0 6px rgba(134, 239, 172, 0.10);
+  }
+
+  .processing-note {
+    margin-top: 1.25rem;
+  }
+
+  .is-submitting .btn,
+  .is-submitting input,
+  .is-submitting textarea {
+    pointer-events: none;
+  }
+</style>
+
+<script>
+  (function () {
+    const form = document.getElementById("business-signup-form");
+    const menuFile = document.getElementById("menu_file");
+    const signupPanel = document.getElementById("signup-panel");
+    const processingPanel = document.getElementById("processing-panel");
+    const submitBtn = document.getElementById("submit-btn");
+    const backBtn = document.getElementById("back-btn");
+    const clientError = document.getElementById("client-error");
+
+    const stepEls = [
+      document.querySelector(".processing-step"),
+      document.getElementById("step-2"),
+      document.getElementById("step-3"),
+      document.getElementById("step-4"),
+    ];
+
+    let progressTimer = null;
+
+    function showClientError(message) {
+      clientError.textContent = message;
+      clientError.style.display = "block";
+    }
+
+    function clearClientError() {
+      clientError.textContent = "";
+      clientError.style.display = "none";
+    }
+
+    function startFakeProgress() {
+      let index = 0;
+
+      progressTimer = window.setInterval(() => {
+        if (index >= stepEls.length - 1) return;
+
+        stepEls[index].classList.remove("is-active");
+        stepEls[index].classList.add("is-done");
+
+        index += 1;
+        stepEls[index].classList.add("is-active");
+      }, 1200);
+    }
+
+    function beginProcessingUI() {
+      signupPanel.style.display = "none";
+      processingPanel.style.display = "block";
+      document.body.classList.add("is-submitting");
+
+      submitBtn.disabled = true;
+      if (backBtn) {
+        backBtn.setAttribute("aria-disabled", "true");
+        backBtn.style.pointerEvents = "none";
+        backBtn.style.opacity = "0.6";
+      }
+
+      startFakeProgress();
+    }
+
+    form.addEventListener("submit", function (event) {
+      clearClientError();
+
+      if (!menuFile.files || !menuFile.files.length) {
+        event.preventDefault();
+        showClientError("Please upload a menu file before creating the account.");
+        return;
+      }
+
+      beginProcessingUI();
+    });
+
+    window.addEventListener("pageshow", function () {
+      if (progressTimer) {
+        window.clearInterval(progressTimer);
+      }
+    });
+  })();
+</script>
 {% endblock %}

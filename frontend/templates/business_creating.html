@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Setting up your restaurant</title>
+    <style>
+        body{
+            font-family: system-ui;
+            background:#0f172a;
+            color:white;
+            display:flex;
+            justify-content:center;
+            align-items:center;
+            height:100vh;
+        }
+
+        .card{
+            text-align:center;
+        }
+
+        .spinner{
+            width:60px;
+            height:60px;
+            border:6px solid #334155;
+            border-top:6px solid #22c55e;
+            border-radius:50%;
+            animation:spin 1s linear infinite;
+            margin:auto;
+            margin-bottom:20px;
+        }
+
+        @keyframes spin{
+            to{ transform:rotate(360deg); }
+        }
+
+        .steps{
+            margin-top:20px;
+            color:#94a3b8;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="card">
+
+    <div class="spinner"></div>
+
+    <h2>Setting up your restaurant</h2>
+
+    <p>This usually takes a few seconds</p>
+
+    <div class="steps">
+        Uploading menu<br>
+        Reading menu items<br>
+        Building ordering system<br>
+        Generating QR code
+    </div>
+
+</div>
+
+</body>
+</html>
