@@ -1,22 +1,44 @@
 :root {
   --bg-1: #050816;
   --bg-2: #0b1738;
+
   --panel: rgba(255, 255, 255, 0.06);
+  --panel-strong: rgba(255, 255, 255, 0.09);
   --panel-border: rgba(255, 255, 255, 0.12);
+
   --text: #f3f5ff;
   --muted: #b7bfdc;
+  --muted-soft: rgba(243, 245, 255, 0.68);
+
   --primary: #8b5cf6;
   --primary-hover: #7c3aed;
+
   --secondary: rgba(255, 255, 255, 0.08);
   --secondary-hover: rgba(255, 255, 255, 0.14);
+
+  --accent-cyan: #66d9d1;
+  --accent-blue: #74a7ff;
+  --danger: #ffb4b4;
+
   --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.22);
+
+  --radius-xl: 24px;
+  --radius-lg: 20px;
+  --radius-md: 14px;
+  --radius-pill: 999px;
+
+  --max-main: 980px;
+  --max-narrow: 720px;
+  --max-form: 460px;
 }
 
 * {
   box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   min-height: 100%;
@@ -41,6 +63,10 @@ a:hover {
   text-decoration: underline;
 }
 
+/* ------------------------------
+   Layout
+------------------------------ */
+
 .site-shell {
   min-height: 100vh;
   display: flex;
@@ -58,7 +84,7 @@ a:hover {
 .brand {
   font-size: 1.5rem;
   font-weight: 700;
-  color: white;
+  color: #fff;
 }
 
 .nav {
@@ -73,7 +99,7 @@ a:hover {
 }
 
 .nav a:hover {
-  color: white;
+  color: #fff;
   text-decoration: none;
 }
 
@@ -87,20 +113,24 @@ a:hover {
 
 .hero {
   width: 100%;
-  max-width: 980px;
+  max-width: var(--max-main);
   display: flex;
   justify-content: center;
 }
 
 .hero.narrow {
-  max-width: 720px;
+  max-width: var(--max-narrow);
 }
+
+/* ------------------------------
+   Cards / panels
+------------------------------ */
 
 .card {
   width: 100%;
   background: var(--panel);
   border: 1px solid var(--panel-border);
-  border-radius: 24px;
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow);
   padding: 40px 28px;
   text-align: center;
@@ -121,6 +151,19 @@ a:hover {
   line-height: 1.6;
 }
 
+.muted {
+  color: var(--muted);
+  margin-top: 12px;
+}
+
+.error-text {
+  color: var(--danger);
+}
+
+/* ------------------------------
+   Buttons
+------------------------------ */
+
 .button-row {
   display: flex;
   gap: 14px;
@@ -134,13 +177,17 @@ a:hover {
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   padding: 14px 22px;
+  min-width: 160px;
   font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
-  transition: transform 0.15s ease, background 0.2s ease;
-  min-width: 160px;
+  transition:
+    transform 0.15s ease,
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .btn:hover {
@@ -149,23 +196,114 @@ a:hover {
 }
 
 .btn-primary {
-  background: var(--primary);
-  color: white;
+  background: linear-gradient(90deg, var(--primary), var(--accent-blue), var(--accent-cyan));
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(124, 58, 237, 0.22);
 }
 
 .btn-primary:hover {
-  background: var(--primary-hover);
+  filter: brightness(1.05);
 }
 
 .btn-secondary {
   background: var(--secondary);
-  color: white;
+  color: #fff;
   border: 1px solid var(--panel-border);
 }
 
 .btn-secondary:hover {
   background: var(--secondary-hover);
 }
+
+.btn-disabled,
+.btn[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ------------------------------
+   Forms
+------------------------------ */
+
+.manual-form {
+  display: grid;
+  gap: 12px;
+  text-align: left;
+  max-width: var(--max-form);
+  margin: 0 auto;
+}
+
+.manual-form label {
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.manual-form input,
+.manual-form textarea,
+.manual-form select {
+  width: 100%;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  padding: 14px 16px;
+  font-size: 1rem;
+  outline: none;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.manual-form textarea {
+  resize: vertical;
+  min-height: 110px;
+}
+
+.manual-form input:focus,
+.manual-form textarea:focus,
+.manual-form select:focus {
+  border-color: rgba(139, 92, 246, 0.8);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.manual-form input::placeholder,
+.manual-form textarea::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.manual-form input[type="file"] {
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+/* ------------------------------
+   Utility
+------------------------------ */
+
+.hidden {
+  display: none;
+}
+
+.divider {
+  margin: 28px 0 18px;
+  color: var(--muted);
+  position: relative;
+}
+
+.footer {
+  padding: 18px 24px 28px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.95rem;
+}
+
+/* ------------------------------
+   QR / scanner
+------------------------------ */
 
 .scanner-section {
   margin-top: 28px;
@@ -176,62 +314,140 @@ a:hover {
   max-width: 360px;
   margin: 0 auto;
   overflow: hidden;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--panel-border);
   background: rgba(0, 0, 0, 0.3);
   padding: 10px;
 }
 
-.muted {
-  color: var(--muted);
-  margin-top: 12px;
-}
-
-.divider {
-  margin: 28px 0 18px;
-  color: var(--muted);
-  position: relative;
-}
-
-.manual-form {
-  display: grid;
-  gap: 12px;
-  text-align: left;
-  max-width: 460px;
-  margin: 0 auto;
-}
-
-.manual-form label {
-  color: var(--muted);
-  font-size: 0.95rem;
-}
-
-.manual-form input {
+.qr-preview {
+  margin: 18px auto 10px;
   width: 100%;
-  border-radius: 14px;
+  max-width: 250px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 14px;
+  box-shadow: var(--shadow-soft);
+}
+
+.qr-preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+}
+
+/* ------------------------------
+   Pricing
+------------------------------ */
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 22px;
+  margin-top: 26px;
+  text-align: left;
+}
+
+.pricing-plan {
+  padding: 24px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--panel-border);
-  background: rgba(255, 255, 255, 0.06);
-  color: white;
-  padding: 14px 16px;
-  font-size: 1rem;
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.manual-form input::placeholder {
-  color: rgba(255, 255, 255, 0.45);
+.pricing-plan h2 {
+  margin: 0;
+  font-size: 1.45rem;
+  line-height: 1.1;
 }
 
-.hidden {
-  display: none;
+.pricing-plan .price {
+  font-size: 30px;
+  font-weight: 800;
+  margin: 0;
+  color: #fff;
 }
 
-.footer {
-  padding: 18px 24px 28px;
+.pricing-plan .price-subtext {
+  margin: 0;
   color: var(--muted);
-  text-align: center;
   font-size: 0.95rem;
+  line-height: 1.5;
 }
 
-@media (max-width: 640px) {
+.pricing-plan .plan-tag {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 8px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 0.85rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border: 1px solid var(--panel-border);
+}
+
+.pricing-plan .plan-tag.highlight {
+  background: rgba(139, 92, 246, 0.18);
+  border-color: rgba(139, 92, 246, 0.48);
+}
+
+.plan-features {
+  margin: 12px 0 14px;
+  padding-left: 18px;
+  color: var(--muted-soft);
+}
+
+.plan-features li {
+  margin-bottom: 8px;
+  line-height: 1.45;
+}
+
+.pricing-plan.featured {
+  border: 1px solid rgba(139, 92, 246, 0.58);
+  background:
+    linear-gradient(180deg, rgba(139, 92, 246, 0.12), rgba(255, 255, 255, 0.05));
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.24),
+    0 0 0 1px rgba(139, 92, 246, 0.14);
+}
+
+.pricing-plan .plan-actions {
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+/* ------------------------------
+   Onboarding complete / success cards
+------------------------------ */
+
+.success-card-meta {
+  margin: 16px 0 8px;
+  font-size: 1.05rem;
+  color: var(--muted);
+}
+
+.success-card-meta strong {
+  color: #fff;
+}
+
+.success-help {
+  max-width: 620px;
+  margin: 18px auto 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+/* ------------------------------
+   Responsive
+------------------------------ */
+
+@media (max-width: 760px) {
   .topbar {
     flex-direction: column;
     align-items: flex-start;
@@ -246,11 +462,33 @@ a:hover {
     border-radius: 20px;
   }
 
+  .button-row {
+    flex-direction: column;
+  }
+
   .btn {
     width: 100%;
   }
 
-  .button-row {
-    flex-direction: column;
+  .pricing-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .main {
+    padding: 20px 14px 42px;
+  }
+
+  .brand {
+    font-size: 1.25rem;
+  }
+
+  .subtitle {
+    font-size: 1rem;
+  }
+
+  .pricing-plan .price {
+    font-size: 26px;
   }
 }

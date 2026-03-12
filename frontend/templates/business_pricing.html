@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero">
+  <div class="card">
+    <h1>Choose Your Plan</h1>
+    <p class="subtitle">
+      Launch your takeaway ordering system with a plan built for growth.
+    </p>
+
+    <div class="pricing-grid">
+      <div class="pricing-plan featured">
+        <span class="plan-tag highlight">Founding Offer</span>
+        <h2>Starter</h2>
+        <p class="price">£200/month</p>
+        <p class="price-subtext">
+          12-month agreement<br>
+          or £2,400 annually
+        </p>
+        <ul class="plan-features">
+          <li>QR ordering</li>
+          <li>AI chat ordering</li>
+          <li>Staff dashboard access</li>
+          <li>Restaurant onboarding setup</li>
+          <li>Locked in for your first 12 months</li>
+        </ul>
+        <div class="plan-actions">
+          <a href="/business/signup?plan=starter" class="btn btn-primary">Start Starter</a>
+        </div>
+      </div>
+
+      <div class="pricing-plan">
+        <span class="plan-tag">Growth</span>
+        <h2>Growth</h2>
+        <p class="price">£300/month</p>
+        <p class="price-subtext">
+          For restaurants ready to expand further.
+        </p>
+        <ul class="plan-features">
+          <li>Everything in Starter</li>
+          <li>Higher-volume support</li>
+          <li>Expanded operations tools</li>
+          <li>Growth-focused support</li>
+        </ul>
+        <div class="plan-actions">
+          <a href="/business/signup?plan=growth" class="btn btn-secondary">Choose Growth</a>
+        </div>
+      </div>
+
+      <div class="pricing-plan">
+        <span class="plan-tag">Pro</span>
+        <h2>Pro</h2>
+        <p class="price">£500/month</p>
+        <p class="price-subtext">
+          For serious operators and premium rollout.
+        </p>
+        <ul class="plan-features">
+          <li>Everything in Growth</li>
+          <li>Advanced rollout support</li>
+          <li>Premium business setup</li>
+          <li>Future multi-site readiness</li>
+        </ul>
+        <div class="plan-actions">
+          <a href="/business/signup?plan=pro" class="btn btn-secondary">Choose Pro</a>
+        </div>
+      </div>
+    </div>
+
+    <p class="success-help">
+      Starter is the current launch offer and is fixed at £200/month for your first 12 months,
+      or £2,400 annually.
+    </p>
+
+    <div class="button-row" style="margin-top: 24px;">
+      <a href="/business" class="btn btn-secondary">Back</a>
+    </div>
+  </div>
+</section>
+{% endblock %}
