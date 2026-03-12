@@ -18,7 +18,7 @@ from fastapi import (
     Request,
     Response,
 )
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy import or_
@@ -46,15 +46,16 @@ except Exception:
 
 router = APIRouter(tags=["commands"])
 
-# ---------- Frontend paths ----------
+# ---------- Frontend / templates ----------
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 TEMPLATES_DIR = FRONTEND_DIR / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
-BASKET_HTML_PATH = FRONTEND_DIR / "basket.html"
-STAFF_HTML_PATH = FRONTEND_DIR / "staff.html"
-STAFF_LOGIN_HTML_PATH = FRONTEND_DIR / "staff_login.html"
+CHAT_HTML_PATH = TEMPLATES_DIR / "chat.html"
+BASKET_HTML_PATH = TEMPLATES_DIR / "basket.html"
+STAFF_HTML_PATH = TEMPLATES_DIR / "staff.html"
+STAFF_LOGIN_HTML_PATH = TEMPLATES_DIR / "staff_login.html"
 
 # ---------- Helpers ----------
 _STATUS_Q_RE = re.compile(
@@ -76,8 +77,8 @@ def _safe_json_dict(raw: str | None) -> Dict[str, Any]:
     if not raw:
         return {}
     try:
-        v = json.loads(raw)
-        return v if isinstance(v, dict) else {}
+        value = json.loads(raw)
+        return value if isinstance(value, dict) else {}
     except Exception:
         return {}
 
@@ -86,8 +87,8 @@ def _safe_json_list(raw: str | None) -> List[Any]:
     if not raw:
         return []
     try:
-        v = json.loads(raw)
-        return v if isinstance(v, list) else []
+        value = json.loads(raw)
+        return value if isinstance(value, list) else []
     except Exception:
         return []
 
@@ -98,8 +99,8 @@ def _normalize_slug(slug: str) -> str:
 
 def _currency_symbol_from_menu(menu_dict: Dict[str, Any], default: str = "GBP") -> str:
     restaurant = menu_dict.get("restaurant") or {}
-    cur = str(restaurant.get("currency") or default).upper()
-    return "£" if cur == "GBP" else ""
+    currency = str(restaurant.get("currency") or default).upper()
+    return "£" if currency == "GBP" else ""
 
 
 def _llm_ready() -> bool:
@@ -114,8 +115,8 @@ def command_to_userlike_text(cmd: Dict[str, Any]) -> str:
     if intent == "show_basket":
         return "basket"
     if intent == "show_category":
-        cat = cmd.get("category") or ""
-        return str(cat).strip() or "menu"
+        category = cmd.get("category") or ""
+        return str(category).strip() or "menu"
 
     if intent == "add_item":
         name = (cmd.get("item_name") or "").strip()
@@ -137,9 +138,14 @@ def command_to_userlike_text(cmd: Dict[str, Any]) -> str:
     return ""
 
 
-async def _apply_optional_llm_rewrite(text: str, menu_dict: Dict[str, Any], state_json: str) -> str:
+async def _apply_optional_llm_rewrite(
+    text: str,
+    menu_dict: Dict[str, Any],
+    state_json: str,
+) -> str:
     if not _llm_ready():
         return text
+
     try:
         cmd = await interpret_message_llm(
             message=text,
@@ -148,8 +154,8 @@ async def _apply_optional_llm_rewrite(text: str, menu_dict: Dict[str, Any], stat
         )
         rewritten = command_to_userlike_text(cmd)
         return rewritten or text
-    except Exception as e:
-        print("[LLM] rewrite failed:", repr(e), flush=True)
+    except Exception as exc:
+        print("[LLM] rewrite failed:", repr(exc), flush=True)
         traceback.print_exc()
         return text
 
@@ -166,11 +172,16 @@ def get_restaurant_and_menu(db: Session, slug: str) -> tuple[Restaurant, Dict[st
 
     try:
         menu_dict = get_json_file(restaurant.menu_json_path)
-    except Exception as e:
-        print("[MENU LOAD ERROR]", slug, restaurant.menu_json_path, repr(e), flush=True)
+    except Exception as exc:
+        print("[MENU LOAD ERROR]", slug, restaurant.menu_json_path, repr(exc), flush=True)
         raise HTTPException(status_code=404, detail="Menu could not be loaded")
 
     return restaurant, menu_dict
+
+
+def _ensure_template_exists(path: Path) -> None:
+    if not path.exists():
+        raise HTTPException(status_code=500, detail=f"Missing frontend file: {path}")
 
 
 # ---------- Auth dependencies ----------
@@ -179,10 +190,10 @@ def require_user_id(authorization: str | None = Header(default=None)) -> int:
         raise HTTPException(status_code=401, detail="Missing Bearer token")
 
     token = authorization.split(" ", 1)[1].strip()
-    uid = decode_token(token)
-    if not uid:
+    user_id = decode_token(token)
+    if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
-    return uid
+    return user_id
 
 
 def require_user_id_or_guest(
@@ -195,16 +206,16 @@ def require_user_id_or_guest(
     # 1) Prefer authenticated API token if present
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()
-        uid = decode_token(token)
-        if uid:
-            return uid
+        user_id = decode_token(token)
+        if user_id:
+            return user_id
 
     # 2) Then try normal website session cookie
     session_email = get_session_email(request)
     if session_email:
-        u = db.query(User).filter(User.email == session_email).first()
-        if u:
-            return u.id
+        user = db.query(User).filter(User.email == session_email).first()
+        if user:
+            return user.id
 
     # 3) Otherwise fall back to guest cookie
     if not guest_id:
@@ -212,17 +223,17 @@ def require_user_id_or_guest(
 
     guest_email = f"guest+{guest_id}@demo.local"
 
-    u = db.query(User).filter(User.email == guest_email).first()
-    if not u:
-        u = User(
+    user = db.query(User).filter(User.email == guest_email).first()
+    if not user:
+        user = User(
             name="Guest",
             email=guest_email,
             phone=None,
             password_hash=hash_password(uuid4().hex),
         )
-        db.add(u)
+        db.add(user)
         db.commit()
-        db.refresh(u)
+        db.refresh(user)
 
     response.set_cookie(
         key="guest_id",
@@ -232,7 +243,7 @@ def require_user_id_or_guest(
         max_age=60 * 60 * 24 * 30,
     )
 
-    return u.id
+    return user.id
 
 
 def require_staff(authorization: str | None = Header(default=None)) -> Dict[str, Any]:
@@ -244,11 +255,11 @@ def require_staff(authorization: str | None = Header(default=None)) -> Dict[str,
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid staff token")
 
-    rs = payload.get("restaurant_slug")
-    if not isinstance(rs, str) or not rs.strip():
+    restaurant_slug = payload.get("restaurant_slug")
+    if not isinstance(restaurant_slug, str) or not restaurant_slug.strip():
         raise HTTPException(status_code=401, detail="Staff token missing restaurant")
 
-    payload["restaurant_slug"] = _normalize_slug(rs)
+    payload["restaurant_slug"] = _normalize_slug(restaurant_slug)
     return payload
 
 
@@ -280,23 +291,23 @@ def get_or_create_draft(db: Session, user_id: int) -> Order:
 
 
 def _ensure_order_scoped_to_restaurant(order: Order, slug: str) -> None:
-    curr_slug = _normalize_slug(slug)
-    order.restaurant_slug = curr_slug
+    current_slug = _normalize_slug(slug)
+    order.restaurant_slug = current_slug
 
     state = _safe_json_dict(order.state_json)
-    prev_slug = _normalize_slug(str(state.get("restaurant_slug") or ""))
+    previous_slug = _normalize_slug(str(state.get("restaurant_slug") or ""))
 
-    if prev_slug and prev_slug != curr_slug:
+    if previous_slug and previous_slug != current_slug:
         order.items_json = "[]"
         state = {}
 
-    state["restaurant_slug"] = curr_slug
+    state["restaurant_slug"] = current_slug
     order.state_json = json.dumps(state)
 
 
 def _is_guest_email(email: str | None) -> bool:
-    e = (email or "").strip().lower()
-    return e.endswith("@demo.local") and e.startswith("guest+")
+    value = (email or "").strip().lower()
+    return value.endswith("@demo.local") and value.startswith("guest+")
 
 
 # ---------- "Me" endpoints ----------
@@ -318,17 +329,17 @@ def me_for_restaurant(
 ):
     slug = _normalize_slug(slug)
 
-    u = db.query(User).filter(User.id == user_id).first()
-    if not u:
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    is_guest = _is_guest_email(u.email)
+    is_guest = _is_guest_email(user.email)
 
     return {
-        "user_id": u.id,
+        "user_id": user.id,
         "is_guest": is_guest,
-        "name": (u.name or None),
-        "email": (None if is_guest else (u.email or None)),
+        "name": (user.name or None),
+        "email": (None if is_guest else (user.email or None)),
         "restaurant_slug": slug,
     }
 
@@ -350,14 +361,14 @@ def set_name_for_restaurant(
     if len(name) < 2:
         raise HTTPException(status_code=400, detail="Name too short")
 
-    u = db.query(User).filter(User.id == user_id).first()
-    if not u:
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    u.name = name
-    db.add(u)
+    user.name = name
+    db.add(user)
     db.commit()
-    return {"ok": True, "name": u.name}
+    return {"ok": True, "name": user.name}
 
 
 # ---------- Pages / menus ----------
@@ -369,6 +380,8 @@ def restaurant_chat(
 ):
     slug = _normalize_slug(slug)
     restaurant, menu_data = get_restaurant_and_menu(db, slug)
+
+    _ensure_template_exists(CHAT_HTML_PATH)
 
     response = templates.TemplateResponse(
         "chat.html",
@@ -406,28 +419,61 @@ def restaurant_menu(slug: str, db: Session = Depends(get_db)):
 
 
 @router.get("/r/{slug}/basket", response_class=HTMLResponse)
-def basket_page(slug: str, db: Session = Depends(get_db)):
+def basket_page(
+    slug: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
     slug = _normalize_slug(slug)
-    _restaurant, _menu = get_restaurant_and_menu(db, slug)
-    if not BASKET_HTML_PATH.exists():
-        raise HTTPException(status_code=500, detail=f"Missing frontend file: {BASKET_HTML_PATH}")
-    return BASKET_HTML_PATH.read_text(encoding="utf-8")
+    restaurant, menu_data = get_restaurant_and_menu(db, slug)
+
+    _ensure_template_exists(BASKET_HTML_PATH)
+
+    return templates.TemplateResponse(
+        "basket.html",
+        {
+            "request": request,
+            "restaurant": restaurant,
+            "restaurant_slug": slug,
+            "menu_data": menu_data,
+        },
+    )
 
 
 @router.get("/r/{slug}/staff", response_class=HTMLResponse)
-def staff_page(slug: str, db: Session = Depends(get_db)):
+def staff_page(
+    slug: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
     slug = _normalize_slug(slug)
-    _restaurant, _menu = get_restaurant_and_menu(db, slug)
-    if not STAFF_HTML_PATH.exists():
-        raise HTTPException(status_code=500, detail=f"Missing frontend file: {STAFF_HTML_PATH}")
-    return STAFF_HTML_PATH.read_text(encoding="utf-8")
+    restaurant, menu_data = get_restaurant_and_menu(db, slug)
+
+    _ensure_template_exists(STAFF_HTML_PATH)
+
+    return templates.TemplateResponse(
+        "staff.html",
+        {
+            "request": request,
+            "restaurant": restaurant,
+            "restaurant_slug": slug,
+            "menu_data": menu_data,
+        },
+    )
 
 
 @router.get("/staff/login", response_class=HTMLResponse)
-def staff_login_page():
-    if not STAFF_LOGIN_HTML_PATH.exists():
-        raise HTTPException(status_code=500, detail=f"Missing frontend file: {STAFF_LOGIN_HTML_PATH}")
-    return STAFF_LOGIN_HTML_PATH.read_text(encoding="utf-8")
+def staff_login_page(request: Request):
+    _ensure_template_exists(STAFF_LOGIN_HTML_PATH)
+
+    return templates.TemplateResponse(
+        "staff_login.html",
+        {
+            "request": request,
+            "next": request.query_params.get("next", ""),
+            "error": request.query_params.get("error", ""),
+        },
+    )
 
 
 # ---------- Staff auth ----------
@@ -437,25 +483,54 @@ async def staff_login(
     db: Session = Depends(get_db),
     email: Optional[str] = Form(default=None),
     password: Optional[str] = Form(default=None),
+    next: Optional[str] = Form(default=""),
 ):
     if email is None and password is None:
         try:
             payload = await request.json()
             email = str(payload.get("email") or "").strip()
             password = str(payload.get("password") or "")
+            next = str(payload.get("next") or "")
         except Exception:
             email = ""
             password = ""
+            next = ""
 
     email = (email or "").strip()
     password = password or ""
+    next = (next or "").strip()
 
-    s = db.query(StaffUser).filter(StaffUser.email == email).first()
-    if not s or not verify_password(password, s.password_hash):
-        raise HTTPException(status_code=401, detail="Bad credentials")
+    staff_user = db.query(StaffUser).filter(StaffUser.email == email).first()
+    if not staff_user or not verify_password(password, staff_user.password_hash):
+        login_url = "/staff/login?error=bad_login"
+        if next:
+            login_url += f"&next={next}"
+        return RedirectResponse(url=login_url, status_code=302)
 
-    token = create_staff_token({"staff_id": s.id, "restaurant_slug": _normalize_slug(s.restaurant_slug)})
-    return {"token": token, "restaurant_slug": _normalize_slug(s.restaurant_slug)}
+    staff_token = create_staff_token(
+        {
+            "staff_id": staff_user.id,
+            "restaurant_slug": _normalize_slug(staff_user.restaurant_slug),
+        }
+    )
+
+    # Browser form submit: redirect into dashboard
+    if request.headers.get("content-type", "").startswith("application/x-www-form-urlencoded") or request.headers.get(
+        "content-type", ""
+    ).startswith("multipart/form-data"):
+        redirect_url = next or f"/r/{_normalize_slug(staff_user.restaurant_slug)}/staff"
+        response = RedirectResponse(url=redirect_url, status_code=302)
+        response.set_cookie(
+            key="staff_token",
+            value=staff_token,
+            httponly=True,
+            samesite="lax",
+            max_age=60 * 60 * 24 * 7,
+        )
+        return response
+
+    # API / JS submit: return JSON
+    return {"token": staff_token, "restaurant_slug": _normalize_slug(staff_user.restaurant_slug)}
 
 
 # ---------- Staff API ----------
@@ -481,13 +556,13 @@ def staff_orders(
 
     return [
         {
-            "id": o.id,
-            "name": o.customer_name,
-            "phone": o.customer_phone,
-            "summary": o.summary_text,
-            "status": (o.kitchen_status or "new"),
+            "id": order.id,
+            "name": order.customer_name,
+            "phone": order.customer_phone,
+            "summary": order.summary_text,
+            "status": (order.kitchen_status or "new"),
         }
-        for o in orders
+        for order in orders
     ]
 
 
@@ -528,7 +603,7 @@ async def chat_for_restaurant(
     user_id: int = Depends(require_user_id_or_guest),
     db: Session = Depends(get_db),
 ):
-    msg = str(payload.get("message") or "")
+    message = str(payload.get("message") or "")
     slug = _normalize_slug(slug)
 
     _restaurant, menu_dict = get_restaurant_and_menu(db, slug)
@@ -536,7 +611,7 @@ async def chat_for_restaurant(
     order = get_or_create_draft(db, user_id)
     _ensure_order_scoped_to_restaurant(order, slug)
 
-    if is_order_status_query(msg):
+    if is_order_status_query(message):
         if (order.status or "").lower() != "confirmed":
             return {
                 "reply": "You haven’t placed an order yet. Type “checkout” when you’re ready 🙂",
@@ -548,7 +623,7 @@ async def chat_for_restaurant(
             }
 
         status = (order.kitchen_status or "new").strip().lower()
-        nice = {
+        nice_status = {
             "new": "New (not started yet)",
             "accepted": "Accepted ✅",
             "preparing": "Preparing 🍳",
@@ -557,7 +632,7 @@ async def chat_for_restaurant(
         }.get(status, status)
 
         return {
-            "reply": f"Order status: {nice}",
+            "reply": f"Order status: {nice_status}",
             "order_id": order.id,
             "summary": order.summary_text,
             "items": _safe_json_list(order.items_json),
@@ -565,7 +640,7 @@ async def chat_for_restaurant(
             "kitchen_status": status,
         }
 
-    text = await _apply_optional_llm_rewrite(msg, menu_dict, order.state_json)
+    text = await _apply_optional_llm_rewrite(message, menu_dict, order.state_json)
 
     reply, updated_items_json, updated_state_json = handle_message(
         message=text,
