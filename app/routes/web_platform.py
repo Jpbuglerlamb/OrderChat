@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-
+from app.routes.auth_platform import set_session_cookie
 from app.db import get_db
 from app.models import User, Restaurant
 from app.security.auth import hash_password
@@ -226,10 +226,12 @@ async def business_signup_submit(
     db.add(restaurant)
     db.commit()
 
-    return RedirectResponse(
+    response = RedirectResponse(
         url=f"/business/onboarding-complete?slug={slug}",
         status_code=303,
     )
+    set_session_cookie(response, email)
+    return response
 
 
 # --------------------------------
