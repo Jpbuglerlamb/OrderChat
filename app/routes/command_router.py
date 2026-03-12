@@ -184,6 +184,46 @@ def _ensure_template_exists(path: Path) -> None:
         raise HTTPException(status_code=500, detail=f"Missing frontend file: {path}")
 
 
+def get_owner_user_for_request(
+    request: Request,
+    db: Session,
+) -> User | None:
+    session_email = get_session_email(request)
+    if not session_email:
+        return None
+
+    return db.query(User).filter(User.email == session_email).first()
+
+
+def _staff_payload_from_cookie(request: Request) -> Dict[str, Any] | None:
+    staff_token = (request.cookies.get("staff_token") or "").strip()
+    if not staff_token:
+        return None
+
+    payload = decode_staff_token(staff_token)
+    if not payload:
+        return None
+
+    restaurant_slug = payload.get("restaurant_slug")
+    if not isinstance(restaurant_slug, str) or not restaurant_slug.strip():
+        return None
+
+    payload["restaurant_slug"] = _normalize_slug(restaurant_slug)
+    return payload
+
+
+def _owner_can_access_restaurant(request: Request, db: Session, restaurant: Restaurant) -> bool:
+    owner_user = get_owner_user_for_request(request, db)
+    return bool(owner_user and restaurant.owner_user_id == owner_user.id)
+
+
+def _staff_can_access_restaurant(request: Request, slug: str) -> bool:
+    payload = _staff_payload_from_cookie(request)
+    if not payload:
+        return False
+    return payload.get("restaurant_slug") == _normalize_slug(slug)
+
+
 # ---------- Auth dependencies ----------
 def require_user_id(authorization: str | None = Header(default=None)) -> int:
     if not authorization or not authorization.lower().startswith("bearer "):
@@ -451,26 +491,59 @@ def staff_page(
 
     _ensure_template_exists(STAFF_HTML_PATH)
 
-    return templates.TemplateResponse(
-        "staff.html",
-        {
-            "request": request,
-            "restaurant": restaurant,
-            "restaurant_slug": slug,
-            "menu_data": menu_data,
-        },
-    )
+    # Owner can enter directly with normal platform session
+    if _owner_can_access_restaurant(request, db, restaurant):
+        return templates.TemplateResponse(
+            "staff.html",
+            {
+                "request": request,
+                "restaurant": restaurant,
+                "restaurant_slug": slug,
+                "menu_data": menu_data,
+                "access_mode": "owner",
+            },
+        )
+
+    # Staff can enter with staff_token cookie
+    if _staff_can_access_restaurant(request, slug):
+        return templates.TemplateResponse(
+            "staff.html",
+            {
+                "request": request,
+                "restaurant": restaurant,
+                "restaurant_slug": slug,
+                "menu_data": menu_data,
+                "access_mode": "staff",
+            },
+        )
+
+    return RedirectResponse(url=f"/staff/login?next=/r/{slug}/staff", status_code=302)
 
 
 @router.get("/staff/login", response_class=HTMLResponse)
-def staff_login_page(request: Request):
+def staff_login_page(
+    request: Request,
+    db: Session = Depends(get_db),
+):
     _ensure_template_exists(STAFF_LOGIN_HTML_PATH)
+
+    next_url = (request.query_params.get("next") or "").strip()
+
+    # If already signed in as owner, skip this page
+    owner_user = get_owner_user_for_request(request, db)
+    if owner_user and next_url.startswith("/r/") and next_url.endswith("/staff"):
+        parts = next_url.strip("/").split("/")
+        if len(parts) >= 3 and parts[0] == "r" and parts[2] == "staff":
+            slug = _normalize_slug(parts[1])
+            restaurant = db.query(Restaurant).filter(Restaurant.slug == slug).first()
+            if restaurant and restaurant.owner_user_id == owner_user.id:
+                return RedirectResponse(url=next_url, status_code=302)
 
     return templates.TemplateResponse(
         "staff_login.html",
         {
             "request": request,
-            "next": request.query_params.get("next", ""),
+            "next": next_url,
             "error": request.query_params.get("error", ""),
         },
     )
@@ -514,10 +587,9 @@ async def staff_login(
         }
     )
 
-    # Browser form submit: redirect into dashboard
-    if request.headers.get("content-type", "").startswith("application/x-www-form-urlencoded") or request.headers.get(
-        "content-type", ""
-    ).startswith("multipart/form-data"):
+    content_type = request.headers.get("content-type", "")
+
+    if content_type.startswith("application/x-www-form-urlencoded") or content_type.startswith("multipart/form-data"):
         redirect_url = next or f"/r/{_normalize_slug(staff_user.restaurant_slug)}/staff"
         response = RedirectResponse(url=redirect_url, status_code=302)
         response.set_cookie(
@@ -529,7 +601,6 @@ async def staff_login(
         )
         return response
 
-    # API / JS submit: return JSON
     return {"token": staff_token, "restaurant_slug": _normalize_slug(staff_user.restaurant_slug)}
 
 
@@ -537,12 +608,13 @@ async def staff_login(
 @router.get("/r/{slug}/staff/orders")
 def staff_orders(
     slug: str,
+    request: Request,
     db: Session = Depends(get_db),
-    staff: Dict[str, Any] = Depends(require_staff),
 ):
     slug = _normalize_slug(slug)
+    restaurant, _menu = get_restaurant_and_menu(db, slug)
 
-    if staff.get("restaurant_slug") != slug:
+    if not _owner_can_access_restaurant(request, db, restaurant) and not _staff_can_access_restaurant(request, slug):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     orders = (
@@ -571,12 +643,13 @@ def update_order_status(
     slug: str,
     order_id: int,
     data: dict,
+    request: Request,
     db: Session = Depends(get_db),
-    staff: Dict[str, Any] = Depends(require_staff),
 ):
     slug = _normalize_slug(slug)
+    restaurant, _menu = get_restaurant_and_menu(db, slug)
 
-    if staff.get("restaurant_slug") != slug:
+    if not _owner_can_access_restaurant(request, db, restaurant) and not _staff_can_access_restaurant(request, slug):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     order = db.query(Order).filter(Order.id == order_id, Order.restaurant_slug == slug).first()
