@@ -794,14 +794,23 @@ async def chat_for_restaurant(
     order.summary_text = summary
     order.updated_at = datetime.utcnow()
 
-    if state.get("order_submitted"):
+    reply_lower = (reply or "").strip().lower()
+    order_submitted = bool(state.get("order_submitted"))
+
+    looks_confirmed = (
+            "order placed" in reply_lower
+            or "order confirmed" in reply_lower
+            or "thanks for your order" in reply_lower
+    )
+
+    if order_submitted or looks_confirmed:
         order.status = "confirmed"
-        order.kitchen_status = "new"
+        order.kitchen_status = order.kitchen_status or "new"
         order.restaurant_slug = slug
 
-        order.customer_name = str(state.get("customer_name") or "")
-        order.customer_email = str(state.get("customer_email") or "")
-        order.customer_phone = str(state.get("customer_phone") or "")
+        order.customer_name = str(state.get("customer_name") or order.customer_name or "")
+        order.customer_email = str(state.get("customer_email") or order.customer_email or "")
+        order.customer_phone = str(state.get("customer_phone") or order.customer_phone or "")
 
         state.pop("order_submitted", None)
         order.state_json = json.dumps(state)
