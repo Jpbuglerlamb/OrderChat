@@ -199,7 +199,7 @@ def get_owner_user_for_request(
     if not session_email:
         return None
 
-    return db.query(User).filter(User.email == session_email).first()
+    return db.query(User).filter(func.lower(User.email) == session_email.lower()).first()
 
 
 def _staff_payload_from_cookie(request: Request) -> Dict[str, Any] | None:
@@ -396,6 +396,15 @@ def clear_customer_session_cookie(response: Response) -> None:
     response.delete_cookie(
         key=CUSTOMER_COOKIE_NAME,
         path="/",
+    )
+def get_latest_confirmed_order(db: Session, user_id: int, slug: str) -> Order | None:
+    return (
+        db.query(Order)
+        .filter(Order.user_id == user_id)
+        .filter(Order.restaurant_slug == _normalize_slug(slug))
+        .filter(Order.status == "confirmed")
+        .order_by(Order.id.desc())
+        .first()
     )
 
 # ---------- "Me" endpoints ----------
@@ -735,7 +744,9 @@ async def chat_for_restaurant(
     _ensure_order_scoped_to_restaurant(order, slug)
 
     if is_order_status_query(message):
-        if (order.status or "").lower() != "confirmed":
+        confirmed_order = get_latest_confirmed_order(db, user_id, slug)
+
+        if not confirmed_order:
             return {
                 "reply": "You haven’t placed an order yet. Type “checkout” when you’re ready 🙂",
                 "order_id": order.id,
@@ -745,7 +756,7 @@ async def chat_for_restaurant(
                 "kitchen_status": None,
             }
 
-        status = (order.kitchen_status or "new").strip().lower()
+        status = (confirmed_order.kitchen_status or "new").strip().lower()
         nice_status = {
             "new": "New (not started yet)",
             "accepted": "Accepted ✅",
@@ -756,9 +767,9 @@ async def chat_for_restaurant(
 
         return {
             "reply": f"Order status: {nice_status}",
-            "order_id": order.id,
-            "summary": order.summary_text,
-            "items": _safe_json_list(order.items_json),
+            "order_id": confirmed_order.id,
+            "summary": confirmed_order.summary_text,
+            "items": _safe_json_list(confirmed_order.items_json),
             "restaurant_slug": slug,
             "kitchen_status": status,
         }
