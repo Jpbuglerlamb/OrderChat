@@ -1,3 +1,4 @@
+#app/routes/command_router.py
 from __future__ import annotations
 
 import json
@@ -504,7 +505,7 @@ def staff_page(
             },
         )
 
-    # Staff can enter with staff_token cookie
+    # Optional: keep separate staff-token access for later
     if _staff_can_access_restaurant(request, slug):
         return templates.TemplateResponse(
             "staff.html",
@@ -517,7 +518,8 @@ def staff_page(
             },
         )
 
-    return RedirectResponse(url=f"/staff/login?next=/r/{slug}/staff", status_code=302)
+    # For now, business user = dashboard user
+    return RedirectResponse(url=f"/business/login?next=/r/{slug}/staff", status_code=302)
 
 
 @router.get("/staff/login", response_class=HTMLResponse)
@@ -593,11 +595,12 @@ async def staff_login(
         redirect_url = next or f"/r/{_normalize_slug(staff_user.restaurant_slug)}/staff"
         response = RedirectResponse(url=redirect_url, status_code=302)
         response.set_cookie(
-            key="staff_token",
-            value=staff_token,
+            key="guest_id",
+            value=guest_id,
             httponly=True,
             samesite="lax",
-            max_age=60 * 60 * 24 * 7,
+            max_age=60 * 60 * 24 * 30,
+            path="/",
         )
         return response
 

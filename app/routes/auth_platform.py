@@ -1,13 +1,17 @@
+#app/routes/auth_platform.py
 from __future__ import annotations
 
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Depends, Form, Request, Response
+from fastapi.responses import RedirectResponse
 from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.db import get_db
 from app.models import User
 from app.security.auth import hash_password, verify_password
 
@@ -16,7 +20,6 @@ router = APIRouter(tags=["auth-platform"])
 COOKIE_NAME = os.getenv("WEB_SESSION_COOKIE", "jpai_session")
 COOKIE_TTL_DAYS = int(os.getenv("WEB_SESSION_TTL_DAYS", "14"))
 
-# IMPORTANT: set WEB_SESSION_SECRET in Render
 SECRET = os.getenv("WEB_SESSION_SECRET", "dev-session-secret-change-me")
 serializer = URLSafeSerializer(SECRET, salt="jpai-web-session")
 
@@ -37,13 +40,11 @@ def _unsign_email(token: str) -> Optional[str]:
 
 
 def _cookie_secure() -> bool:
-    """
-    Render is HTTPS, localhost often isn't.
-    Control via env:
-      WEB_SESSION_SECURE=1  -> Secure cookies
-      WEB_SESSION_SECURE=0  -> Non-secure cookies (default)
-    """
     return os.getenv("WEB_SESSION_SECURE", "0").strip() == "1"
+
+
+def _cookie_expires() -> datetime:
+    return datetime.now(timezone.utc) + timedelta(days=COOKIE_TTL_DAYS)
 
 
 def set_session_cookie(resp: Response, email: str) -> None:
@@ -55,11 +56,16 @@ def set_session_cookie(resp: Response, email: str) -> None:
         samesite="lax",
         secure=_cookie_secure(),
         max_age=60 * 60 * 24 * COOKIE_TTL_DAYS,
+        expires=_cookie_expires(),
+        path="/",
     )
 
 
 def clear_session_cookie(resp: Response) -> None:
-    resp.delete_cookie(COOKIE_NAME)
+    resp.delete_cookie(
+        key=COOKIE_NAME,
+        path="/",
+    )
 
 
 def get_session_email(request: Request) -> Optional[str]:
@@ -67,6 +73,13 @@ def get_session_email(request: Request) -> Optional[str]:
     if not token:
         return None
     return _unsign_email(token)
+
+
+def get_current_platform_user(request: Request, db: Session) -> Optional[User]:
+    email = get_session_email(request)
+    if not email:
+        return None
+    return db.query(User).filter(func.lower(User.email) == email).first()
 
 
 def create_user(
@@ -104,7 +117,30 @@ def verify_user(db: Session, email: str, password: str) -> bool:
     return verify_password(password, u.password_hash)
 
 
+@router.post("/auth/login")
+def login(
+    response: Response,
+    email: str = Form(...),
+    password: str = Form(...),
+    next: str = Form("/business"),
+    db: Session = Depends(get_db),
+):
+    email_norm = email.strip().lower()
+    user = db.query(User).filter(func.lower(User.email) == email_norm).first()
+
+    if not user or not verify_password(password, user.password_hash):
+        login_url = "/business/login?error=bad_login"
+        if next:
+            login_url += f"&next={next}"
+        return RedirectResponse(url=login_url, status_code=302)
+
+    redirect = RedirectResponse(url=next or "/business", status_code=302)
+    set_session_cookie(redirect, user.email)
+    return redirect
+
+
 @router.post("/auth/logout")
-def logout(response: Response):
+def logout():
+    response = RedirectResponse(url="/business", status_code=302)
     clear_session_cookie(response)
-    return {"ok": True}
+    return response

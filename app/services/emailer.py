@@ -1,4 +1,4 @@
-# app/emailer.py
+# app/services/emailer.py
 from __future__ import annotations
 
 import json

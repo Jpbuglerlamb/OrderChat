@@ -19,6 +19,7 @@ from app.db import Base, engine
 from app import models  # noqa: F401
 
 # Routers
+from app.routes.auth_platform import router as auth_platform_router
 from app.routes.web_platform import router as web_platform_router
 from app.routes.cart_api import router as cart_router
 from app.routes.command_router import router as command_router
@@ -40,6 +41,7 @@ def create_app() -> FastAPI:
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     # ---------- Routers ----------
+    app.include_router(auth_platform_router)
     app.include_router(web_platform_router)
     app.include_router(cart_router)
     app.include_router(command_router)

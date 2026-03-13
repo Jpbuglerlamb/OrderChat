@@ -1,3 +1,4 @@
+#app/routes/web_platform.py
 from pathlib import Path
 import json
 import os
@@ -353,6 +354,20 @@ def onboarding_complete(
         },
     )
 
+@router.get("/business/login", response_class=HTMLResponse)
+def business_login_page(
+    request: Request,
+    next: str = "/business",
+    error: str = "",
+):
+    return templates.TemplateResponse(
+        "business_login.html",
+        {
+            "request": request,
+            "next": next,
+            "error": error,
+        },
+    )
 
 # --------------------------------
 # Debug
