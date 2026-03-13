@@ -358,6 +358,8 @@ def looks_like_category(line: str) -> bool:
     if len(line) > 40:
         return False
 
+    ll = line.lower().strip()
+
     known = {
         "wraps",
         "kebabs",
@@ -365,8 +367,6 @@ def looks_like_category(line: str) -> bool:
         "sides",
         "drinks",
         "starters",
-        "pizzas",
-        "calzones",
         "soups",
         "mains",
         "rice",
@@ -385,15 +385,21 @@ def looks_like_category(line: str) -> bool:
         "set meals",
     }
 
-    ll = line.lower().strip()
-
     if ll in known:
         return True
 
-    if line.isupper() or line.istitle():
+    # strong heading patterns only
+    if re.fullmatch(r"[A-Za-z& ]+\s+dishes", line, flags=re.I):
         return True
 
-    if re.fullmatch(r"[A-Za-z& ]+\s+dishes", line, flags=re.I):
+    if re.fullmatch(r"[A-Za-z& ]+\s+specials?", line, flags=re.I):
+        return True
+
+    if re.fullmatch(r"set meals?", line, flags=re.I):
+        return True
+
+    # allow uppercase headings, but not generic title-case item names
+    if line.isupper():
         return True
 
     return False
@@ -429,6 +435,9 @@ def option_name_to_key(option_name: str) -> str:
 
     return slugify(option_name)
 
+def is_price_only_line(line: str) -> bool:
+    s = clean_text(line).replace(" ", "")
+    return bool(re.fullmatch(r"£?\d+(?:\.\d{1,2})?", s))
 
 # ----------------------------
 # PARSERS
@@ -577,13 +586,16 @@ def parse_csv_menu(rows: list[dict[str, str]]) -> tuple[list[dict[str, Any]], li
 
 
 def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str]]:
-    lines = [line.strip() for line in text.splitlines()]
+    lines = [clean_text(line) for line in text.splitlines()]
     lines = [line for line in lines if line]
 
     categories: list[dict[str, Any]] = []
     warnings: list[str] = []
     current_category: dict[str, Any] | None = None
     last_item: dict[str, Any] | None = None
+
+    # holds a likely item name waiting for a price on the next line
+    pending_item_name: str | None = None
 
     def ensure_category(name: str = "Menu") -> dict[str, Any]:
         nonlocal current_category
@@ -596,12 +608,15 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
         if is_ignorable_menu_line(line):
             continue
 
+        # 1) category headings
         if looks_like_category(line):
             current_category = {"name": line.title(), "items": []}
             categories.append(current_category)
             last_item = None
+            pending_item_name = None
             continue
 
+        # 2) option hints attached to previous item
         option_match = OPTION_HINT_RE.match(line)
         if option_match and last_item is not None:
             option_name = option_match.group(1).lower().strip()
@@ -612,6 +627,7 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
             last_item["options"][normalized_key] = option_values
             continue
 
+        # 3) extras attached to previous item
         extra_match = EXTRA_LINE_RE.match(line)
         if extra_match and last_item is not None:
             last_item.setdefault("extras", [])
@@ -623,6 +639,7 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
             )
             continue
 
+        # 4) normal one-line item with price
         item_match = ITEM_WITH_PRICE_RE.match(line)
         if item_match:
             category = ensure_category()
@@ -632,6 +649,7 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
             if not item_name or is_ignorable_menu_line(item_name):
                 warnings.append(f"Ignored header-like item line: {line}")
                 last_item = None
+                pending_item_name = None
                 continue
 
             last_item = {
@@ -641,8 +659,10 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
                 "extras": [],
             }
             category["items"].append(last_item)
+            pending_item_name = None
             continue
 
+        # 5) size upgrade line attached to previous item
         size_match = SIZE_UPGRADE_RE.match(line)
         if size_match and last_item is not None:
             size_name = size_match.group(1).title()
@@ -656,10 +676,26 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
             last_item["options"]["size"] = existing_sizes
             continue
 
-        if PRICE_RE.fullmatch(line.replace("£", "").strip()) and last_item is None and categories:
+        # 6) two-line item support:
+        # if current line is just a price and we have a pending item name, attach it
+        if is_price_only_line(line):
+            if pending_item_name:
+                category = ensure_category()
+                last_item = {
+                    "name": pending_item_name,
+                    "base_price": parse_price(line),
+                    "options": {},
+                    "extras": [],
+                }
+                category["items"].append(last_item)
+                pending_item_name = None
+                continue
+
+            # no pending name, but previous item exists: ignore as stray
             warnings.append(f"Standalone price line could not be attached: {line}")
             continue
 
+        # 7) if line contains a price anywhere, try loose parse
         price_match = PRICE_RE.search(line)
         if price_match:
             category = ensure_category()
@@ -674,10 +710,18 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
                     "extras": [],
                 }
                 category["items"].append(last_item)
+                pending_item_name = None
             else:
                 warnings.append(f"Could not determine usable item name from line: {line}")
             continue
 
+        # 8) likely item-name-only line, wait for next line to be a price
+        # but only if it is not obviously junk
+        if not looks_like_category(line) and not is_ignorable_menu_line(line):
+            pending_item_name = clean_item_name(line)
+            continue
+
+        # 9) fallback warnings
         if last_item is not None:
             warnings.append(f"Unattached line after item '{last_item['name']}': {line}")
         else:
