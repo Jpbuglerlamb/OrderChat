@@ -38,7 +38,8 @@ from app.security.auth import (
     verify_password,
 )
 from app.services.storage import get_json_file
-
+from itsdangerous import BadSignature, URLSafeSerializer
+import os
 try:
     from app.ai_intent import interpret_message_llm
 except Exception:
@@ -57,6 +58,11 @@ CHAT_HTML_PATH = TEMPLATES_DIR / "chat.html"
 BASKET_HTML_PATH = TEMPLATES_DIR / "basket.html"
 STAFF_HTML_PATH = TEMPLATES_DIR / "staff.html"
 STAFF_LOGIN_HTML_PATH = TEMPLATES_DIR / "staff_login.html"
+CUSTOMER_COOKIE_NAME = os.getenv("CUSTOMER_SESSION_COOKIE", "jpai_customer_session")
+CUSTOMER_COOKIE_TTL_DAYS = int(os.getenv("CUSTOMER_SESSION_TTL_DAYS", "30"))
+
+CUSTOMER_SECRET = os.getenv("CUSTOMER_SESSION_SECRET", "dev-customer-secret-change-me")
+customer_serializer = URLSafeSerializer(CUSTOMER_SECRET, salt="jpai-customer-session")
 
 # ---------- Helpers ----------
 _STATUS_Q_RE = re.compile(
@@ -244,21 +250,21 @@ def require_user_id_or_guest(
     authorization: str | None = Header(default=None),
     guest_id: str | None = Cookie(default=None, alias="guest_id"),
 ) -> int:
-    # 1) Prefer authenticated API token if present
+    # 1) API bearer token
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()
         user_id = decode_token(token)
         if user_id:
             return user_id
 
-    # 2) Then try normal website session cookie
-    session_email = get_session_email(request)
-    if session_email:
-        user = db.query(User).filter(User.email == session_email).first()
+    # 2) Customer session cookie only
+    customer_email = get_customer_session_email(request)
+    if customer_email:
+        user = db.query(User).filter(User.email == customer_email).first()
         if user:
             return user.id
 
-    # 3) Otherwise fall back to guest cookie
+    # 3) Guest fallback
     if not guest_id:
         guest_id = uuid4().hex
 
@@ -351,6 +357,46 @@ def _is_guest_email(email: str | None) -> bool:
     value = (email or "").strip().lower()
     return value.endswith("@demo.local") and value.startswith("guest+")
 
+def sign_customer_email(email: str) -> str:
+    return customer_serializer.dumps({"email": email.strip().lower()})
+
+
+def unsign_customer_email(token: str) -> str | None:
+    try:
+        data = customer_serializer.loads(token)
+        email = (data.get("email") or "").strip().lower()
+        return email or None
+    except BadSignature:
+        return None
+    except Exception:
+        return None
+
+
+def get_customer_session_email(request: Request) -> str | None:
+    token = request.cookies.get(CUSTOMER_COOKIE_NAME)
+    if not token:
+        return None
+    return unsign_customer_email(token)
+
+
+def set_customer_session_cookie(response: Response, email: str) -> None:
+    token = sign_customer_email(email)
+    response.set_cookie(
+        key=CUSTOMER_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        samesite="lax",
+        secure=os.getenv("WEB_SESSION_SECURE", "0").strip() == "1",
+        max_age=60 * 60 * 24 * CUSTOMER_COOKIE_TTL_DAYS,
+        path="/",
+    )
+
+
+def clear_customer_session_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=CUSTOMER_COOKIE_NAME,
+        path="/",
+    )
 
 # ---------- "Me" endpoints ----------
 class MeOut(BaseModel):
