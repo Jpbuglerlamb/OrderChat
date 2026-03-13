@@ -17,7 +17,7 @@ from app.services.menu_ingest import ingest_menu_file_to_dataset
 from app.services.qr_service import build_restaurant_public_url, generate_qr_png_bytes
 from app.services.storage import upload_file_bytes, generate_download_url
 from app.ordering.menu_store import clear_menu_cache
-
+from app.services.storage import get_json_file
 router = APIRouter()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -384,3 +384,26 @@ def debug_restaurants(db: Session = Depends(get_db)):
         }
         for r in rows
     ]
+
+@router.get("/debug/restaurant-menu/{slug}")
+def debug_restaurant_menu(slug: str, db: Session = Depends(get_db)):
+    restaurant = db.query(Restaurant).filter(Restaurant.slug == slug).first()
+    if not restaurant:
+        return {"ok": False, "error": "Restaurant not found"}
+
+    if not restaurant.menu_json_path:
+        return {"ok": False, "error": "Restaurant has no menu_json_path"}
+
+    try:
+        data = get_json_file(restaurant.menu_json_path)
+    except Exception as e:
+        return {"ok": False, "error": f"Failed to load menu JSON: {str(e)}"}
+
+    return {
+        "ok": True,
+        "slug": slug,
+        "menu_json_path": restaurant.menu_json_path,
+        "category_names": [c.get("name") for c in data.get("categories", [])],
+        "item_names": [i.get("name") for i in data.get("items", [])[:20]],
+        "raw": data,
+    }
