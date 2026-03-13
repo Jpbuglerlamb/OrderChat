@@ -1,18 +1,124 @@
 {% extends "base.html" %}
 
 {% block content %}
+
+<!-- HERO -->
 <section class="hero">
-  <div class="card">
-    <h1>JP AI Takeaway Platform</h1>
+  <div class="card hero-card">
+
+    <h1>AI Ordering for Restaurants</h1>
+
     <p class="subtitle">
-      Order food with AI or manage your takeaway through one platform.
+      Customers scan a QR code, chat naturally to order food, and orders appear instantly in your kitchen dashboard.
     </p>
 
     <div class="button-row">
-      <a href="/customer" class="btn btn-primary">I’m a Customer</a>
-      <a href="/business" class="btn btn-secondary">I’m a Business</a>
+      <a href="/customer" class="btn btn-primary">Try Ordering</a>
+      <a href="/business/signup" class="btn btn-secondary">Create Restaurant</a>
     </div>
 
   </div>
 </section>
+
+
+<!-- STEP 1 -->
+<section class="feature-section">
+  <div class="feature-container">
+
+    <div class="feature-text">
+      <h2>Customers order with chat</h2>
+      <p>
+        Customers simply type what they want. The AI understands the menu and adds items automatically.
+      </p>
+    </div>
+
+    <div class="feature-image">
+      <img src="/static/images/chat-demo1.jpg">
+    </div>
+
+  </div>
+</section>
+
+
+<!-- STEP 2 -->
+<section class="feature-section alt">
+  <div class="feature-container">
+
+    <div class="feature-image">
+      <img src="/static/images/chat-demo2.jpg">
+    </div>
+
+    <div class="feature-text">
+      <h2>The AI builds the order</h2>
+      <p>
+        The system recognises items from your menu, calculates totals, and confirms the order with the customer.
+      </p>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- STEP 3 -->
+<section class="feature-section">
+  <div class="feature-container">
+
+    <div class="feature-text">
+      <h2>Customers scan your QR code</h2>
+      <p>
+        Place your QR code in the restaurant or takeaway window. Customers scan it and start ordering instantly.
+      </p>
+    </div>
+
+    <div class="feature-image">
+      <img src="/static/images/QRcode.png">
+    </div>
+
+  </div>
+</section>
+
+
+<!-- STEP 4 -->
+<section class="feature-section alt">
+  <div class="feature-container">
+
+    <div class="feature-image">
+      <img src="/static/images/Dashboard.png">
+    </div>
+
+    <div class="feature-text">
+      <h2>Orders arrive in your kitchen</h2>
+      <p>
+        Every order appears instantly in the staff dashboard so your team can prepare it quickly.
+      </p>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- VALUE SECTION -->
+<section class="pricing-section">
+
+  <div class="card pricing-card">
+
+    <h2>Own your ordering system</h2>
+
+    <p class="subtitle">
+      Food delivery apps take up to <strong>30% commission</strong> on every order.
+    </p>
+
+    <p class="subtitle highlight">
+      With JP AI you pay a one-time setup of <strong>£200</strong> and keep your profits.
+    </p>
+
+    <div class="button-row">
+      <a href="/business/signup" class="btn btn-primary">Create your restaurant</a>
+      <a href="/customer" class="btn btn-secondary">See demo</a>
+    </div>
+
+  </div>
+
+</section>
+
 {% endblock %}
