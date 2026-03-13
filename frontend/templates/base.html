@@ -15,9 +15,18 @@
         <a href="/">Home</a>
         <a href="/customer">Customer</a>
         <a href="/business">Business</a>
-        <a href="/staff">Dashboard</a>
-        <a href="/login">Log in</a>
-        <a href="/signup">Sign up</a>
+
+        {% if current_user %}
+          <a href="{{ dashboard_url or '/business' }}" class="nav-dashboard">Dashboard</a>
+          <span class="nav-user">Signed in as {{ current_user.name or current_user.email }}</span>
+
+          <form method="post" action="/auth/logout" style="display:inline;">
+            <button type="submit" class="nav-link-button">Log out</button>
+          </form>
+        {% else %}
+          <a href="/business/login">Log in</a>
+          <a href="/business/signup">Sign up</a>
+        {% endif %}
       </nav>
     </header>
 

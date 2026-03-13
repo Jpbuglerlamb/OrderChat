@@ -1,4 +1,3 @@
-#app/routes/web_platform.py
 from pathlib import Path
 import json
 import os
@@ -10,15 +9,15 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from app.routes.auth_platform import set_session_cookie
+from app.routes.auth_platform import set_session_cookie, get_current_platform_user
 from app.db import get_db
 from app.models import User, Restaurant
 from app.security.auth import hash_password
 from app.services.menu_ingest import ingest_menu_file_to_dataset
 from app.services.qr_service import build_restaurant_public_url, generate_qr_png_bytes
-from app.services.storage import upload_file_bytes, generate_download_url
+from app.services.storage import upload_file_bytes, generate_download_url, get_json_file
 from app.ordering.menu_store import clear_menu_cache
-from app.services.storage import get_json_file
+
 router = APIRouter()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -49,6 +48,21 @@ def build_s3_menu_key(slug: str, filename: str) -> str:
     return f"restaurants/{slug}/uploads/{uuid4()}_{safe_name}"
 
 
+def build_dashboard_url_for_user(db: Session, current_user: User | None) -> str:
+    if not current_user:
+        return "/business"
+
+    restaurant = (
+        db.query(Restaurant)
+        .filter(Restaurant.owner_user_id == current_user.id)
+        .order_by(Restaurant.id.desc())
+        .first()
+    )
+    if restaurant:
+        return f"/r/{restaurant.slug}/staff"
+    return "/business"
+
+
 def render_signup_error(
     request: Request,
     plan: str,
@@ -61,6 +75,8 @@ def render_signup_error(
             "request": request,
             "error": message,
             "plan": plan,
+            "current_user": None,
+            "dashboard_url": "/business",
         },
         status_code=status_code,
     )
@@ -86,18 +102,48 @@ def validate_menu_dataset(menu_dataset: dict) -> list[str]:
 # --------------------------------
 
 @router.get("/", response_class=HTMLResponse)
-def home(request: Request):
-    return templates.TemplateResponse("home.html", {"request": request})
+def home(request: Request, db: Session = Depends(get_db)):
+    current_user = get_current_platform_user(request, db)
+    dashboard_url = build_dashboard_url_for_user(db, current_user)
+
+    return templates.TemplateResponse(
+        "home.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "dashboard_url": dashboard_url,
+        },
+    )
 
 
 @router.get("/customer", response_class=HTMLResponse)
-def customer_page(request: Request):
-    return templates.TemplateResponse("customer_home.html", {"request": request})
+def customer_page(request: Request, db: Session = Depends(get_db)):
+    current_user = get_current_platform_user(request, db)
+    dashboard_url = build_dashboard_url_for_user(db, current_user)
+
+    return templates.TemplateResponse(
+        "customer_home.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "dashboard_url": dashboard_url,
+        },
+    )
 
 
 @router.get("/business", response_class=HTMLResponse)
-def business_page(request: Request):
-    return templates.TemplateResponse("business_home.html", {"request": request})
+def business_page(request: Request, db: Session = Depends(get_db)):
+    current_user = get_current_platform_user(request, db)
+    dashboard_url = build_dashboard_url_for_user(db, current_user)
+
+    return templates.TemplateResponse(
+        "business_home.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "dashboard_url": dashboard_url,
+        },
+    )
 
 
 # --------------------------------
@@ -105,10 +151,17 @@ def business_page(request: Request):
 # --------------------------------
 
 @router.get("/business/pricing", response_class=HTMLResponse)
-def business_pricing_page(request: Request):
+def business_pricing_page(request: Request, db: Session = Depends(get_db)):
+    current_user = get_current_platform_user(request, db)
+    dashboard_url = build_dashboard_url_for_user(db, current_user)
+
     return templates.TemplateResponse(
         "business_pricing.html",
-        {"request": request},
+        {
+            "request": request,
+            "current_user": current_user,
+            "dashboard_url": dashboard_url,
+        },
     )
 
 
@@ -117,13 +170,18 @@ def business_pricing_page(request: Request):
 # --------------------------------
 
 @router.get("/business/signup", response_class=HTMLResponse)
-def business_signup_page(request: Request, plan: str = ""):
+def business_signup_page(request: Request, plan: str = "", db: Session = Depends(get_db)):
+    current_user = get_current_platform_user(request, db)
+    dashboard_url = build_dashboard_url_for_user(db, current_user)
+
     return templates.TemplateResponse(
         "business_signup.html",
         {
             "request": request,
             "error": None,
             "plan": plan,
+            "current_user": current_user,
+            "dashboard_url": dashboard_url,
         },
     )
 
@@ -335,6 +393,9 @@ def onboarding_complete(
     slug: str = "",
     db: Session = Depends(get_db),
 ):
+    current_user = get_current_platform_user(request, db)
+    dashboard_url = build_dashboard_url_for_user(db, current_user)
+
     restaurant = db.query(Restaurant).filter(Restaurant.slug == slug).first()
 
     qr_download_url = None
@@ -351,23 +412,33 @@ def onboarding_complete(
             "slug": slug,
             "restaurant": restaurant,
             "qr_download_url": qr_download_url,
+            "current_user": current_user,
+            "dashboard_url": dashboard_url,
         },
     )
+
 
 @router.get("/business/login", response_class=HTMLResponse)
 def business_login_page(
     request: Request,
     next: str = "/business",
     error: str = "",
+    db: Session = Depends(get_db),
 ):
+    current_user = get_current_platform_user(request, db)
+    dashboard_url = build_dashboard_url_for_user(db, current_user)
+
     return templates.TemplateResponse(
         "business_login.html",
         {
             "request": request,
             "next": next,
             "error": error,
+            "current_user": current_user,
+            "dashboard_url": dashboard_url,
         },
     )
+
 
 # --------------------------------
 # Debug
@@ -399,6 +470,7 @@ def debug_restaurants(db: Session = Depends(get_db)):
         }
         for r in rows
     ]
+
 
 @router.get("/debug/restaurant-menu/{slug}")
 def debug_restaurant_menu(slug: str, db: Session = Depends(get_db)):
