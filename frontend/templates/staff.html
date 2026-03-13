@@ -24,24 +24,26 @@
     </div>
 
     <p class="muted" id="ordersCountText" style="margin-top:8px;">
-      Loading orders…
+      Loading orders...
     </p>
 
-    <div id="ordersMount" class="pricing-grid" style="grid-template-columns:1fr; margin-top:20px;"></div>
+    <div id="ordersMount" style="display:grid; grid-template-columns:1fr; gap:18px; margin-top:20px;"></div>
   </div>
 </section>
 
 <script>
-  const slug = {{ restaurant_slug|tojson }};
+  const slug = "{{ restaurant_slug|tojson }}";
   const ordersMount = document.getElementById("ordersMount");
   const ordersCountText = document.getElementById("ordersCountText");
   const refreshBtn = document.getElementById("refreshBtn");
 
   function escapeHtml(text) {
     return String(text || "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;");
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   }
 
   function prettyStatus(status) {
@@ -51,17 +53,17 @@
     if (s === "preparing") return "Preparing";
     if (s === "ready") return "Ready";
     if (s === "completed") return "Completed";
-    return s;
+    return s.charAt(0).toUpperCase() + s.slice(1);
   }
 
   async function apiStaffOrders() {
     const res = await fetch(`/r/${slug}/staff/orders`, {
       method: "GET",
-      credentials: "same-origin"
+      credentials: "same-origin",
     });
 
     if (res.status === 401 || res.status === 403) {
-      window.location.href = `/staff/login?next=/r/${slug}/staff`;
+      window.location.href = `/business/login?next=/r/${slug}/staff`;
       return [];
     }
 
@@ -71,7 +73,7 @@
       throw new Error(data.detail || "Failed to load staff orders");
     }
 
-    return data;
+    return Array.isArray(data) ? data : [];
   }
 
   async function apiUpdateStatus(orderId, status) {
@@ -79,13 +81,13 @@
       method: "POST",
       credentials: "same-origin",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify({ status })
+      body: JSON.stringify({ status }),
     });
 
     if (res.status === 401 || res.status === 403) {
-      window.location.href = `/staff/login?next=/r/${slug}/staff`;
+      window.location.href = `/business/login?next=/r/${slug}/staff`;
       return null;
     }
 
@@ -109,7 +111,7 @@
   }
 
   function renderOrders(orders) {
-    if (!Array.isArray(orders) || orders.length === 0) {
+    if (!orders.length) {
       renderEmpty();
       return;
     }
@@ -122,7 +124,7 @@
       const summary = String(o.summary || "").trim();
 
       return `
-        <article class="pricing-plan ${status === "new" ? "featured" : ""}" data-order-id="${o.id}">
+        <article class="pricing-plan ${status === "new" ? "featured" : ""}" data-order-id="${escapeHtml(o.id)}">
           <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:flex-start;">
             <div>
               <h2 style="margin-bottom:8px;">${escapeHtml(o.name || "Customer")}</h2>
@@ -132,7 +134,7 @@
             <span class="plan-tag">${escapeHtml(prettyStatus(status))}</span>
           </div>
 
-          <div class="summaryBox" style="margin-top:16px; white-space:pre-wrap; line-height:1.5;">
+          <div style="margin-top:16px; white-space:pre-wrap; line-height:1.5;">
 ${escapeHtml(summary || "No summary available.")}
           </div>
 
@@ -154,8 +156,8 @@ ${escapeHtml(summary || "No summary available.")}
     document.querySelectorAll(".updateBtn").forEach((btn) => {
       btn.addEventListener("click", async (e) => {
         const card = e.currentTarget.closest("[data-order-id]");
-        const orderId = card?.getAttribute("data-order-id");
-        const select = card?.querySelector(".statusSelect");
+        const orderId = card ? card.getAttribute("data-order-id") : null;
+        const select = card ? card.querySelector(".statusSelect") : null;
 
         if (!orderId || !select) return;
 
@@ -186,7 +188,7 @@ ${escapeHtml(summary || "No summary available.")}
     } catch (err) {
       ordersMount.innerHTML = `
         <div class="pricing-plan">
-          <h2>Couldn’t load orders</h2>
+          <h2>Couldn't load orders</h2>
           <p class="muted">${escapeHtml(err.message || "Something went wrong.")}</p>
         </div>
       `;
@@ -198,7 +200,6 @@ ${escapeHtml(summary || "No summary available.")}
   }
 
   refreshBtn.addEventListener("click", loadOrders);
-
   loadOrders();
 </script>
 {% endblock %}
