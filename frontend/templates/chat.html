@@ -173,6 +173,7 @@
       overflow-y:auto;
       -webkit-overflow-scrolling:touch;
       padding:0 0 calc(18px + var(--kb));
+      scroll-behavior:smooth;
     }
 
     .welcome{
@@ -248,6 +249,15 @@
       font-size:14px;
       cursor:pointer;
       user-select:none;
+      transition:transform .08s ease, background .2s ease, opacity .15s ease;
+    }
+
+    .pillBtn:hover{
+      background:rgba(255,255,255,.08);
+    }
+
+    .pillBtn:active{
+      transform:scale(.98);
     }
 
     .pillBtn.primary{
@@ -255,6 +265,11 @@
       background:linear-gradient(135deg, var(--primaryA), var(--primaryB), var(--primaryC));
       color:#fff;
       box-shadow:0 8px 24px rgba(79,140,255,.22);
+    }
+
+    .pillBtn:disabled{
+      opacity:.6;
+      cursor:not-allowed;
     }
 
     .nameInput{
@@ -270,6 +285,11 @@
 
     .nameInput::placeholder{
       color:rgba(232,238,255,.46);
+    }
+
+    .nameInput:focus{
+      border-color:rgba(123,97,255,.55);
+      box-shadow:0 0 0 3px rgba(123,97,255,.14);
     }
 
     .row{
@@ -299,6 +319,7 @@
     }
 
     .bubble.user{
+      margin-left:auto;
       background:linear-gradient(135deg, #111827, #0b1220);
       color:var(--userText);
       border-top-right-radius:10px;
@@ -498,6 +519,8 @@
     const btnText = document.querySelector(".btnText");
     const restaurantLine = document.getElementById("restaurantLine");
     const welcomeMount = document.getElementById("welcomeMount");
+    const menuBtn = document.getElementById("menuBtn");
+    const basketBtn = document.getElementById("basketBtn");
 
     restaurantLine.textContent = `Restaurant: ${slug}`;
 
@@ -510,8 +533,26 @@
       return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     }
 
-    function scrollToBottom() {
-      chatEl.scrollTop = chatEl.scrollHeight;
+    function isNearBottom() {
+      return chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 140;
+    }
+
+    function scrollToBottom(force = false) {
+      if (!chatEl) return;
+      if (!force && !isNearBottom()) return;
+
+      const run = () => {
+        chatEl.scrollTo({
+          top: chatEl.scrollHeight,
+          behavior: "smooth"
+        });
+      };
+
+      requestAnimationFrame(() => {
+        run();
+        setTimeout(run, 60);
+        setTimeout(run, 180);
+      });
     }
 
     function isRealName(name) {
@@ -555,7 +596,7 @@
       ensureIntroRow();
       document.getElementById("introBubble").textContent = greetingText(profile);
       document.getElementById("introMeta").textContent = nowTime();
-      scrollToBottom();
+      scrollToBottom(true);
     }
 
     function addMsg(text, who) {
@@ -577,7 +618,8 @@
       stack.appendChild(meta);
       row.appendChild(stack);
       chatEl.appendChild(row);
-      scrollToBottom();
+
+      scrollToBottom(true);
     }
 
     function renderSummary(summary) {
@@ -610,7 +652,7 @@
 
       summaryRow.querySelector(".summaryBubble").textContent = cleaned;
       summaryRow.querySelector(".meta").textContent = "Updated " + nowTime();
-      scrollToBottom();
+      scrollToBottom(true);
     }
 
     function isGreeting(s) {
@@ -722,7 +764,7 @@
         }
 
         try {
-          saveBtn.textContent = "Saving…";
+          saveBtn.textContent = "Saving...";
           saveBtn.disabled = true;
 
           const out = await apiSaveName(n);
@@ -751,13 +793,17 @@
         loginBtn.className = "pillBtn";
         loginBtn.type = "button";
         loginBtn.textContent = "Log in";
-        loginBtn.onclick = () => location.href = "/auth/login";
+        loginBtn.onclick = () => {
+          location.href = `/customer?login=1&next=${encodeURIComponent(location.pathname)}`;
+        };
 
         const signupBtn = document.createElement("button");
         signupBtn.className = "pillBtn";
         signupBtn.type = "button";
         signupBtn.textContent = "Sign up";
-        signupBtn.onclick = () => location.href = "/auth/signup";
+        signupBtn.onclick = () => {
+          location.href = `/customer?signup=1&next=${encodeURIComponent(location.pathname)}`;
+        };
 
         row.appendChild(loginBtn);
         row.appendChild(signupBtn);
@@ -769,6 +815,8 @@
 
       welcomeMount.innerHTML = "";
       welcomeMount.appendChild(card);
+
+      scrollToBottom(true);
     }
 
     async function sendMessage(raw) {
@@ -777,10 +825,12 @@
 
       inputEl.value = "";
       addMsg(text, "user");
+      scrollToBottom(true);
 
       if (isGreeting(text)) {
         addMsg("Hey. You can ask for the menu, browse a category, or type an item like “coke + spring rolls”.", "bot");
         inputEl.focus();
+        scrollToBottom(true);
         return;
       }
 
@@ -795,12 +845,12 @@
       } finally {
         setSending(false);
         inputEl.focus();
-        scrollToBottom();
+        scrollToBottom(true);
       }
     }
 
-    document.getElementById("menuBtn").addEventListener("click", () => sendMessage("menu"));
-    document.getElementById("basketBtn").addEventListener("click", () => {
+    menuBtn.addEventListener("click", () => sendMessage("menu"));
+    basketBtn.addEventListener("click", () => {
       window.location.href = `/r/${slug}/basket`;
     });
 
@@ -816,6 +866,7 @@
     }
 
     sendBtn.addEventListener("click", () => sendMessage());
+
     inputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
@@ -830,11 +881,16 @@
         const vv = window.visualViewport;
         if (!vv) {
           root.style.setProperty("--kb", "0px");
+          scrollToBottom(true);
           return;
         }
+
         const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
         root.style.setProperty("--kb", kb + "px");
-        scrollToBottom();
+
+        requestAnimationFrame(() => {
+          scrollToBottom(true);
+        });
       }
 
       if (window.visualViewport) {
@@ -859,7 +915,10 @@
         console.warn("Profile fetch failed, using guest fallback:", e);
       }
 
-      inputEl.focus();
+      requestAnimationFrame(() => {
+        scrollToBottom(true);
+        inputEl.focus();
+      });
     })();
   </script>
 </body>
