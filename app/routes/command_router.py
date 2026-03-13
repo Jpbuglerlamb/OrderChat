@@ -22,8 +22,8 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from sqlalchemy import or_
-from sqlalchemy.orm import Session, func
+from sqlalchemy import or_, func
+from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import Order, Restaurant, StaffUser, User
