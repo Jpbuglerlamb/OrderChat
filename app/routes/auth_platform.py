@@ -20,6 +20,7 @@ router = APIRouter(tags=["auth-platform"])
 COOKIE_NAME = os.getenv("WEB_SESSION_COOKIE", "jpai_session")
 COOKIE_TTL_DAYS = int(os.getenv("WEB_SESSION_TTL_DAYS", "14"))
 
+# IMPORTANT: set WEB_SESSION_SECRET in production
 SECRET = os.getenv("WEB_SESSION_SECRET", "dev-session-secret-change-me")
 serializer = URLSafeSerializer(SECRET, salt="jpai-web-session")
 
@@ -79,7 +80,7 @@ def get_current_platform_user(request: Request, db: Session) -> Optional[User]:
     email = get_session_email(request)
     if not email:
         return None
-    return db.query(User).filter(func.lower(User.email) == email).first()
+    return db.query(User).filter(func.lower(User.email) == email.lower()).first()
 
 
 def create_user(
@@ -119,7 +120,6 @@ def verify_user(db: Session, email: str, password: str) -> bool:
 
 @router.post("/auth/login")
 def login(
-    response: Response,
     email: str = Form(...),
     password: str = Form(...),
     next: str = Form("/business"),

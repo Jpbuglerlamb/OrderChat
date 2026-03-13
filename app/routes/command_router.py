@@ -99,8 +99,8 @@ def _normalize_slug(slug: str) -> str:
 
 
 def _currency_symbol_from_menu(menu_dict: Dict[str, Any], default: str = "GBP") -> str:
-    restaurant = menu_dict.get("restaurant") or {}
-    currency = str(restaurant.get("currency") or default).upper()
+    meta = menu_dict.get("meta") or {}
+    currency = str(meta.get("currency") or default).upper()
     return "£" if currency == "GBP" else ""
 
 
@@ -282,6 +282,7 @@ def require_user_id_or_guest(
         httponly=True,
         samesite="lax",
         max_age=60 * 60 * 24 * 30,
+        path="/",
     )
 
     return user.id
@@ -440,6 +441,7 @@ def restaurant_chat(
         max_age=60 * 60 * 24 * 30,
         httponly=True,
         samesite="lax",
+        path="/",
     )
 
     return response
@@ -492,7 +494,7 @@ def staff_page(
 
     _ensure_template_exists(STAFF_HTML_PATH)
 
-    # Owner can enter directly with normal platform session
+    # Business owner can enter directly with normal platform session
     if _owner_can_access_restaurant(request, db, restaurant):
         return templates.TemplateResponse(
             "staff.html",
@@ -505,7 +507,7 @@ def staff_page(
             },
         )
 
-    # Optional: keep separate staff-token access for later
+    # Optional: separate staff accounts kept for later use
     if _staff_can_access_restaurant(request, slug):
         return templates.TemplateResponse(
             "staff.html",
@@ -518,7 +520,6 @@ def staff_page(
             },
         )
 
-    # For now, business user = dashboard user
     return RedirectResponse(url=f"/business/login?next=/r/{slug}/staff", status_code=302)
 
 
@@ -595,11 +596,11 @@ async def staff_login(
         redirect_url = next or f"/r/{_normalize_slug(staff_user.restaurant_slug)}/staff"
         response = RedirectResponse(url=redirect_url, status_code=302)
         response.set_cookie(
-            key="guest_id",
-            value=guest_id,
+            key="staff_token",
+            value=staff_token,
             httponly=True,
             samesite="lax",
-            max_age=60 * 60 * 24 * 30,
+            max_age=60 * 60 * 24 * 7,
             path="/",
         )
         return response
