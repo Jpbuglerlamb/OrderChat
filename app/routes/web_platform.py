@@ -464,6 +464,50 @@ def business_login_page(
         },
     )
 
+@router.get("/business/qr", response_class=HTMLResponse)
+def business_qr_page(request: Request, db: Session = Depends(get_db)):
+    current_user = get_current_platform_user(request, db)
+    dashboard_url = build_dashboard_url_for_user(db, current_user)
+
+    if not current_user:
+        return RedirectResponse(url="/business/login?next=/business/qr", status_code=302)
+
+    restaurant = (
+        db.query(Restaurant)
+        .filter(Restaurant.owner_user_id == current_user.id)
+        .order_by(Restaurant.id.desc())
+        .first()
+    )
+
+    if not restaurant:
+        return RedirectResponse(url="/business/signup", status_code=302)
+
+    qr_download_url = None
+    if restaurant.qr_code_path:
+        try:
+            qr_download_url = generate_download_url(restaurant.qr_code_path)
+        except Exception:
+            qr_download_url = None
+
+    public_base_url = os.getenv("PUBLIC_BASE_URL", "").strip()
+    public_order_url = None
+    if public_base_url:
+        try:
+            public_order_url = build_restaurant_public_url(public_base_url, restaurant.slug)
+        except Exception:
+            public_order_url = None
+
+    return templates.TemplateResponse(
+        "business_qr.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "dashboard_url": dashboard_url,
+            "restaurant": restaurant,
+            "qr_download_url": qr_download_url,
+            "public_order_url": public_order_url,
+        },
+    )
 
 # --------------------------------
 # Debug
