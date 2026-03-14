@@ -6,23 +6,41 @@
     <h1>Business Registered</h1>
     <p class="subtitle">Your restaurant has been saved successfully.</p>
 
-    <p><strong>Restaurant slug:</strong> {{ slug }}</p>
+    <p class="muted" style="margin-top:8px; line-height:1.6;">
+      Your ordering page is live at<br>
+      <strong>/r/{{ slug }}</strong>
+    </p>
 
     {% if qr_download_url %}
-      <div style="margin: 24px 0;">
-        <p style="margin-bottom: 12px;"><strong>Your QR code is ready</strong></p>
+      <div style="margin:32px 0; display:flex; flex-direction:column; align-items:center; gap:18px;">
+        <p style="margin:0;"><strong>Your QR code is ready</strong></p>
 
-        <img
-          src="{{ qr_download_url }}"
-          alt="Restaurant QR code"
-          style="max-width: 260px; width: 100%; border-radius: 16px; background: white; padding: 12px;"
-        >
+        <div style="
+          background:white;
+          padding:18px;
+          border-radius:20px;
+          box-shadow:0 8px 24px rgba(0,0,0,0.15);
+          display:inline-flex;
+          justify-content:center;
+          align-items:center;
+        ">
+          <img
+            src="{{ qr_download_url }}"
+            alt="Restaurant QR code"
+            style="
+              width:220px;
+              height:220px;
+              object-fit:contain;
+              display:block;
+            "
+          >
+        </div>
 
-        <p class="muted" style="margin-top: 14px;">
+        <p class="muted" style="max-width:420px; margin:0;">
           Download this QR code, print it, and place it where customers can scan it to start ordering.
         </p>
 
-        <div class="button-row" style="justify-content:center; margin-top: 18px;">
+        <div class="button-row" style="justify-content:center; margin-top:4px;">
           <a href="{{ qr_download_url }}" class="btn btn-primary" download>
             Download QR Code
           </a>
@@ -32,12 +50,12 @@
         </div>
       </div>
     {% else %}
-      <p class="muted" style="margin-top: 18px;">
+      <p class="muted" style="margin-top:24px;">
         QR code not available yet.
       </p>
     {% endif %}
 
-    <div class="button-row" style="justify-content:center; margin-top: 20px;">
+    <div class="button-row" style="justify-content:center; margin-top:24px;">
       <a href="/r/{{ slug }}/staff" class="btn btn-primary">
         Open Dashboard
       </a>
