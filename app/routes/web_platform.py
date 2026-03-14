@@ -150,6 +150,28 @@ def business_page(request: Request, db: Session = Depends(get_db)):
         },
     )
 
+@router.get("/privacy", response_class=HTMLResponse)
+def privacy_page(request: Request):
+    return templates.TemplateResponse(
+        "privacy.html",
+        {"request": request},
+    )
+
+
+@router.get("/terms", response_class=HTMLResponse)
+def terms_page(request: Request):
+    return templates.TemplateResponse(
+        "terms.html",
+        {"request": request},
+    )
+
+
+@router.get("/feedback", response_class=HTMLResponse)
+def feedback_page(request: Request):
+    return templates.TemplateResponse(
+        "feedback.html",
+        {"request": request},
+    )
 
 # --------------------------------
 # Pricing Page

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero narrow">
+  <div class="card">
+
+    <h1>Feedback</h1>
+
+    <p class="subtitle">
+      Help us improve JP AI. Your feedback is valuable.
+    </p>
+
+    <form method="post" action="/feedback">
+      <label>Email (optional)</label>
+      <input type="email" name="email">
+
+      <label>Your feedback</label>
+      <textarea name="message" rows="6" required></textarea>
+
+      <div class="button-row">
+        <button type="submit" class="btn btn-primary">Send Feedback</button>
+      </div>
+    </form>
+
+  </div>
+</section>
+{% endblock %}
