@@ -20,7 +20,7 @@
           <a href="{{ dashboard_url or '/business' }}" class="nav-dashboard">Dashboard</a>
           <span class="nav-user">Signed in as {{ current_user.name or current_user.email }}</span>
 
-          <form method="post" action="/auth/logout" style="display:inline;">
+          <form method="post" action="/business/auth/logout" style="display:inline;">
             <button type="submit" class="nav-link-button">Log out</button>
           </form>
         {% else %}
