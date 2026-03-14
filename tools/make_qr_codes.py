@@ -6,7 +6,7 @@ from pathlib import Path
 from app.services.qr_service import build_restaurant_public_url, generate_qr_png_bytes
 
 # Change this to your current base URL
-BASE_URL = "https://orderchat-eidt.onrender.com"
+BASE_URL = "https://jpaiplatform.com"
 
 # Your menus live here
 MENUS_DIR = Path(__file__).resolve().parents[1] / "data"

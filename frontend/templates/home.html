@@ -2,6 +2,50 @@
 
 {% block content %}
 
+{% if current_user %}
+
+<!-- SIGNED-IN HERO -->
+<section class="hero">
+  <div class="card hero-card">
+
+    <h1>Welcome back {{ current_user.name or current_user.email }}</h1>
+
+    <p class="subtitle">
+      Your restaurant workspace is ready. Open your dashboard, manage incoming orders, and access your QR setup.
+    </p>
+
+    <div class="button-row">
+      <a href="{{ dashboard_url or '/business' }}" class="btn btn-primary">Open Dashboard</a>
+      <a href="/business" class="btn btn-secondary">View QR Code</a>
+    </div>
+
+    <p class="muted" style="margin-top:14px;">
+      Manage orders • Access your QR code • Keep service moving
+    </p>
+
+  </div>
+</section>
+
+<!-- SIGNED-IN SUPPORT SECTION -->
+<section class="pricing-section">
+  <div class="card pricing-card">
+
+    <h2>Your ordering system is live</h2>
+
+    <p class="subtitle">
+      Customers can scan your QR code, place orders through chat, and send them straight to your kitchen dashboard.
+    </p>
+
+    <div class="button-row">
+      <a href="{{ dashboard_url or '/business' }}" class="btn btn-primary">Open Dashboard</a>
+      <a href="/business" class="btn btn-secondary">View QR Code</a>
+    </div>
+
+  </div>
+</section>
+
+{% else %}
+
 <!-- HERO -->
 <section class="hero">
   <div class="card hero-card">
@@ -139,5 +183,7 @@
     </div>
   </div>
 </section>
+
+{% endif %}
 
 {% endblock %}
