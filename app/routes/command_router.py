@@ -549,6 +549,9 @@ def staff_page(
 
     _ensure_template_exists(STAFF_HTML_PATH)
 
+    owner_user = get_owner_user_for_request(request, db)
+    dashboard_url = f"/r/{slug}/staff"
+
     # Business owner can enter directly with normal platform session
     if _owner_can_access_restaurant(request, db, restaurant):
         return templates.TemplateResponse(
@@ -559,6 +562,8 @@ def staff_page(
                 "restaurant_slug": slug,
                 "menu_data": menu_data,
                 "access_mode": "owner",
+                "current_user": owner_user,
+                "dashboard_url": dashboard_url,
             },
         )
 
@@ -572,6 +577,8 @@ def staff_page(
                 "restaurant_slug": slug,
                 "menu_data": menu_data,
                 "access_mode": "staff",
+                "current_user": owner_user,
+                "dashboard_url": dashboard_url,
             },
         )
 
