@@ -347,6 +347,8 @@ async def business_menu_submit(request: Request, db: Session = Depends(get_db)):
                 "dashboard_url": dashboard_url,
                 "restaurant": restaurant,
                 "menu_data": None,
+                "items_by_category": {},
+                "categories": [],
                 "error": f"Could not load menu: {str(e)}",
                 "success": None,
             },
@@ -354,8 +356,142 @@ async def business_menu_submit(request: Request, db: Session = Depends(get_db)):
         )
 
     form = await request.form()
+    action = str(form.get("action") or "save").strip().lower()
+
+    categories = menu_data.get("categories") or []
     items = menu_data.get("items") or []
 
+    def build_items_by_category(menu_dict: dict):
+        categories_local = menu_dict.get("categories") or []
+        items_local = menu_dict.get("items") or []
+
+        category_map = {}
+        for c in categories_local:
+            cid = str(c.get("id") or c.get("name") or "").strip()
+            cname = str(c.get("name") or cid or "Uncategorised").strip()
+            if cid:
+                category_map[cid] = cname
+                category_map[cname] = cname
+
+        grouped = {}
+        for item in items_local:
+            category_key = str(item.get("category") or item.get("category_id") or "").strip()
+            category_name = category_map.get(category_key) or category_key or "Uncategorised"
+
+            if "available" not in item:
+                item["available"] = True
+
+            grouped.setdefault(category_name, []).append(item)
+
+        return grouped
+
+    def render_with(message_success=None, message_error=None, status_code=200):
+        return templates.TemplateResponse(
+            "business_menu.html",
+            {
+                "request": request,
+                "current_user": current_user,
+                "dashboard_url": dashboard_url,
+                "restaurant": restaurant,
+                "menu_data": menu_data,
+                "items_by_category": build_items_by_category(menu_data),
+                "categories": menu_data.get("categories") or [],
+                "error": message_error,
+                "success": message_success,
+            },
+            status_code=status_code,
+        )
+
+    if action == "add_category":
+        new_category_name = str(form.get("new_category_name") or "").strip()
+        if not new_category_name:
+            return render_with(message_error="Please enter a category name.", status_code=400)
+
+        existing_names = {
+            str(c.get("name") or "").strip().lower()
+            for c in categories
+        }
+
+        if new_category_name.lower() in existing_names:
+            return render_with(message_error="That category already exists.", status_code=400)
+
+        new_category_id = slugify(new_category_name)
+
+        existing_ids = {
+            str(c.get("id") or "").strip().lower()
+            for c in categories
+        }
+
+        base_id = new_category_id
+        counter = 2
+        while new_category_id.lower() in existing_ids:
+            new_category_id = f"{base_id}-{counter}"
+            counter += 1
+
+        categories.append({
+            "id": new_category_id,
+            "name": new_category_name,
+        })
+        menu_data["categories"] = categories
+
+        try:
+            save_json_file(restaurant.menu_json_path, menu_data)
+            clear_menu_cache(restaurant.slug)
+        except Exception as e:
+            return render_with(message_error=f"Could not save category: {str(e)}", status_code=500)
+
+        return render_with(message_success="Category added successfully.")
+
+    if action == "add_item":
+        category_id = str(form.get("category_id") or "").strip()
+        item_name = str(form.get("new_item_name") or "").strip()
+        item_price_raw = str(form.get("new_item_price") or "").strip()
+
+        if not category_id:
+            return render_with(message_error="Missing category.", status_code=400)
+
+        if not item_name:
+            return render_with(message_error="Please enter an item name.", status_code=400)
+
+        try:
+            item_price = round(float(item_price_raw), 2)
+        except Exception:
+            return render_with(message_error="Please enter a valid item price.", status_code=400)
+
+        category_exists = any(str(c.get("id") or "").strip() == category_id for c in categories)
+        if not category_exists:
+            return render_with(message_error="Selected category does not exist.", status_code=400)
+
+        new_item_id = slugify(item_name)
+        existing_item_ids = {
+            str(i.get("id") or "").strip().lower()
+            for i in items
+        }
+
+        base_item_id = new_item_id
+        counter = 2
+        while new_item_id.lower() in existing_item_ids:
+            new_item_id = f"{base_item_id}-{counter}"
+            counter += 1
+
+        items.append({
+            "id": new_item_id,
+            "name": item_name,
+            "base_price": item_price,
+            "category_id": category_id,
+            "available": True,
+        })
+        menu_data["items"] = items
+
+        try:
+            save_json_file(restaurant.menu_json_path, menu_data)
+            clear_menu_cache(restaurant.slug)
+        except Exception as e:
+            return render_with(message_error=f"Could not save new item: {str(e)}", status_code=500)
+
+        return render_with(message_success="Item added successfully.")
+
+    # Default action: save existing items
     updated_items = []
 
     for idx, item in enumerate(items):
@@ -387,64 +523,9 @@ async def business_menu_submit(request: Request, db: Session = Depends(get_db)):
         save_json_file(restaurant.menu_json_path, menu_data)
         clear_menu_cache(restaurant.slug)
     except Exception as e:
-        categories = menu_data.get("categories") or []
-        category_map = {}
-        for c in categories:
-            cid = str(c.get("id") or c.get("name") or "").strip()
-            cname = str(c.get("name") or cid or "Uncategorised").strip()
-            if cid:
-                category_map[cid] = cname
-                category_map[cname] = cname
+        return render_with(message_error=f"Could not save menu: {str(e)}", status_code=500)
 
-        items_by_category = {}
-        for item in updated_items:
-            category_key = str(item.get("category") or item.get("category_id") or "").strip()
-            category_name = category_map.get(category_key) or category_key or "Uncategorised"
-            items_by_category.setdefault(category_name, []).append(item)
-
-        return templates.TemplateResponse(
-            "business_menu.html",
-            {
-                "request": request,
-                "current_user": current_user,
-                "dashboard_url": dashboard_url,
-                "restaurant": restaurant,
-                "menu_data": menu_data,
-                "items_by_category": items_by_category,
-                "error": f"Could not save menu: {str(e)}",
-                "success": None,
-            },
-            status_code=500,
-        )
-
-    categories = menu_data.get("categories") or []
-    category_map = {}
-    for c in categories:
-        cid = str(c.get("id") or c.get("name") or "").strip()
-        cname = str(c.get("name") or cid or "Uncategorised").strip()
-        if cid:
-            category_map[cid] = cname
-            category_map[cname] = cname
-
-    items_by_category = {}
-    for item in updated_items:
-        category_key = str(item.get("category") or item.get("category_id") or "").strip()
-        category_name = category_map.get(category_key) or category_key or "Uncategorised"
-        items_by_category.setdefault(category_name, []).append(item)
-
-    return templates.TemplateResponse(
-        "business_menu.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "dashboard_url": dashboard_url,
-            "restaurant": restaurant,
-            "menu_data": menu_data,
-            "items_by_category": items_by_category,
-            "error": None,
-            "success": "Menu updated successfully.",
-        },
-    )
+    return render_with(message_success="Menu updated successfully.")
 
 @router.get("/privacy", response_class=HTMLResponse)
 def privacy_page(request: Request):
