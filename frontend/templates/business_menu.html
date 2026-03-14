@@ -1,225 +1,217 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="hero">
-  <div class="card" style="text-align:left;">
-    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px;">
+<section class="menu-editor-page">
+  <div class="menu-editor-wrap">
+
+    <header class="menu-editor-header">
       <div>
-        <h1 style="margin-bottom:8px;">Menu Editor</h1>
-        <p class="subtitle" style="margin:0; max-width:none;">
+        <h1 class="menu-editor-title">Menu Editor</h1>
+        <p class="menu-editor-subtitle">
           Update prices, item names, and availability for <strong>{{ restaurant.name }}</strong>.
         </p>
       </div>
 
-      <div class="button-row" style="margin-top:0;">
+      <div class="menu-editor-nav">
         <a href="{{ dashboard_url or '/business' }}" class="btn btn-secondary">Dashboard</a>
         <a href="/business/settings" class="btn btn-secondary">Settings</a>
         <a href="/business/qr" class="btn btn-secondary">View QR Code</a>
       </div>
-    </div>
+    </header>
 
     {% if success %}
-      <div class="pricing-plan" style="margin-bottom:18px; border-color:rgba(99,230,190,.35);">
-        <p style="margin:0;"><strong>{{ success }}</strong></p>
+      <div class="menu-editor-alert menu-editor-alert-success">
+        <strong>{{ success }}</strong>
       </div>
     {% endif %}
 
     {% if error %}
-      <div class="pricing-plan" style="margin-bottom:18px; border-color:rgba(255,180,180,.35);">
-        <p style="margin:0;"><strong>{{ error }}</strong></p>
+      <div class="menu-editor-alert menu-editor-alert-error">
+        <strong>{{ error }}</strong>
       </div>
     {% endif %}
 
-    <!-- Upload / Replace Menu -->
-    <section class="pricing-plan" style="margin-bottom:22px;">
-      <h2 style="margin-bottom:8px;">Upload or replace menu</h2>
-      <p class="muted" style="margin-top:0;">
-        Upload a menu file to rebuild categories and items. Your current menu is backed up before replacement.
-      </p>
+    <div class="menu-editor-sections">
 
-      <form method="post" action="/business/menu/upload" enctype="multipart/form-data">
-        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:end;">
-          <div style="flex:1; min-width:240px;">
-            <label for="menu_file"><strong>Menu file</strong></label>
-            <input
-              id="menu_file"
-              name="menu_file"
-              type="file"
-              required
-              style="display:block; width:100%; margin-top:8px;"
-            >
-          </div>
-
-          <div>
-            <button type="submit" class="btn btn-primary">Upload Menu</button>
-          </div>
+      <section class="menu-section-card">
+        <div class="menu-section-head">
+          <h2>Upload or replace menu</h2>
+          <p>Upload a menu file to rebuild categories and items. Your current menu is backed up before replacement.</p>
         </div>
-      </form>
-    </section>
 
-    <!-- Add Category -->
-    <section class="pricing-plan" style="margin-bottom:22px;">
-      <h2 style="margin-bottom:14px;">Add Category</h2>
-
-      <form method="post" action="/business/menu">
-        <input type="hidden" name="action" value="add_category">
-
-        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:end;">
-          <div style="flex:1; min-width:240px;">
-            <label for="new_category_name"><strong>Category name</strong></label>
-            <input
-              id="new_category_name"
-              name="new_category_name"
-              type="text"
-              placeholder="Example: Desserts"
-              required
-              style="width:100%; margin-top:8px;"
-            >
-          </div>
-
-          <div>
-            <button type="submit" class="btn btn-primary">Add Category</button>
-          </div>
-        </div>
-      </form>
-    </section>
-
-    <!-- Add Item -->
-    <section class="pricing-plan" style="margin-bottom:26px;">
-      <h2 style="margin-bottom:14px;">Add Item</h2>
-
-      {% if categories %}
-        <form method="post" action="/business/menu">
-          <input type="hidden" name="action" value="add_item">
-
-          <div style="display:grid; grid-template-columns:1.1fr 1.2fr .8fr auto; gap:12px; align-items:end;">
-            <div style="min-width:180px;">
-              <label for="category_id"><strong>Category</strong></label>
-              <select id="category_id" name="category_id" required style="width:100%; margin-top:8px;">
-                <option value="">Select category</option>
-                {% for category in categories %}
-                  <option value="{{ category.id }}">{{ category.name }}</option>
-                {% endfor %}
-              </select>
+        <form method="post" action="/business/menu/upload" enctype="multipart/form-data" class="menu-form">
+          <div class="menu-form-grid menu-form-grid-upload">
+            <div class="menu-field">
+              <label for="menu_file">Menu file</label>
+              <input id="menu_file" name="menu_file" type="file" required>
             </div>
 
-            <div style="min-width:220px;">
-              <label for="new_item_name"><strong>Item name</strong></label>
-              <input
-                id="new_item_name"
-                name="new_item_name"
-                type="text"
-                placeholder="Example: Chocolate Cake"
-                required
-                style="width:100%; margin-top:8px;"
-              >
-            </div>
-
-            <div style="min-width:140px;">
-              <label for="new_item_price"><strong>Price (£)</strong></label>
-              <input
-                id="new_item_price"
-                name="new_item_price"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                required
-                style="width:100%; margin-top:8px;"
-              >
-            </div>
-
-            <div>
-              <button type="submit" class="btn btn-primary">Add Item</button>
+            <div class="menu-form-action">
+              <button type="submit" class="btn btn-primary">Upload Menu</button>
             </div>
           </div>
         </form>
-      {% else %}
-        <p class="muted" style="margin:0;">
-          Add a category first before adding items.
-        </p>
-      {% endif %}
-    </section>
+      </section>
 
-    <!-- Existing Items -->
-    <section>
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
-        <h2 style="margin:0;">Current Menu</h2>
-        <p class="muted" style="margin:0;">Edit names, prices, and availability, then save everything together.</p>
-      </div>
+      <section class="menu-section-card">
+        <div class="menu-section-head">
+          <h2>Add Category</h2>
+        </div>
 
-      {% if items_by_category %}
-        <form method="post" action="/business/menu">
-          <input type="hidden" name="action" value="save">
+        <form method="post" action="/business/menu" class="menu-form">
+          <input type="hidden" name="action" value="add_category">
 
-          {% set ns = namespace(idx=0) %}
+          <div class="menu-form-grid menu-form-grid-category">
+            <div class="menu-field">
+              <label for="new_category_name">Category name</label>
+              <input
+                id="new_category_name"
+                name="new_category_name"
+                type="text"
+                placeholder="Example: Desserts"
+                required
+              >
+            </div>
 
-          {% for category_name, category_items in items_by_category.items() %}
-            <div style="margin-bottom:26px;">
-              <h3 style="margin-bottom:14px;">{{ category_name }}</h3>
+            <div class="menu-form-action">
+              <button type="submit" class="btn btn-primary">Add Category</button>
+            </div>
+          </div>
+        </form>
+      </section>
 
-              <div style="display:grid; grid-template-columns:1fr; gap:14px;">
-                {% for item in category_items %}
-                  <article class="pricing-plan">
-                    <input type="hidden" name="item_id_{{ ns.idx }}" value="{{ item.id or '' }}">
+      <section class="menu-section-card">
+        <div class="menu-section-head">
+          <h2>Add Item</h2>
+        </div>
 
-                    <div style="display:grid; grid-template-columns:1.5fr .8fr .7fr; gap:16px; align-items:end;">
-                      <div>
-                        <label for="item_name_{{ ns.idx }}"><strong>Item name</strong></label>
-                        <input
-                          id="item_name_{{ ns.idx }}"
-                          name="item_name_{{ ns.idx }}"
-                          type="text"
-                          value="{{ item.name or '' }}"
-                          style="width:100%; margin-top:8px;"
-                        >
-                      </div>
+        {% if categories %}
+          <form method="post" action="/business/menu" class="menu-form">
+            <input type="hidden" name="action" value="add_item">
 
-                      <div>
-                        <label for="item_price_{{ ns.idx }}"><strong>Price (£)</strong></label>
-                        <input
-                          id="item_price_{{ ns.idx }}"
-                          name="item_price_{{ ns.idx }}"
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value="{{ item.base_price if item.base_price is not none else 0 }}"
-                          style="width:100%; margin-top:8px;"
-                        >
-                      </div>
+            <div class="menu-form-grid menu-form-grid-add-item">
+              <div class="menu-field">
+                <label for="category_id">Category</label>
+                <select id="category_id" name="category_id" required>
+                  <option value="">Select category</option>
+                  {% for category in categories %}
+                    <option value="{{ category.id }}">{{ category.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
 
-                      <div>
-                        <label style="display:flex; align-items:center; gap:10px; margin-top:30px;">
-                          <input
-                            type="checkbox"
-                            name="item_available_{{ ns.idx }}"
-                            {% if item.available %}checked{% endif %}
-                          >
-                          <span><strong>Available</strong></span>
-                        </label>
-                      </div>
-                    </div>
-                  </article>
+              <div class="menu-field">
+                <label for="new_item_name">Item name</label>
+                <input
+                  id="new_item_name"
+                  name="new_item_name"
+                  type="text"
+                  placeholder="Example: Chocolate Cake"
+                  required
+                >
+              </div>
 
-                  {% set ns.idx = ns.idx + 1 %}
-                {% endfor %}
+              <div class="menu-field">
+                <label for="new_item_price">Price (£)</label>
+                <input
+                  id="new_item_price"
+                  name="new_item_price"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  required
+                >
+              </div>
+
+              <div class="menu-form-action">
+                <button type="submit" class="btn btn-primary">Add Item</button>
               </div>
             </div>
-          {% endfor %}
+          </form>
+        {% else %}
+          <p class="menu-empty-note">Add a category first before adding items.</p>
+        {% endif %}
+      </section>
 
-          <div class="button-row" style="justify-content:flex-start; margin-top:20px;">
-            <button type="submit" class="btn btn-primary">Save Menu Changes</button>
-          </div>
-        </form>
-      {% else %}
-        <div class="pricing-plan">
-          <h3 style="margin-bottom:10px;">No menu loaded yet</h3>
-          <p class="muted" style="margin:0;">
-            Upload a menu file above to generate your menu, then come back here to edit it.
-          </p>
+      <section class="menu-section-card">
+        <div class="menu-section-head menu-section-head-inline">
+          <h2>Current Menu</h2>
+          <p>Edit names, prices, and availability, then save everything together.</p>
         </div>
-      {% endif %}
-    </section>
+
+        {% if items_by_category %}
+          <form method="post" action="/business/menu" class="menu-form">
+            <input type="hidden" name="action" value="save">
+
+            {% set ns = namespace(idx=0) %}
+
+            <div class="menu-category-list">
+              {% for category_name, category_items in items_by_category.items() %}
+                <section class="menu-category-block">
+                  <h3 class="menu-category-title">{{ category_name }}</h3>
+
+                  <div class="menu-item-list">
+                    {% for item in category_items %}
+                      <article class="menu-item-card">
+                        <input type="hidden" name="item_id_{{ ns.idx }}" value="{{ item.id or '' }}">
+
+                        <div class="menu-form-grid menu-form-grid-existing">
+                          <div class="menu-field">
+                            <label for="item_name_{{ ns.idx }}">Item name</label>
+                            <input
+                              id="item_name_{{ ns.idx }}"
+                              name="item_name_{{ ns.idx }}"
+                              type="text"
+                              value="{{ item.name or '' }}"
+                            >
+                          </div>
+
+                          <div class="menu-field">
+                            <label for="item_price_{{ ns.idx }}">Price (£)</label>
+                            <input
+                              id="item_price_{{ ns.idx }}"
+                              name="item_price_{{ ns.idx }}"
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value="{{ item.base_price if item.base_price is not none else 0 }}"
+                            >
+                          </div>
+
+                          <div class="menu-field menu-checkbox-field">
+                            <label class="menu-checkbox-label">
+                              <input
+                                type="checkbox"
+                                name="item_available_{{ ns.idx }}"
+                                {% if item.available %}checked{% endif %}
+                              >
+                              <span>Available</span>
+                            </label>
+                          </div>
+                        </div>
+                      </article>
+
+                      {% set ns.idx = ns.idx + 1 %}
+                    {% endfor %}
+                  </div>
+                </section>
+              {% endfor %}
+            </div>
+
+            <div class="menu-save-row">
+              <button type="submit" class="btn btn-primary">Save Menu Changes</button>
+            </div>
+          </form>
+        {% else %}
+          <div class="menu-empty-state">
+            <h3>No menu loaded yet</h3>
+            <p>Upload a menu file above to generate your menu, then come back here to edit it.</p>
+          </div>
+        {% endif %}
+      </section>
+
+    </div>
   </div>
 </section>
 {% endblock %}
