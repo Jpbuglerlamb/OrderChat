@@ -79,3 +79,16 @@ def get_json_file(key: str) -> dict:
     """
     raw = get_file_bytes(key)
     return json.loads(raw.decode("utf-8"))
+
+def save_json_file(key: str, data: dict):
+    """
+    Upload a Python dict as JSON to S3.
+    """
+    raw = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+    s3.put_object(
+        Bucket=S3_BUCKET_NAME,
+        Key=key,
+        Body=raw,
+        ContentType="application/json",
+    )
+    return key

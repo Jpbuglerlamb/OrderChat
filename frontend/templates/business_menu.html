@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero narrow">
+  <div class="card" style="text-align:left;">
+
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:22px;">
+      <div>
+        <h1 style="margin-bottom:8px;">Menu Editor</h1>
+        <p class="subtitle" style="margin:0;">
+          Update prices, item names, and availability for <strong>{{ restaurant.name }}</strong>.
+        </p>
+      </div>
+
+      <div class="button-row" style="margin-top:0;">
+        <a href="{{ dashboard_url or '/business' }}" class="btn btn-secondary">Dashboard</a>
+        <a href="/business/settings" class="btn btn-secondary">Settings</a>
+        <a href="/business/qr" class="btn btn-secondary">View QR Code</a>
+      </div>
+    </div>
+
+    {% if success %}
+      <div class="success-card-meta" style="margin-bottom:18px;">
+        {{ success }}
+      </div>
+    {% endif %}
+
+    {% if error %}
+      <p class="muted error-text" style="margin-bottom:18px;">
+        {{ error }}
+      </p>
+    {% endif %}
+
+    {% if items_by_category %}
+      <form method="post" action="/business/menu">
+        {% set ns = namespace(idx=0) %}
+
+        {% for category_name, items in items_by_category.items() %}
+          <div style="margin-bottom:28px;">
+            <h2 style="margin-bottom:14px;">{{ category_name }}</h2>
+
+            <div style="display:grid; gap:14px;">
+              {% for item in items %}
+                <div class="pricing-plan" style="padding:18px;">
+                  <input type="hidden" name="item_id_{{ ns.idx }}" value="{{ item.id }}">
+
+                  <div style="display:grid; grid-template-columns: 1.5fr 0.8fr auto; gap:14px; align-items:end;">
+                    <div>
+                      <label for="item_name_{{ ns.idx }}">Item name</label>
+                      <input
+                        id="item_name_{{ ns.idx }}"
+                        name="item_name_{{ ns.idx }}"
+                        type="text"
+                        value="{{ item.name }}"
+                        required
+                      >
+                    </div>
+
+                    <div>
+                      <label for="item_price_{{ ns.idx }}">Price (£)</label>
+                      <input
+                        id="item_price_{{ ns.idx }}"
+                        name="item_price_{{ ns.idx }}"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value="{{ item.base_price }}"
+                        required
+                      >
+                    </div>
+
+                    <div style="padding-bottom:10px;">
+                      <label style="display:flex; align-items:center; gap:8px;">
+                        <input
+                          type="checkbox"
+                          name="item_available_{{ ns.idx }}"
+                          {% if item.available %}checked{% endif %}
+                        >
+                        Available
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {% set ns.idx = ns.idx + 1 %}
+              {% endfor %}
+            </div>
+          </div>
+        {% endfor %}
+
+        <div class="button-row" style="margin-top:22px;">
+          <button type="submit" class="btn btn-primary">Save Menu Changes</button>
+          <a href="{{ dashboard_url or '/business' }}" class="btn btn-secondary">Cancel</a>
+        </div>
+      </form>
+    {% else %}
+      <p class="muted">No menu items found.</p>
+    {% endif %}
+
+  </div>
+</section>
+{% endblock %}

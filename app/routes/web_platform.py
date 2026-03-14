@@ -17,7 +17,12 @@ from app.models import User, Restaurant
 from app.security.auth import hash_password
 from app.services.menu_ingest import ingest_menu_file_to_dataset
 from app.services.qr_service import build_restaurant_public_url, generate_qr_png_bytes
-from app.services.storage import upload_file_bytes, generate_download_url, get_json_file
+from app.services.storage import (
+    upload_file_bytes,
+    generate_download_url,
+    get_json_file,
+    save_json_file,
+)
 from app.ordering.menu_store import clear_menu_cache
 
 router = APIRouter()
@@ -235,6 +240,209 @@ def business_settings_submit(
             "restaurant": restaurant,
             "qr_download_url": qr_download_url,
             "success": "Settings updated successfully.",
+        },
+    )
+
+@router.get("/business/menu", response_class=HTMLResponse)
+def business_menu_page(request: Request, db: Session = Depends(get_db)):
+    current_user = get_current_platform_user(request, db)
+    dashboard_url = build_dashboard_url_for_user(db, current_user)
+
+    if not current_user:
+        return RedirectResponse(url="/business/login?next=/business/menu", status_code=302)
+
+    restaurant = (
+        db.query(Restaurant)
+        .filter(Restaurant.owner_user_id == current_user.id)
+        .order_by(Restaurant.id.desc())
+        .first()
+    )
+
+    if not restaurant:
+        return RedirectResponse(url="/business/signup", status_code=302)
+
+    if not restaurant.menu_json_path:
+        return RedirectResponse(url="/business/settings", status_code=302)
+
+    try:
+        menu_data = get_json_file(restaurant.menu_json_path)
+    except Exception as e:
+        return templates.TemplateResponse(
+            "business_menu.html",
+            {
+                "request": request,
+                "current_user": current_user,
+                "dashboard_url": dashboard_url,
+                "restaurant": restaurant,
+                "menu_data": None,
+                "error": f"Could not load menu: {str(e)}",
+            },
+            status_code=500,
+        )
+
+    categories = menu_data.get("categories") or []
+    items = menu_data.get("items") or []
+
+    category_map = {}
+    for c in categories:
+        cid = str(c.get("id") or c.get("name") or "").strip()
+        cname = str(c.get("name") or cid or "Uncategorised").strip()
+        if cid:
+            category_map[cid] = cname
+            category_map[cname] = cname
+
+    items_by_category = {}
+    for item in items:
+        category_key = str(item.get("category") or item.get("category_id") or "").strip()
+        category_name = category_map.get(category_key) or category_key or "Uncategorised"
+
+        if "available" not in item:
+            item["available"] = True
+
+        items_by_category.setdefault(category_name, []).append(item)
+
+    return templates.TemplateResponse(
+        "business_menu.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "dashboard_url": dashboard_url,
+            "restaurant": restaurant,
+            "menu_data": menu_data,
+            "items_by_category": items_by_category,
+            "error": None,
+            "success": None,
+        },
+    )
+
+@router.post("/business/menu", response_class=HTMLResponse)
+async def business_menu_submit(request: Request, db: Session = Depends(get_db)):
+    current_user = get_current_platform_user(request, db)
+    dashboard_url = build_dashboard_url_for_user(db, current_user)
+
+    if not current_user:
+        return RedirectResponse(url="/business/login?next=/business/menu", status_code=302)
+
+    restaurant = (
+        db.query(Restaurant)
+        .filter(Restaurant.owner_user_id == current_user.id)
+        .order_by(Restaurant.id.desc())
+        .first()
+    )
+
+    if not restaurant:
+        return RedirectResponse(url="/business/signup", status_code=302)
+
+    if not restaurant.menu_json_path:
+        return RedirectResponse(url="/business/settings", status_code=302)
+
+    try:
+        menu_data = get_json_file(restaurant.menu_json_path)
+    except Exception as e:
+        return templates.TemplateResponse(
+            "business_menu.html",
+            {
+                "request": request,
+                "current_user": current_user,
+                "dashboard_url": dashboard_url,
+                "restaurant": restaurant,
+                "menu_data": None,
+                "error": f"Could not load menu: {str(e)}",
+                "success": None,
+            },
+            status_code=500,
+        )
+
+    form = await request.form()
+    items = menu_data.get("items") or []
+
+    updated_items = []
+
+    for idx, item in enumerate(items):
+        item_id = str(form.get(f"item_id_{idx}") or "").strip()
+        original_id = str(item.get("id") or "").strip()
+
+        if item_id != original_id:
+            updated_items.append(item)
+            continue
+
+        new_name = str(form.get(f"item_name_{idx}") or item.get("name") or "").strip()
+        new_price_raw = str(form.get(f"item_price_{idx}") or item.get("base_price") or "0").strip()
+        new_available = form.get(f"item_available_{idx}") == "on"
+
+        try:
+            new_price = float(new_price_raw)
+        except Exception:
+            new_price = float(item.get("base_price") or 0.0)
+
+        item["name"] = new_name or str(item.get("name") or "Unnamed item")
+        item["base_price"] = round(new_price, 2)
+        item["available"] = new_available
+
+        updated_items.append(item)
+
+    menu_data["items"] = updated_items
+
+    try:
+        save_json_file(restaurant.menu_json_path, menu_data)
+        clear_menu_cache(restaurant.slug)
+    except Exception as e:
+        categories = menu_data.get("categories") or []
+        category_map = {}
+        for c in categories:
+            cid = str(c.get("id") or c.get("name") or "").strip()
+            cname = str(c.get("name") or cid or "Uncategorised").strip()
+            if cid:
+                category_map[cid] = cname
+                category_map[cname] = cname
+
+        items_by_category = {}
+        for item in updated_items:
+            category_key = str(item.get("category") or item.get("category_id") or "").strip()
+            category_name = category_map.get(category_key) or category_key or "Uncategorised"
+            items_by_category.setdefault(category_name, []).append(item)
+
+        return templates.TemplateResponse(
+            "business_menu.html",
+            {
+                "request": request,
+                "current_user": current_user,
+                "dashboard_url": dashboard_url,
+                "restaurant": restaurant,
+                "menu_data": menu_data,
+                "items_by_category": items_by_category,
+                "error": f"Could not save menu: {str(e)}",
+                "success": None,
+            },
+            status_code=500,
+        )
+
+    categories = menu_data.get("categories") or []
+    category_map = {}
+    for c in categories:
+        cid = str(c.get("id") or c.get("name") or "").strip()
+        cname = str(c.get("name") or cid or "Uncategorised").strip()
+        if cid:
+            category_map[cid] = cname
+            category_map[cname] = cname
+
+    items_by_category = {}
+    for item in updated_items:
+        category_key = str(item.get("category") or item.get("category_id") or "").strip()
+        category_name = category_map.get(category_key) or category_key or "Uncategorised"
+        items_by_category.setdefault(category_name, []).append(item)
+
+    return templates.TemplateResponse(
+        "business_menu.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "dashboard_url": dashboard_url,
+            "restaurant": restaurant,
+            "menu_data": menu_data,
+            "items_by_category": items_by_category,
+            "error": None,
+            "success": "Menu updated successfully.",
         },
     )
 
