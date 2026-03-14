@@ -149,6 +149,94 @@ def business_page(request: Request, db: Session = Depends(get_db)):
             "dashboard_url": dashboard_url,
         },
     )
+@router.get("/business/settings", response_class=HTMLResponse)
+def business_settings_page(request: Request, db: Session = Depends(get_db)):
+    current_user = get_current_platform_user(request, db)
+    dashboard_url = build_dashboard_url_for_user(db, current_user)
+
+    if not current_user:
+        return RedirectResponse(url="/business/login?next=/business/settings", status_code=302)
+
+    restaurant = (
+        db.query(Restaurant)
+        .filter(Restaurant.owner_user_id == current_user.id)
+        .order_by(Restaurant.id.desc())
+        .first()
+    )
+
+    if not restaurant:
+        return RedirectResponse(url="/business/signup", status_code=302)
+
+    qr_download_url = None
+    if restaurant.qr_code_path:
+        try:
+            qr_download_url = generate_download_url(restaurant.qr_code_path)
+        except Exception:
+            qr_download_url = None
+
+    return templates.TemplateResponse(
+        "business_settings.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "dashboard_url": dashboard_url,
+            "restaurant": restaurant,
+            "qr_download_url": qr_download_url,
+        },
+    )
+
+@router.post("/business/settings", response_class=HTMLResponse)
+def business_settings_submit(
+    request: Request,
+    business_name: str = Form(...),
+    phone: str = Form(""),
+    address: str = Form(...),
+    opening_hours: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    current_user = get_current_platform_user(request, db)
+    dashboard_url = build_dashboard_url_for_user(db, current_user)
+
+    if not current_user:
+        return RedirectResponse(url="/business/login?next=/business/settings", status_code=302)
+
+    restaurant = (
+        db.query(Restaurant)
+        .filter(Restaurant.owner_user_id == current_user.id)
+        .order_by(Restaurant.id.desc())
+        .first()
+    )
+
+    if not restaurant:
+        return RedirectResponse(url="/business/signup", status_code=302)
+
+    restaurant.name = business_name.strip()
+    restaurant.phone = phone.strip()
+    restaurant.address = address.strip()
+    restaurant.opening_hours = opening_hours.strip()
+
+    db.add(restaurant)
+    db.commit()
+    db.refresh(restaurant)
+
+    qr_download_url = None
+    if restaurant.qr_code_path:
+        try:
+            qr_download_url = generate_download_url(restaurant.qr_code_path)
+        except Exception:
+            qr_download_url = None
+
+    return templates.TemplateResponse(
+        "business_settings.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "dashboard_url": dashboard_url,
+            "restaurant": restaurant,
+            "qr_download_url": qr_download_url,
+            "success": "Settings updated successfully.",
+        },
+    )
 
 @router.get("/privacy", response_class=HTMLResponse)
 def privacy_page(request: Request):

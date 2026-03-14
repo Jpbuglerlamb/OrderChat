@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero narrow">
+  <div class="card" style="text-align:left;">
+
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:22px;">
+      <div>
+        <h1 style="margin-bottom:8px;">Business Settings</h1>
+        <p class="subtitle" style="margin:0;">
+          Manage your restaurant details and QR access.
+        </p>
+      </div>
+
+      <div class="button-row" style="margin-top:0;">
+        <a href="{{ dashboard_url or '/business' }}" class="btn btn-secondary">Dashboard</a>
+        <a href="/business/qr" class="btn btn-secondary">View QR Code</a>
+      </div>
+    </div>
+
+    {% if success %}
+      <div class="success-card-meta" style="margin-bottom:18px;">
+        {{ success }}
+      </div>
+    {% endif %}
+
+    <form method="post" action="/business/settings" class="manual-form">
+      <label for="business_name">Restaurant name</label>
+      <input
+        id="business_name"
+        name="business_name"
+        type="text"
+        value="{{ restaurant.name }}"
+        required
+      >
+
+      <label for="phone">Phone</label>
+      <input
+        id="phone"
+        name="phone"
+        type="text"
+        value="{{ restaurant.phone or '' }}"
+      >
+
+      <label for="address">Address</label>
+      <input
+        id="address"
+        name="address"
+        type="text"
+        value="{{ restaurant.address or '' }}"
+        required
+      >
+
+      <label for="opening_hours">Opening hours</label>
+      <textarea
+        id="opening_hours"
+        name="opening_hours"
+        rows="4"
+        required
+      >{{ restaurant.opening_hours or '' }}</textarea>
+
+      <div class="button-row" style="margin-top:20px;">
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+        <a href="{{ dashboard_url or '/business' }}" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+
+    <div style="margin-top:36px; padding-top:24px; border-top:1px solid rgba(255,255,255,0.12);">
+      <h2 style="margin-bottom:12px;">Restaurant QR Code</h2>
+
+      <p class="muted" style="margin-bottom:16px;">
+        Customers can scan this code to open your ordering page.
+      </p>
+
+      {% if qr_download_url %}
+        <div style="display:flex; flex-direction:column; align-items:flex-start; gap:16px;">
+          <div style="
+            background:white;
+            padding:14px;
+            border-radius:18px;
+            box-shadow:0 8px 24px rgba(0,0,0,0.15);
+            display:inline-flex;
+            justify-content:center;
+            align-items:center;
+          ">
+            <img
+              src="{{ qr_download_url }}"
+              alt="Restaurant QR code"
+              style="width:180px; height:180px; object-fit:contain; display:block;"
+            >
+          </div>
+
+          <div class="button-row">
+            <a href="{{ qr_download_url }}" class="btn btn-primary" download>
+              Download QR Code
+            </a>
+            <a href="/business/qr" class="btn btn-secondary">
+              Open QR Page
+            </a>
+          </div>
+        </div>
+      {% else %}
+        <p class="muted">QR code not available yet.</p>
+      {% endif %}
+    </div>
+
+  </div>
+</section>
+{% endblock %}
