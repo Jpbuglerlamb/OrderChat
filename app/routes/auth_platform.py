@@ -118,7 +118,7 @@ def verify_user(db: Session, email: str, password: str) -> bool:
     return verify_password(password, u.password_hash)
 
 
-@router.post("/auth/login")
+@router.post("/business/auth/login")
 def login(
     email: str = Form(...),
     password: str = Form(...),
@@ -139,7 +139,7 @@ def login(
     return redirect
 
 
-@router.post("/auth/logout")
+@router.post("/business/auth/logout")
 def logout():
     response = RedirectResponse(url="/business", status_code=302)
     clear_session_cookie(response)

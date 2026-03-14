@@ -1,3 +1,4 @@
+# app/routes/web_platform.py
 from pathlib import Path
 import json
 import os
@@ -8,6 +9,7 @@ from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.routes.auth_platform import set_session_cookie, get_current_platform_user
 from app.db import get_db
@@ -136,6 +138,9 @@ def business_page(request: Request, db: Session = Depends(get_db)):
     current_user = get_current_platform_user(request, db)
     dashboard_url = build_dashboard_url_for_user(db, current_user)
 
+    if current_user and dashboard_url != "/business":
+        return RedirectResponse(url=dashboard_url, status_code=302)
+
     return templates.TemplateResponse(
         "business_home.html",
         {
@@ -204,7 +209,15 @@ async def business_signup_submit(
     menu_file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
-    existing_user = db.query(User).filter(User.email == email).first()
+    name = name.strip()
+    business_name = business_name.strip()
+    email_norm = email.strip().lower()
+    phone = phone.strip()
+    address = address.strip()
+    opening_hours = opening_hours.strip()
+    plan = plan.strip().lower() or "starter"
+
+    existing_user = db.query(User).filter(func.lower(User.email) == email_norm).first()
     if existing_user:
         return render_signup_error(
             request,
@@ -256,7 +269,7 @@ async def business_signup_submit(
             file_bytes=file_bytes,
             filename=original_filename,
             business_name=business_name,
-            email=email,
+            email=email_norm,
             phone=phone or "",
             address=address,
             opening_hours=opening_hours,
@@ -343,7 +356,7 @@ async def business_signup_submit(
     try:
         user = User(
             name=name,
-            email=email,
+            email=email_norm,
             phone=phone or None,
             address=address,
             password_hash=hash_password(password),
@@ -365,6 +378,18 @@ async def business_signup_submit(
 
         db.add(restaurant)
         db.commit()
+        db.refresh(user)
+        db.refresh(restaurant)
+
+        print(
+            "SIGNED UP USER:",
+            user.id,
+            user.email,
+            "RESTAURANT:",
+            restaurant.id,
+            restaurant.slug,
+            flush=True,
+        )
 
     except Exception as e:
         db.rollback()
@@ -379,7 +404,7 @@ async def business_signup_submit(
         url=f"/business/onboarding-complete?slug={slug}",
         status_code=303,
     )
-    set_session_cookie(response, email)
+    set_session_cookie(response, user.email)
     return response
 
 
