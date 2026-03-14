@@ -16,3 +16,4 @@ itsdangerous
 python-multipart
 boto3
 pypdf
+psycopg2-binary
