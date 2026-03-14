@@ -1,6 +1,4 @@
-# app/routes/web_platform.py
 from pathlib import Path
-import json
 import os
 import re
 from uuid import uuid4
@@ -8,12 +6,13 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 
-from app.routes.auth_platform import set_session_cookie, get_current_platform_user
 from app.db import get_db
-from app.models import User, Restaurant
+from app.models import Restaurant, User
+from app.ordering.menu_store import clear_menu_cache
+from app.routes.auth_platform import get_current_platform_user, set_session_cookie
 from app.security.auth import hash_password
 from app.services.menu_ingest import ingest_menu_file_to_dataset
 from app.services.qr_service import build_restaurant_public_url, generate_qr_png_bytes
@@ -23,7 +22,6 @@ from app.services.storage import (
     get_json_file,
     save_json_file,
 )
-from app.ordering.menu_store import clear_menu_cache
 
 router = APIRouter()
 
@@ -31,6 +29,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATES_DIR = PROJECT_ROOT / "frontend" / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+
+# --------------------------------
+# Helpers
+# --------------------------------
 
 def slugify(value: str) -> str:
     value = value.strip().lower()
@@ -55,19 +57,93 @@ def build_s3_menu_key(slug: str, filename: str) -> str:
     return f"restaurants/{slug}/uploads/{uuid4()}_{safe_name}"
 
 
-def build_dashboard_url_for_user(db: Session, current_user: User | None) -> str:
+def get_latest_restaurant_for_user(db: Session, current_user: User | None) -> Restaurant | None:
     if not current_user:
-        return "/business"
+        return None
 
-    restaurant = (
+    return (
         db.query(Restaurant)
         .filter(Restaurant.owner_user_id == current_user.id)
         .order_by(Restaurant.id.desc())
         .first()
     )
+
+
+def build_dashboard_url_for_user(db: Session, current_user: User | None) -> str:
+    restaurant = get_latest_restaurant_for_user(db, current_user)
     if restaurant:
         return f"/r/{restaurant.slug}/staff"
     return "/business"
+
+
+def get_qr_download_url(restaurant: Restaurant | None) -> str | None:
+    if not restaurant or not restaurant.qr_code_path:
+        return None
+
+    try:
+        return generate_download_url(restaurant.qr_code_path)
+    except Exception:
+        return None
+
+
+def get_public_order_url(restaurant: Restaurant | None) -> str | None:
+    if not restaurant:
+        return None
+
+    public_base_url = os.getenv("PUBLIC_BASE_URL", "").strip()
+    if not public_base_url:
+        return None
+
+    try:
+        return build_restaurant_public_url(public_base_url, restaurant.slug)
+    except Exception:
+        return None
+
+
+def normalize_menu_categories(raw_categories: list) -> list[dict]:
+    normalized: list[dict] = []
+
+    for c in raw_categories or []:
+        if isinstance(c, dict):
+            cid = str(c.get("id") or c.get("name") or "").strip()
+            cname = str(c.get("name") or cid or "Uncategorised").strip()
+        else:
+            cid = str(c or "").strip()
+            cname = cid.replace("-", " ").title() if cid else "Uncategorised"
+
+        if cid:
+            normalized.append(
+                {
+                    "id": cid,
+                    "name": cname,
+                }
+            )
+
+    return normalized
+
+
+def build_items_by_category(menu_data: dict) -> tuple[list[dict], dict]:
+    raw_categories = menu_data.get("categories") or []
+    items = menu_data.get("items") or []
+
+    categories = normalize_menu_categories(raw_categories)
+
+    category_map: dict[str, str] = {}
+    for c in categories:
+        category_map[c["id"]] = c["name"]
+        category_map[c["name"]] = c["name"]
+
+    items_by_category: dict[str, list] = {}
+    for item in items:
+        category_key = str(item.get("category") or item.get("category_id") or "").strip()
+        category_name = category_map.get(category_key) or category_key.replace("-", " ").title() or "Uncategorised"
+
+        if "available" not in item:
+            item["available"] = True
+
+        items_by_category.setdefault(category_name, []).append(item)
+
+    return categories, items_by_category
 
 
 def render_signup_error(
@@ -102,6 +178,39 @@ def validate_menu_dataset(menu_dataset: dict) -> list[str]:
         errors.append("No valid menu items were extracted from the uploaded menu.")
 
     return errors
+
+
+def render_business_menu_page(
+    request: Request,
+    current_user: User,
+    dashboard_url: str,
+    restaurant: Restaurant,
+    menu_data: dict | None,
+    error: str | None = None,
+    success: str | None = None,
+    status_code: int = 200,
+):
+    categories: list[dict] = []
+    items_by_category: dict = {}
+
+    if menu_data:
+        categories, items_by_category = build_items_by_category(menu_data)
+
+    return templates.TemplateResponse(
+        "business_menu.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "dashboard_url": dashboard_url,
+            "restaurant": restaurant,
+            "menu_data": menu_data,
+            "items_by_category": items_by_category,
+            "categories": categories,
+            "error": error,
+            "success": success,
+        },
+        status_code=status_code,
+    )
 
 
 # --------------------------------
@@ -154,6 +263,12 @@ def business_page(request: Request, db: Session = Depends(get_db)):
             "dashboard_url": dashboard_url,
         },
     )
+
+
+# --------------------------------
+# Settings
+# --------------------------------
+
 @router.get("/business/settings", response_class=HTMLResponse)
 def business_settings_page(request: Request, db: Session = Depends(get_db)):
     current_user = get_current_platform_user(request, db)
@@ -162,22 +277,9 @@ def business_settings_page(request: Request, db: Session = Depends(get_db)):
     if not current_user:
         return RedirectResponse(url="/business/login?next=/business/settings", status_code=302)
 
-    restaurant = (
-        db.query(Restaurant)
-        .filter(Restaurant.owner_user_id == current_user.id)
-        .order_by(Restaurant.id.desc())
-        .first()
-    )
-
+    restaurant = get_latest_restaurant_for_user(db, current_user)
     if not restaurant:
         return RedirectResponse(url="/business/signup", status_code=302)
-
-    qr_download_url = None
-    if restaurant.qr_code_path:
-        try:
-            qr_download_url = generate_download_url(restaurant.qr_code_path)
-        except Exception:
-            qr_download_url = None
 
     return templates.TemplateResponse(
         "business_settings.html",
@@ -186,9 +288,10 @@ def business_settings_page(request: Request, db: Session = Depends(get_db)):
             "current_user": current_user,
             "dashboard_url": dashboard_url,
             "restaurant": restaurant,
-            "qr_download_url": qr_download_url,
+            "qr_download_url": get_qr_download_url(restaurant),
         },
     )
+
 
 @router.post("/business/settings", response_class=HTMLResponse)
 def business_settings_submit(
@@ -205,13 +308,7 @@ def business_settings_submit(
     if not current_user:
         return RedirectResponse(url="/business/login?next=/business/settings", status_code=302)
 
-    restaurant = (
-        db.query(Restaurant)
-        .filter(Restaurant.owner_user_id == current_user.id)
-        .order_by(Restaurant.id.desc())
-        .first()
-    )
-
+    restaurant = get_latest_restaurant_for_user(db, current_user)
     if not restaurant:
         return RedirectResponse(url="/business/signup", status_code=302)
 
@@ -224,13 +321,6 @@ def business_settings_submit(
     db.commit()
     db.refresh(restaurant)
 
-    qr_download_url = None
-    if restaurant.qr_code_path:
-        try:
-            qr_download_url = generate_download_url(restaurant.qr_code_path)
-        except Exception:
-            qr_download_url = None
-
     return templates.TemplateResponse(
         "business_settings.html",
         {
@@ -238,10 +328,15 @@ def business_settings_submit(
             "current_user": current_user,
             "dashboard_url": dashboard_url,
             "restaurant": restaurant,
-            "qr_download_url": qr_download_url,
+            "qr_download_url": get_qr_download_url(restaurant),
             "success": "Settings updated successfully.",
         },
     )
+
+
+# --------------------------------
+# Menu Editor
+# --------------------------------
 
 @router.get("/business/menu", response_class=HTMLResponse)
 def business_menu_page(request: Request, db: Session = Depends(get_db)):
@@ -251,13 +346,7 @@ def business_menu_page(request: Request, db: Session = Depends(get_db)):
     if not current_user:
         return RedirectResponse(url="/business/login?next=/business/menu", status_code=302)
 
-    restaurant = (
-        db.query(Restaurant)
-        .filter(Restaurant.owner_user_id == current_user.id)
-        .order_by(Restaurant.id.desc())
-        .first()
-    )
-
+    restaurant = get_latest_restaurant_for_user(db, current_user)
     if not restaurant:
         return RedirectResponse(url="/business/signup", status_code=302)
 
@@ -267,53 +356,24 @@ def business_menu_page(request: Request, db: Session = Depends(get_db)):
     try:
         menu_data = get_json_file(restaurant.menu_json_path)
     except Exception as e:
-        return templates.TemplateResponse(
-            "business_menu.html",
-            {
-                "request": request,
-                "current_user": current_user,
-                "dashboard_url": dashboard_url,
-                "restaurant": restaurant,
-                "menu_data": None,
-                "error": f"Could not load menu: {str(e)}",
-            },
+        return render_business_menu_page(
+            request=request,
+            current_user=current_user,
+            dashboard_url=dashboard_url,
+            restaurant=restaurant,
+            menu_data=None,
+            error=f"Could not load menu: {str(e)}",
             status_code=500,
         )
 
-    categories = menu_data.get("categories") or []
-    items = menu_data.get("items") or []
-
-    category_map = {}
-    for c in categories:
-        cid = str(c.get("id") or c.get("name") or "").strip()
-        cname = str(c.get("name") or cid or "Uncategorised").strip()
-        if cid:
-            category_map[cid] = cname
-            category_map[cname] = cname
-
-    items_by_category = {}
-    for item in items:
-        category_key = str(item.get("category") or item.get("category_id") or "").strip()
-        category_name = category_map.get(category_key) or category_key or "Uncategorised"
-
-        if "available" not in item:
-            item["available"] = True
-
-        items_by_category.setdefault(category_name, []).append(item)
-
-    return templates.TemplateResponse(
-        "business_menu.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "dashboard_url": dashboard_url,
-            "restaurant": restaurant,
-            "menu_data": menu_data,
-            "items_by_category": items_by_category,
-            "error": None,
-            "success": None,
-        },
+    return render_business_menu_page(
+        request=request,
+        current_user=current_user,
+        dashboard_url=dashboard_url,
+        restaurant=restaurant,
+        menu_data=menu_data,
     )
+
 
 @router.post("/business/menu", response_class=HTMLResponse)
 async def business_menu_submit(request: Request, db: Session = Depends(get_db)):
@@ -323,13 +383,7 @@ async def business_menu_submit(request: Request, db: Session = Depends(get_db)):
     if not current_user:
         return RedirectResponse(url="/business/login?next=/business/menu", status_code=302)
 
-    restaurant = (
-        db.query(Restaurant)
-        .filter(Restaurant.owner_user_id == current_user.id)
-        .order_by(Restaurant.id.desc())
-        .first()
-    )
-
+    restaurant = get_latest_restaurant_for_user(db, current_user)
     if not restaurant:
         return RedirectResponse(url="/business/signup", status_code=302)
 
@@ -339,66 +393,35 @@ async def business_menu_submit(request: Request, db: Session = Depends(get_db)):
     try:
         menu_data = get_json_file(restaurant.menu_json_path)
     except Exception as e:
-        return templates.TemplateResponse(
-            "business_menu.html",
-            {
-                "request": request,
-                "current_user": current_user,
-                "dashboard_url": dashboard_url,
-                "restaurant": restaurant,
-                "menu_data": None,
-                "items_by_category": {},
-                "categories": [],
-                "error": f"Could not load menu: {str(e)}",
-                "success": None,
-            },
+        return render_business_menu_page(
+            request=request,
+            current_user=current_user,
+            dashboard_url=dashboard_url,
+            restaurant=restaurant,
+            menu_data=None,
+            error=f"Could not load menu: {str(e)}",
             status_code=500,
         )
 
     form = await request.form()
     action = str(form.get("action") or "save").strip().lower()
 
-    categories = menu_data.get("categories") or []
+    raw_categories = menu_data.get("categories") or []
     items = menu_data.get("items") or []
 
-    def build_items_by_category(menu_dict: dict):
-        categories_local = menu_dict.get("categories") or []
-        items_local = menu_dict.get("items") or []
-
-        category_map = {}
-        for c in categories_local:
-            cid = str(c.get("id") or c.get("name") or "").strip()
-            cname = str(c.get("name") or cid or "Uncategorised").strip()
-            if cid:
-                category_map[cid] = cname
-                category_map[cname] = cname
-
-        grouped = {}
-        for item in items_local:
-            category_key = str(item.get("category") or item.get("category_id") or "").strip()
-            category_name = category_map.get(category_key) or category_key or "Uncategorised"
-
-            if "available" not in item:
-                item["available"] = True
-
-            grouped.setdefault(category_name, []).append(item)
-
-        return grouped
-
-    def render_with(message_success=None, message_error=None, status_code=200):
-        return templates.TemplateResponse(
-            "business_menu.html",
-            {
-                "request": request,
-                "current_user": current_user,
-                "dashboard_url": dashboard_url,
-                "restaurant": restaurant,
-                "menu_data": menu_data,
-                "items_by_category": build_items_by_category(menu_data),
-                "categories": menu_data.get("categories") or [],
-                "error": message_error,
-                "success": message_success,
-            },
+    def render_with(
+        message_success: str | None = None,
+        message_error: str | None = None,
+        status_code: int = 200,
+    ):
+        return render_business_menu_page(
+            request=request,
+            current_user=current_user,
+            dashboard_url=dashboard_url,
+            restaurant=restaurant,
+            menu_data=menu_data,
+            error=message_error,
+            success=message_success,
             status_code=status_code,
         )
 
@@ -407,20 +430,15 @@ async def business_menu_submit(request: Request, db: Session = Depends(get_db)):
         if not new_category_name:
             return render_with(message_error="Please enter a category name.", status_code=400)
 
-        existing_names = {
-            str(c.get("name") or "").strip().lower()
-            for c in categories
-        }
+        normalized_categories = normalize_menu_categories(raw_categories)
+        existing_names = {c["name"].strip().lower() for c in normalized_categories}
+        existing_ids = {c["id"].strip().lower() for c in normalized_categories}
 
-        if new_category_name.lower() in existing_names:
+        pretty_name = new_category_name.strip()
+        new_category_id = slugify(pretty_name)
+
+        if pretty_name.lower() in existing_names or new_category_id.lower() in existing_ids:
             return render_with(message_error="That category already exists.", status_code=400)
-
-        new_category_id = slugify(new_category_name)
-
-        existing_ids = {
-            str(c.get("id") or "").strip().lower()
-            for c in categories
-        }
 
         base_id = new_category_id
         counter = 2
@@ -428,11 +446,9 @@ async def business_menu_submit(request: Request, db: Session = Depends(get_db)):
             new_category_id = f"{base_id}-{counter}"
             counter += 1
 
-        categories.append({
-            "id": new_category_id,
-            "name": new_category_name,
-        })
-        menu_data["categories"] = categories
+        # Keep parser-compatible category format: list[str]
+        raw_categories.append(new_category_id)
+        menu_data["categories"] = raw_categories
 
         try:
             save_json_file(restaurant.menu_json_path, menu_data)
@@ -458,15 +474,13 @@ async def business_menu_submit(request: Request, db: Session = Depends(get_db)):
         except Exception:
             return render_with(message_error="Please enter a valid item price.", status_code=400)
 
-        category_exists = any(str(c.get("id") or "").strip() == category_id for c in categories)
+        normalized_categories = normalize_menu_categories(raw_categories)
+        category_exists = any(c["id"] == category_id for c in normalized_categories)
         if not category_exists:
             return render_with(message_error="Selected category does not exist.", status_code=400)
 
         new_item_id = slugify(item_name)
-        existing_item_ids = {
-            str(i.get("id") or "").strip().lower()
-            for i in items
-        }
+        existing_item_ids = {str(i.get("id") or "").strip().lower() for i in items}
 
         base_item_id = new_item_id
         counter = 2
@@ -474,13 +488,15 @@ async def business_menu_submit(request: Request, db: Session = Depends(get_db)):
             new_item_id = f"{base_item_id}-{counter}"
             counter += 1
 
-        items.append({
-            "id": new_item_id,
-            "name": item_name,
-            "base_price": item_price,
-            "category_id": category_id,
-            "available": True,
-        })
+        items.append(
+            {
+                "id": new_item_id,
+                "name": item_name,
+                "base_price": item_price,
+                "category_id": category_id,
+                "available": True,
+            }
+        )
         menu_data["items"] = items
 
         try:
@@ -491,7 +507,7 @@ async def business_menu_submit(request: Request, db: Session = Depends(get_db)):
 
         return render_with(message_success="Item added successfully.")
 
-    # Default action: save existing items
+    # Default action: save edited existing items
     updated_items = []
 
     for idx, item in enumerate(items):
@@ -527,28 +543,83 @@ async def business_menu_submit(request: Request, db: Session = Depends(get_db)):
 
     return render_with(message_success="Menu updated successfully.")
 
+
+@router.post("/business/menu/upload")
+async def business_menu_upload(
+    request: Request,
+    menu_file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    current_user = get_current_platform_user(request, db)
+
+    if not current_user:
+        return RedirectResponse(url="/business/login?next=/business/menu", status_code=302)
+
+    restaurant = get_latest_restaurant_for_user(db, current_user)
+    if not restaurant:
+        return RedirectResponse(url="/business/signup", status_code=302)
+
+    original_filename = (menu_file.filename or "").strip() or "menu_upload.bin"
+    file_bytes = await menu_file.read()
+
+    if not file_bytes:
+        return RedirectResponse(url="/business/menu", status_code=302)
+
+    try:
+        if restaurant.menu_json_path:
+            existing_menu = get_json_file(restaurant.menu_json_path)
+            backup_key = f"restaurants/{restaurant.slug}/menu-backups/{uuid4()}_menu.json"
+            save_json_file(backup_key, existing_menu)
+    except Exception:
+        pass
+
+    try:
+        menu_dataset = ingest_menu_file_to_dataset(
+            file_bytes=file_bytes,
+            filename=original_filename,
+            business_name=restaurant.name,
+            email=current_user.email,
+            phone=restaurant.phone or "",
+            address=restaurant.address or "",
+            opening_hours=restaurant.opening_hours or "",
+            currency="GBP",
+            pickup_only=True,
+        )
+    except Exception:
+        return RedirectResponse(url="/business/menu", status_code=302)
+
+    menu_json_s3_key = restaurant.menu_json_path or f"restaurants/{restaurant.slug}/menu.json"
+
+    try:
+        save_json_file(menu_json_s3_key, menu_dataset)
+        restaurant.menu_json_path = menu_json_s3_key
+        db.add(restaurant)
+        db.commit()
+        clear_menu_cache(restaurant.slug)
+    except Exception:
+        db.rollback()
+
+    return RedirectResponse(url="/business/menu", status_code=302)
+
+
+# --------------------------------
+# Public Pages
+# --------------------------------
+
 @router.get("/privacy", response_class=HTMLResponse)
 def privacy_page(request: Request):
-    return templates.TemplateResponse(
-        "privacy.html",
-        {"request": request},
-    )
+    return templates.TemplateResponse("privacy.html", {"request": request})
 
 
 @router.get("/terms", response_class=HTMLResponse)
 def terms_page(request: Request):
-    return templates.TemplateResponse(
-        "terms.html",
-        {"request": request},
-    )
+    return templates.TemplateResponse("terms.html", {"request": request})
 
 
 @router.get("/feedback", response_class=HTMLResponse)
 def feedback_page(request: Request):
-    return templates.TemplateResponse(
-        "feedback.html",
-        {"request": request},
-    )
+    return templates.TemplateResponse("feedback.html", {"request": request})
+
 
 # --------------------------------
 # Pricing Page
@@ -625,14 +696,6 @@ async def business_signup_submit(
             status_code=400,
         )
 
-    if not menu_file:
-        return render_signup_error(
-            request,
-            plan,
-            "Please upload a menu file.",
-            status_code=400,
-        )
-
     original_filename = (menu_file.filename or "").strip() or "menu_upload.bin"
     file_bytes = await menu_file.read()
 
@@ -692,20 +755,10 @@ async def business_signup_submit(
             status_code=400,
         )
 
-    menu_json_bytes = json.dumps(
-        menu_dataset,
-        indent=2,
-        ensure_ascii=False,
-    ).encode("utf-8")
-
     menu_json_s3_key = f"restaurants/{slug}/menu.json"
 
     try:
-        upload_file_bytes(
-            data=menu_json_bytes,
-            key=menu_json_s3_key,
-            content_type="application/json",
-        )
+        save_json_file(menu_json_s3_key, menu_dataset)
     except Exception as e:
         return render_signup_error(
             request,
@@ -822,20 +875,13 @@ def onboarding_complete(
 
     restaurant = db.query(Restaurant).filter(Restaurant.slug == slug).first()
 
-    qr_download_url = None
-    if restaurant and restaurant.qr_code_path:
-        try:
-            qr_download_url = generate_download_url(restaurant.qr_code_path)
-        except Exception:
-            qr_download_url = None
-
     return templates.TemplateResponse(
         "business_onboarding_complete.html",
         {
             "request": request,
             "slug": slug,
             "restaurant": restaurant,
-            "qr_download_url": qr_download_url,
+            "qr_download_url": get_qr_download_url(restaurant),
             "current_user": current_user,
             "dashboard_url": dashboard_url,
         },
@@ -863,6 +909,7 @@ def business_login_page(
         },
     )
 
+
 @router.get("/business/qr", response_class=HTMLResponse)
 def business_qr_page(request: Request, db: Session = Depends(get_db)):
     current_user = get_current_platform_user(request, db)
@@ -871,30 +918,9 @@ def business_qr_page(request: Request, db: Session = Depends(get_db)):
     if not current_user:
         return RedirectResponse(url="/business/login?next=/business/qr", status_code=302)
 
-    restaurant = (
-        db.query(Restaurant)
-        .filter(Restaurant.owner_user_id == current_user.id)
-        .order_by(Restaurant.id.desc())
-        .first()
-    )
-
+    restaurant = get_latest_restaurant_for_user(db, current_user)
     if not restaurant:
         return RedirectResponse(url="/business/signup", status_code=302)
-
-    qr_download_url = None
-    if restaurant.qr_code_path:
-        try:
-            qr_download_url = generate_download_url(restaurant.qr_code_path)
-        except Exception:
-            qr_download_url = None
-
-    public_base_url = os.getenv("PUBLIC_BASE_URL", "").strip()
-    public_order_url = None
-    if public_base_url:
-        try:
-            public_order_url = build_restaurant_public_url(public_base_url, restaurant.slug)
-        except Exception:
-            public_order_url = None
 
     return templates.TemplateResponse(
         "business_qr.html",
@@ -903,10 +929,11 @@ def business_qr_page(request: Request, db: Session = Depends(get_db)):
             "current_user": current_user,
             "dashboard_url": dashboard_url,
             "restaurant": restaurant,
-            "qr_download_url": qr_download_url,
-            "public_order_url": public_order_url,
+            "qr_download_url": get_qr_download_url(restaurant),
+            "public_order_url": get_public_order_url(restaurant),
         },
     )
+
 
 # --------------------------------
 # Debug
@@ -954,11 +981,13 @@ def debug_restaurant_menu(slug: str, db: Session = Depends(get_db)):
     except Exception as e:
         return {"ok": False, "error": f"Failed to load menu JSON: {str(e)}"}
 
+    categories = normalize_menu_categories(data.get("categories") or [])
+
     return {
         "ok": True,
         "slug": slug,
         "menu_json_path": restaurant.menu_json_path,
-        "category_names": [c.get("name") for c in data.get("categories", [])],
-        "item_names": [i.get("name") for i in data.get("items", [])[:20]],
+        "category_names": [c["name"] for c in categories],
+        "item_names": [str(i.get("name") or "") for i in data.get("items", [])[:20]],
         "raw": data,
     }
