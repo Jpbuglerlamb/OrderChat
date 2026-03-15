@@ -735,10 +735,9 @@ async def business_signup_submit(
             content_type=menu_file.content_type or "application/octet-stream",
         )
     except Exception as e:
-        return render_signup_error(
-            request,
-            normalized_plan,
-            f"Menu upload failed: {str(e)}",
+        print("MENU UPLOAD ERROR:", repr(e), flush=True)
+        return HTMLResponse(
+            content=f"<h1>Menu upload failed</h1><pre>{repr(e)}</pre>",
             status_code=500,
         )
 
@@ -755,11 +754,10 @@ async def business_signup_submit(
             pickup_only=True,
         )
     except Exception as e:
-        return render_signup_error(
-            request,
-            normalized_plan,
-            f"Menu could not be parsed: {str(e)}",
-            status_code=400,
+        print("MENU PARSE ERROR:", repr(e), flush=True)
+        return HTMLResponse(
+            content=f"<h1>Menu parsing failed</h1><pre>{repr(e)}</pre>",
+            status_code=500,
         )
 
     validation_errors = validate_menu_dataset(menu_dataset)
@@ -776,10 +774,9 @@ async def business_signup_submit(
     try:
         save_json_file(menu_json_s3_key, menu_dataset)
     except Exception as e:
-        return render_signup_error(
-            request,
-            normalized_plan,
-            f"Processed menu could not be saved: {str(e)}",
+        print("MENU JSON SAVE ERROR:", repr(e), flush=True)
+        return HTMLResponse(
+            content=f"<h1>Processed menu save failed</h1><pre>{repr(e)}</pre>",
             status_code=500,
         )
 
@@ -787,10 +784,8 @@ async def business_signup_submit(
 
     public_base_url = os.getenv("PUBLIC_BASE_URL", "").strip()
     if not public_base_url:
-        return render_signup_error(
-            request,
-            normalized_plan,
-            "PUBLIC_BASE_URL is missing from environment variables.",
+        return HTMLResponse(
+            content="<h1>Missing PUBLIC_BASE_URL</h1>",
             status_code=500,
         )
 
@@ -798,10 +793,9 @@ async def business_signup_submit(
         restaurant_public_url = build_restaurant_public_url(public_base_url, slug)
         qr_png_bytes = generate_qr_png_bytes(restaurant_public_url)
     except Exception as e:
-        return render_signup_error(
-            request,
-            normalized_plan,
-            f"QR code generation failed: {str(e)}",
+        print("QR GENERATION ERROR:", repr(e), flush=True)
+        return HTMLResponse(
+            content=f"<h1>QR generation failed</h1><pre>{repr(e)}</pre>",
             status_code=500,
         )
 
@@ -814,10 +808,9 @@ async def business_signup_submit(
             content_type="image/png",
         )
     except Exception as e:
-        return render_signup_error(
-            request,
-            normalized_plan,
-            f"QR code upload failed: {str(e)}",
+        print("QR UPLOAD ERROR:", repr(e), flush=True)
+        return HTMLResponse(
+            content=f"<h1>QR upload failed</h1><pre>{repr(e)}</pre>",
             status_code=500,
         )
 
@@ -866,10 +859,9 @@ async def business_signup_submit(
         )
     except Exception as e:
         db.rollback()
-        return render_signup_error(
-            request,
-            normalized_plan,
-            f"Account setup failed while saving your restaurant: {str(e)}",
+        print("ACCOUNT SETUP ERROR:", repr(e), flush=True)
+        return HTMLResponse(
+            content=f"<h1>Account setup failed</h1><pre>{repr(e)}</pre>",
             status_code=500,
         )
 
@@ -881,18 +873,17 @@ async def business_signup_submit(
             restaurant_id=restaurant.id,
             customer_email=user.email,
         )
+        print("CHECKOUT URL:", checkout_url, flush=True)
     except Exception as e:
-        return render_signup_error(
-            request,
-            normalized_plan,
-            f"Stripe checkout could not be created: {str(e)}",
+        print("STRIPE CHECKOUT ERROR:", repr(e), flush=True)
+        return HTMLResponse(
+            content=f"<h1>Stripe checkout failed</h1><pre>{repr(e)}</pre>",
             status_code=500,
         )
 
     response = RedirectResponse(url=checkout_url, status_code=303)
     set_session_cookie(response, user.email)
     return response
-
 
 # --------------------------------
 # Onboarding Complete
