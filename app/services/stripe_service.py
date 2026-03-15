@@ -2,14 +2,14 @@ import os
 import stripe
 
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
-STRIPE_MONTH_PRICE_ID = os.getenv("STRIPE_MONTH_PRICE_ID")
+STRIPE_MONTHLY_PRICE_ID = os.getenv("STRIPE_MONTH_PRICE_ID")
 STRIPE_YEARLY_PRICE_ID = os.getenv("STRIPE_YEARLY_PRICE_ID")
 
 if not STRIPE_SECRET_KEY:
     raise RuntimeError("Missing STRIPE_SECRET_KEY")
 
-if not STRIPE_MONTH_PRICE_ID:
-    raise RuntimeError("Missing STRIPE_MONTH_PRICE_ID")
+if not STRIPE_MONTHLY_PRICE_ID:
+    raise RuntimeError("Missing STRIPE_MONTHLY_PRICE_ID")
 
 if not STRIPE_YEARLY_PRICE_ID:
     raise RuntimeError("Missing STRIPE_YEARLY_PRICE_ID")
