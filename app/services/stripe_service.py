@@ -2,7 +2,7 @@ import os
 import stripe
 
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
-STRIPE_MONTHLY_PRICE_ID = os.getenv("STRIPE_MONTH_PRICE_ID")
+STRIPE_MONTHLY_PRICE_ID = os.getenv("STRIPE_MONTHLY_PRICE_ID")
 STRIPE_YEARLY_PRICE_ID = os.getenv("STRIPE_YEARLY_PRICE_ID")
 
 if not STRIPE_SECRET_KEY:
@@ -23,7 +23,7 @@ def get_price_id_for_plan(plan: str) -> str:
     if normalized_plan == "yearly":
         return STRIPE_YEARLY_PRICE_ID
 
-    return STRIPE_MONTH_PRICE_ID
+    return STRIPE_MONTHLY_PRICE_ID
 
 
 def create_checkout_session(
