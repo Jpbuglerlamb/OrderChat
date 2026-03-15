@@ -1,4 +1,3 @@
-#app/routes/web_platform.py
 from pathlib import Path
 import os
 import re
@@ -23,6 +22,7 @@ from app.services.storage import (
     get_json_file,
     save_json_file,
 )
+from app.services.stripe_service import create_checkout_session
 
 router = APIRouter()
 
@@ -34,6 +34,14 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 # --------------------------------
 # Helpers
 # --------------------------------
+
+VALID_PLANS = {"monthly", "yearly"}
+
+
+def normalize_plan(plan: str | None) -> str:
+    value = (plan or "monthly").strip().lower()
+    return value if value in VALID_PLANS else "monthly"
+
 
 def slugify(value: str) -> str:
     value = value.strip().lower()
@@ -137,7 +145,11 @@ def build_items_by_category(menu_data: dict) -> tuple[list[dict], dict]:
     items_by_category: dict[str, list] = {}
     for item in items:
         category_key = str(item.get("category") or item.get("category_id") or "").strip()
-        category_name = category_map.get(category_key) or category_key.replace("-", " ").title() or "Uncategorised"
+        category_name = (
+            category_map.get(category_key)
+            or category_key.replace("-", " ").title()
+            or "Uncategorised"
+        )
 
         if "available" not in item:
             item["available"] = True
@@ -158,7 +170,7 @@ def render_signup_error(
         {
             "request": request,
             "error": message,
-            "plan": plan,
+            "plan": normalize_plan(plan),
             "current_user": None,
             "dashboard_url": "/business",
         },
@@ -447,7 +459,6 @@ async def business_menu_submit(request: Request, db: Session = Depends(get_db)):
             new_category_id = f"{base_id}-{counter}"
             counter += 1
 
-        # Keep parser-compatible category format: list[str]
         raw_categories.append(new_category_id)
         menu_data["categories"] = raw_categories
 
@@ -508,7 +519,6 @@ async def business_menu_submit(request: Request, db: Session = Depends(get_db)):
 
         return render_with(message_success="Item added successfully.")
 
-    # Default action: save edited existing items
     updated_items = []
 
     for idx, item in enumerate(items):
@@ -646,16 +656,22 @@ def business_pricing_page(request: Request, db: Session = Depends(get_db)):
 # --------------------------------
 
 @router.get("/business/signup", response_class=HTMLResponse)
-def business_signup_page(request: Request, plan: str = "", db: Session = Depends(get_db)):
+def business_signup_page(
+    request: Request,
+    plan: str = "monthly",
+    db: Session = Depends(get_db),
+):
     current_user = get_current_platform_user(request, db)
     dashboard_url = build_dashboard_url_for_user(db, current_user)
+
+    normalized_plan = normalize_plan(plan)
 
     return templates.TemplateResponse(
         "business_signup.html",
         {
             "request": request,
             "error": None,
-            "plan": plan,
+            "plan": normalized_plan,
             "current_user": current_user,
             "dashboard_url": dashboard_url,
         },
@@ -676,7 +692,7 @@ async def business_signup_submit(
     phone: str = Form(""),
     address: str = Form(...),
     opening_hours: str = Form(...),
-    plan: str = Form("starter"),
+    plan: str = Form("monthly"),
     menu_file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
@@ -686,13 +702,13 @@ async def business_signup_submit(
     phone = phone.strip()
     address = address.strip()
     opening_hours = opening_hours.strip()
-    plan = plan.strip().lower() or "starter"
+    normalized_plan = normalize_plan(plan)
 
     existing_user = db.query(User).filter(func.lower(User.email) == email_norm).first()
     if existing_user:
         return render_signup_error(
             request,
-            plan,
+            normalized_plan,
             "An account with that email already exists.",
             status_code=400,
         )
@@ -703,14 +719,13 @@ async def business_signup_submit(
     if not file_bytes:
         return render_signup_error(
             request,
-            plan,
+            normalized_plan,
             "The uploaded menu file was empty.",
             status_code=400,
         )
 
     base_slug = slugify(business_name)
     slug = unique_slug(db, base_slug)
-
     raw_menu_s3_key = build_s3_menu_key(slug, original_filename)
 
     try:
@@ -722,7 +737,7 @@ async def business_signup_submit(
     except Exception as e:
         return render_signup_error(
             request,
-            plan,
+            normalized_plan,
             f"Menu upload failed: {str(e)}",
             status_code=500,
         )
@@ -742,7 +757,7 @@ async def business_signup_submit(
     except Exception as e:
         return render_signup_error(
             request,
-            plan,
+            normalized_plan,
             f"Menu could not be parsed: {str(e)}",
             status_code=400,
         )
@@ -751,7 +766,7 @@ async def business_signup_submit(
     if validation_errors:
         return render_signup_error(
             request,
-            plan,
+            normalized_plan,
             " ".join(validation_errors),
             status_code=400,
         )
@@ -763,7 +778,7 @@ async def business_signup_submit(
     except Exception as e:
         return render_signup_error(
             request,
-            plan,
+            normalized_plan,
             f"Processed menu could not be saved: {str(e)}",
             status_code=500,
         )
@@ -774,7 +789,7 @@ async def business_signup_submit(
     if not public_base_url:
         return render_signup_error(
             request,
-            plan,
+            normalized_plan,
             "PUBLIC_BASE_URL is missing from environment variables.",
             status_code=500,
         )
@@ -785,7 +800,7 @@ async def business_signup_submit(
     except Exception as e:
         return render_signup_error(
             request,
-            plan,
+            normalized_plan,
             f"QR code generation failed: {str(e)}",
             status_code=500,
         )
@@ -801,7 +816,7 @@ async def business_signup_submit(
     except Exception as e:
         return render_signup_error(
             request,
-            plan,
+            normalized_plan,
             f"QR code upload failed: {str(e)}",
             status_code=500,
         )
@@ -827,6 +842,8 @@ async def business_signup_submit(
             menu_upload_path=raw_menu_s3_key,
             menu_json_path=menu_json_s3_key,
             qr_code_path=qr_s3_key,
+            selected_plan=normalized_plan,
+            subscription_status="pending",
         )
 
         db.add(restaurant)
@@ -841,22 +858,38 @@ async def business_signup_submit(
             "RESTAURANT:",
             restaurant.id,
             restaurant.slug,
+            "PLAN:",
+            restaurant.selected_plan,
+            "STATUS:",
+            restaurant.subscription_status,
             flush=True,
         )
-
     except Exception as e:
         db.rollback()
         return render_signup_error(
             request,
-            plan,
+            normalized_plan,
             f"Account setup failed while saving your restaurant: {str(e)}",
             status_code=500,
         )
 
-    response = RedirectResponse(
-        url=f"/business/onboarding-complete?slug={slug}",
-        status_code=303,
-    )
+    try:
+        base_url = str(request.base_url).rstrip("/")
+        checkout_url = create_checkout_session(
+            base_url=base_url,
+            plan=restaurant.selected_plan,
+            restaurant_id=restaurant.id,
+            customer_email=user.email,
+        )
+    except Exception as e:
+        return render_signup_error(
+            request,
+            normalized_plan,
+            f"Stripe checkout could not be created: {str(e)}",
+            status_code=500,
+        )
+
+    response = RedirectResponse(url=checkout_url, status_code=303)
     set_session_cookie(response, user.email)
     return response
 
@@ -963,6 +996,8 @@ def debug_restaurants(db: Session = Depends(get_db)):
             "slug": r.slug,
             "menu_json_path": r.menu_json_path,
             "qr_code_path": r.qr_code_path,
+            "selected_plan": getattr(r, "selected_plan", None),
+            "subscription_status": getattr(r, "subscription_status", None),
         }
         for r in rows
     ]

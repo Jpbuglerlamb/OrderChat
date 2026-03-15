@@ -14,12 +14,10 @@
         <p class="success-card-meta">
           Selected plan:
           <strong>
-            {% if plan == "starter" %}
-              Starter · £200/month for 12 months or £2,400 annually
-            {% elif plan == "growth" %}
-              Growth · £300/month
-            {% elif plan == "pro" %}
-              Pro · £500/month
+            {% if plan == "monthly" %}
+              Monthly · £200/month for 12 months
+            {% elif plan == "yearly" %}
+              Yearly · £2,400 annually
             {% else %}
               {{ plan|capitalize }}
             {% endif %}

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, Boolean
 from sqlalchemy.orm import relationship
 
 from .db import Base
@@ -49,6 +49,11 @@ class Restaurant(Base):
     menu_upload_path = Column(String(255), default="", nullable=False)
     menu_json_path = Column(String(255), default="", nullable=False)
     qr_code_path = Column(String(255), default="", nullable=False)
+
+    selected_plan = Column(String(40), default="monthly", nullable=False)
+    subscription_status = Column(String(40), default="pending", nullable=False)
+    stripe_customer_id = Column(String(255), nullable=True)
+    stripe_subscription_id = Column(String(255), nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
