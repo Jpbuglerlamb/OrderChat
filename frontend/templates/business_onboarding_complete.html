@@ -3,13 +3,21 @@
 {% block content %}
 <section class="hero narrow">
   <div class="card" style="text-align:center;">
-    <h1>Business Registered</h1>
-    <p class="subtitle">Your restaurant has been saved successfully.</p>
-
-    <p class="muted" style="margin-top:8px; line-height:1.6;">
-      Your ordering page is live at<br>
-      <strong>/r/{{ slug }}</strong>
+    <h1>Payment successful</h1>
+    <p class="subtitle">
+      Your subscription has been created successfully.
     </p>
+
+    {% if slug %}
+      <p class="muted" style="margin-top:8px; line-height:1.6;">
+        Your ordering page is live at<br>
+        <strong>/r/{{ slug }}</strong>
+      </p>
+    {% else %}
+      <p class="muted" style="margin-top:8px; line-height:1.6;">
+        Your account is now connected. You can continue in your business dashboard.
+      </p>
+    {% endif %}
 
     {% if qr_download_url %}
       <div style="margin:32px 0; display:flex; flex-direction:column; align-items:center; gap:18px;">
@@ -49,16 +57,14 @@
           </a>
         </div>
       </div>
-    {% else %}
-      <p class="muted" style="margin-top:24px;">
-        QR code not available yet.
-      </p>
     {% endif %}
 
     <div class="button-row" style="justify-content:center; margin-top:24px;">
-      <a href="/r/{{ slug }}/staff" class="btn btn-primary">
-        Open Dashboard
-      </a>
+      {% if slug %}
+        <a href="/r/{{ slug }}/staff" class="btn btn-primary">Open Dashboard</a>
+      {% else %}
+        <a href="/business" class="btn btn-primary">Go to dashboard</a>
+      {% endif %}
       <a href="/business" class="btn btn-secondary">Back to Business</a>
       <a href="/" class="btn btn-secondary">Home</a>
     </div>

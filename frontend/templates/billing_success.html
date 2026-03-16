@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero narrow">
+  <div class="card">
+    <h1>Payment successful</h1>
+    <p class="subtitle">
+      Your subscription has been created successfully. Your restaurant account is now moving through setup.
+    </p>
+
+    <p class="success-card-meta">
+      Your billing connection is working and your platform access is almost ready.
+    </p>
+
+    <div class="button-row">
+      <a href="/business" class="btn btn-primary">Go to dashboard</a>
+      <a href="/business/settings" class="btn btn-secondary">Business settings</a>
+    </div>
+  </div>
+</section>
+{% endblock %}
