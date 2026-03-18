@@ -4,6 +4,8 @@ from __future__ import annotations
 import difflib
 import re
 from typing import Any, Dict, List, Tuple
+from .aliases import expand_order_phrase
+from .upsells import get_upsell_suggestion
 
 from app.services.emailer import send_order_email
 from .nlp import (
@@ -453,6 +455,47 @@ def _add_item_to_cart(
     recalc_line_total(new_line)
     cart.append(new_line)
 
+def _try_add_expanded_phrase(
+    cart: List[Dict[str, Any]],
+    state: Dict[str, Any],
+    menu: Dict[str, Any],
+    text: str,
+    qty: int,
+    synonyms: Dict[str, str],
+) -> tuple[bool, str | None]:
+    """
+    Try to expand a local phrase like 'fish supper' into multiple real menu items,
+    but ONLY if the exact phrase is not already a real menu item.
+    Returns:
+        (added_any, reply_if_modifier_prompt)
+    """
+    # First prefer exact real menu item
+    exact_item = find_item(menu, text, synonyms)
+    if exact_item:
+        return False, None
+
+    expanded = expand_order_phrase(text, synonyms)
+    if not expanded:
+        return False, None
+
+    added_any = False
+
+    for part in expanded:
+        part_name = str(part.get("name") or "").strip()
+        part_qty = max(1, int(part.get("qty") or 1)) * max(1, int(qty or 1))
+
+        item = find_item(menu, part_name, synonyms)
+        if not item:
+            continue
+
+        modifier_reply = _begin_modifier_flow(state, item, qty=part_qty)
+        if modifier_reply:
+            return added_any, modifier_reply
+
+        _add_item_to_cart(cart, item, qty=part_qty)
+        added_any = True
+
+    return added_any, None
 
 def _business_order_email(menu_dict: Dict[str, Any]) -> str:
     meta = menu_dict.get("meta") or {}
@@ -825,6 +868,23 @@ def handle_message(
 
         text_clean = _clean_order_phrase(text)
 
+        # A) Try local phrase expansion first when no exact combo item exists
+        expanded_added, modifier_reply = _try_add_expanded_phrase(
+            cart=cart,
+            state=state,
+            menu=menu,
+            text=text_clean,
+            qty=qty,
+            synonyms=synonyms,
+        )
+        if modifier_reply:
+            return modifier_reply, dump_cart(cart), dump_state(state)
+
+        if expanded_added:
+            added_any = True
+            matched_count += 1
+            continue
+
         candidates = [
             text_clean,
             normalize_text(text_clean, synonyms),
@@ -860,9 +920,17 @@ def handle_message(
 
     if added_any:
         summary, _ = build_summary(cart, currency_symbol=cur)
+        upsell = get_upsell_suggestion(cart, menu)
+
         if matched_count > 1:
-            return "Added ✅ (multiple items)\n\n" + summary, dump_cart(cart), dump_state(state)
-        return "Added ✅\n\n" + summary, dump_cart(cart), dump_state(state)
+            base_reply = "Added ✅ (multiple items)\n\n" + summary
+        else:
+            base_reply = "Added ✅\n\n" + summary
+
+        if upsell:
+            base_reply += "\n\n" + upsell
+
+        return base_reply, dump_cart(cart), dump_state(state)
 
     if low_confidence_item:
         return (

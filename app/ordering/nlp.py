@@ -27,6 +27,20 @@ _DEFAULT_SYNONYMS: Dict[str, str] = {
     "chunky chips": "fries",
     "steak fries": "fries",
 
+    # Scottish chip shop language
+    "fish supper": "fish supper",
+    "sausage supper": "sausage supper",
+    "smoked sausage supper": "smoked sausage supper",
+    "single fish": "fish",
+    "single sausage": "sausage",
+    "smoke sausage": "smoked sausage",
+    "smokie sausage": "smoked sausage",
+    "chippy sauce": "brown sauce",
+    "salt n sauce": "salt and sauce",
+    "salt and sauce": "salt and sauce",
+    "can of juice": "soft drink",
+    "juice": "soft drink",
+
     # Drinks
     "coke": "coca cola",
     "cola": "coca cola",
@@ -259,6 +273,7 @@ _PROTECTED_AND_PHRASES = [
     "sweet and sour",
     "salt and pepper",
     "fish and chips",
+    "salt and sauce",
 ]
 
 _STOPWORDS = {
