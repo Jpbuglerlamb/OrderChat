@@ -1,4 +1,4 @@
-# app/services/menu_ingest.py
+#app/services/menu_ingest.py
 from __future__ import annotations
 
 import csv
@@ -7,6 +7,8 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+
+from app.services.menu_vision import extract_menu_from_image_with_ai
 
 
 # ----------------------------
@@ -58,220 +60,6 @@ def prompt_for_option(key: str) -> str:
         "type": "Choose:",
     }
     return prompts.get(key, f"Choose {key.replace('_', ' ')}:")
-
-
-# ----------------------------
-# NORMALIZERS TO NEW SCHEMA
-# ----------------------------
-
-def normalize_extras(extras: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
-    extras = extras or []
-    out: list[dict[str, Any]] = []
-
-    for extra in extras:
-        if not isinstance(extra, dict):
-            continue
-
-        name = clean_text(extra.get("name"))
-        if not name:
-            continue
-
-        out.append(
-            {
-                "name": name,
-                "price": parse_price(extra.get("price", 0)),
-            }
-        )
-
-    return out
-
-
-def normalize_modifiers_from_options(
-    options: dict[str, list[str]] | None,
-) -> list[dict[str, Any]]:
-    options = options or {}
-    out: list[dict[str, Any]] = []
-
-    for raw_key, values in options.items():
-        key = slugify(raw_key)
-        cleaned_values = [clean_text(v) for v in (values or []) if clean_text(v)]
-        if not cleaned_values:
-            continue
-
-        out.append(
-            {
-                "key": key,
-                "prompt": prompt_for_option(key),
-                "required": True,
-                "multi": False,
-                "options": cleaned_values,
-            }
-        )
-
-    return out
-
-
-def normalize_modifiers(item: dict[str, Any]) -> list[dict[str, Any]]:
-    raw_modifiers = item.get("modifiers")
-    if isinstance(raw_modifiers, list):
-        out: list[dict[str, Any]] = []
-        for mod in raw_modifiers:
-            if not isinstance(mod, dict):
-                continue
-
-            key = clean_text(mod.get("key") or slugify(mod.get("prompt", "option")))
-            prompt = clean_text(mod.get("prompt") or "Choose an option:")
-            required = bool(mod.get("required", True))
-            multi = bool(mod.get("multi", False))
-            options = [clean_text(v) for v in mod.get("options", []) if clean_text(v)]
-
-            if not key or not options:
-                continue
-
-            out.append(
-                {
-                    "key": key,
-                    "prompt": prompt,
-                    "required": required,
-                    "multi": multi,
-                    "options": options,
-                }
-            )
-        return out
-
-    raw_options = item.get("options")
-    if isinstance(raw_options, dict):
-        return normalize_modifiers_from_options(raw_options)
-
-    return []
-
-
-def normalize_item(item: dict[str, Any], category_id: str) -> dict[str, Any]:
-    name = clean_text(item.get("name"))
-    if not name:
-        raise ValueError("Item is missing name")
-
-    item_id = clean_text(item.get("id")) or slugify(name)
-    base_price_raw = item.get("base_price", item.get("price", 0))
-
-    return {
-        "id": item_id,
-        "name": name,
-        "category_id": category_id,
-        "base_price": parse_price(base_price_raw),
-        "modifiers": normalize_modifiers(item),
-        "extras": normalize_extras(item.get("extras")),
-    }
-
-
-def categories_items_to_canonical(
-    *,
-    business_name: str,
-    email: str,
-    phone: str,
-    address: str,
-    opening_hours: str,
-    categories: list[dict[str, Any]],
-    slug: str | None = None,
-    currency: str = "GBP",
-    pickup_only: bool = True,
-    notes_allowed: bool = True,
-    warnings: list[str] | None = None,
-) -> dict[str, Any]:
-    slug = slug or slugify_dash(business_name)
-
-    out_categories: list[dict[str, str]] = []
-    out_items: list[dict[str, Any]] = []
-    seen_category_ids: set[str] = set()
-    seen_item_ids: set[str] = set()
-
-    for category in categories:
-        cat_name = clean_text(category.get("name"))
-        if not cat_name or is_ignorable_menu_line(cat_name):
-            continue
-
-        cat_id = clean_text(category.get("id")) or slugify(cat_name)
-
-        if cat_id not in seen_category_ids:
-            out_categories.append({"id": cat_id, "name": cat_name})
-            seen_category_ids.add(cat_id)
-
-        for raw_item in category.get("items", []) or []:
-            if not isinstance(raw_item, dict):
-                continue
-
-            item = normalize_item(raw_item, cat_id)
-
-            original_id = item["id"]
-            counter = 2
-            while item["id"] in seen_item_ids:
-                item["id"] = f"{original_id}_{counter}"
-                counter += 1
-
-            seen_item_ids.add(item["id"])
-            out_items.append(item)
-
-    return {
-        "meta": {
-            "slug": slug,
-            "currency": currency,
-            "notes_allowed": notes_allowed,
-            "order_email": email,
-            "business_name": business_name,
-            "phone": phone,
-            "address": address,
-            "opening_hours": opening_hours,
-            "pickup_only": pickup_only,
-        },
-        "categories": out_categories,
-        "items": out_items,
-        "warnings": warnings or [],
-    }
-
-
-def save_menu_json(menu_data: dict[str, Any], output_path: str | Path) -> Path:
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(
-        json.dumps(menu_data, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
-    return output_path
-
-
-# ----------------------------
-# FILE EXTRACTION
-# ----------------------------
-
-def extract_text_from_txt(file_bytes: bytes) -> str:
-    return file_bytes.decode("utf-8", errors="ignore")
-
-
-def extract_rows_from_csv(file_bytes: bytes) -> list[dict[str, str]]:
-    text = file_bytes.decode("utf-8", errors="ignore")
-    reader = csv.DictReader(io.StringIO(text))
-    return [dict(row) for row in reader]
-
-
-def extract_text_from_pdf(file_bytes: bytes) -> str:
-    try:
-        from pypdf import PdfReader
-    except ImportError as e:
-        raise RuntimeError("pypdf is required to parse PDF menus.") from e
-
-    reader = PdfReader(io.BytesIO(file_bytes))
-    parts: list[str] = []
-
-    for page in reader.pages:
-        parts.append(page.extract_text() or "")
-
-    text = "\n".join(parts).strip()
-    if not text:
-        raise RuntimeError(
-            "This PDF appears to be image-only or unreadable as text. "
-            "Use OCR/AI vision/manual review for this file."
-        )
-    return text
 
 
 # ----------------------------
@@ -388,7 +176,6 @@ def looks_like_category(line: str) -> bool:
     if ll in known:
         return True
 
-    # strong heading patterns only
     if re.fullmatch(r"[A-Za-z& ]+\s+dishes", line, flags=re.I):
         return True
 
@@ -398,7 +185,6 @@ def looks_like_category(line: str) -> bool:
     if re.fullmatch(r"set meals?", line, flags=re.I):
         return True
 
-    # allow uppercase headings, but not generic title-case item names
     if line.isupper():
         return True
 
@@ -435,9 +221,299 @@ def option_name_to_key(option_name: str) -> str:
 
     return slugify(option_name)
 
+
 def is_price_only_line(line: str) -> bool:
     s = clean_text(line).replace(" ", "")
     return bool(re.fullmatch(r"£?\d+(?:\.\d{1,2})?", s))
+
+
+# ----------------------------
+# IMAGE / PDF AI HELPERS
+# ----------------------------
+
+def extract_images_from_pdf(file_bytes: bytes) -> list[bytes]:
+    """
+    Render PDF pages to PNG bytes.
+    Requires PyMuPDF: pip install pymupdf
+    """
+    try:
+        import fitz  # PyMuPDF
+    except ImportError as e:
+        raise RuntimeError("pymupdf is required for scanned/image PDF support.") from e
+
+    pdf = fitz.open(stream=file_bytes, filetype="pdf")
+    out: list[bytes] = []
+
+    try:
+        for page in pdf:
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+            out.append(pix.tobytes("png"))
+    finally:
+        pdf.close()
+
+    return out
+
+
+def merge_extracted_categories(categories: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: dict[str, dict[str, Any]] = {}
+
+    for category in categories:
+        if not isinstance(category, dict):
+            continue
+
+        raw_name = clean_text(category.get("name")) or "Menu"
+        name_key = normalize_line_for_compare(raw_name)
+        items = category.get("items") or []
+
+        if name_key not in merged:
+            merged[name_key] = {"name": raw_name, "items": []}
+
+        existing_item_keys = {
+            normalize_line_for_compare(clean_text(it.get("name")))
+            for it in merged[name_key]["items"]
+            if isinstance(it, dict)
+        }
+
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+
+            item_name = clean_text(item.get("name"))
+            if not item_name:
+                continue
+
+            item_key = normalize_line_for_compare(item_name)
+            if item_key in existing_item_keys:
+                continue
+
+            merged[name_key]["items"].append(item)
+            existing_item_keys.add(item_key)
+
+    return list(merged.values())
+
+
+def extract_menu_from_pdf_images_with_ai(file_bytes: bytes) -> tuple[list[dict[str, Any]], list[str]]:
+    page_images = extract_images_from_pdf(file_bytes)
+
+    all_categories: list[dict[str, Any]] = []
+    warnings: list[str] = []
+
+    for i, image_bytes in enumerate(page_images, start=1):
+        page_categories, page_warnings = extract_menu_from_image_with_ai(
+            image_bytes=image_bytes,
+            filename=f"page_{i}.png",
+        )
+        all_categories.extend(page_categories)
+        warnings.extend([f"Page {i}: {w}" for w in page_warnings])
+
+    merged = merge_extracted_categories(all_categories)
+    return merged, warnings
+
+
+# ----------------------------
+# NORMALIZERS TO NEW SCHEMA
+# ----------------------------
+
+def normalize_extras(extras: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    extras = extras or []
+    out: list[dict[str, Any]] = []
+
+    for extra in extras:
+        if not isinstance(extra, dict):
+            continue
+
+        name = clean_text(extra.get("name"))
+        if not name:
+            continue
+
+        out.append(
+            {
+                "name": name,
+                "price": parse_price(extra.get("price", 0)),
+            }
+        )
+
+    return out
+
+
+def normalize_modifiers_from_options(
+    options: dict[str, list[str]] | None,
+) -> list[dict[str, Any]]:
+    options = options or {}
+    out: list[dict[str, Any]] = []
+
+    for raw_key, values in options.items():
+        key = slugify(raw_key)
+        cleaned_values = [clean_text(v) for v in (values or []) if clean_text(v)]
+        if not cleaned_values:
+            continue
+
+        out.append(
+            {
+                "key": key,
+                "prompt": prompt_for_option(key),
+                "required": True,
+                "multi": False,
+                "options": cleaned_values,
+            }
+        )
+
+    return out
+
+
+def normalize_modifiers(item: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_modifiers = item.get("modifiers")
+    if isinstance(raw_modifiers, list):
+        out: list[dict[str, Any]] = []
+
+        for mod in raw_modifiers:
+            if not isinstance(mod, dict):
+                continue
+
+            key = clean_text(mod.get("key") or slugify(mod.get("prompt", "option")))
+            prompt = clean_text(mod.get("prompt") or "Choose an option:")
+            required = bool(mod.get("required", True))
+            multi = bool(mod.get("multi", False))
+            options = [clean_text(v) for v in mod.get("options", []) if clean_text(v)]
+
+            if not key or not options:
+                continue
+
+            out.append(
+                {
+                    "key": key,
+                    "prompt": prompt,
+                    "required": required,
+                    "multi": multi,
+                    "options": options,
+                }
+            )
+        return out
+
+    raw_options = item.get("options")
+    if isinstance(raw_options, dict):
+        return normalize_modifiers_from_options(raw_options)
+
+    return []
+
+
+def normalize_item(item: dict[str, Any], category_id: str) -> dict[str, Any]:
+    name = clean_text(item.get("name"))
+    if not name:
+        raise ValueError("Item is missing name")
+
+    item_id = clean_text(item.get("id")) or slugify(name)
+    base_price_raw = item.get("base_price", item.get("price", 0))
+
+    return {
+        "id": item_id,
+        "name": name,
+        "category_id": category_id,
+        "base_price": parse_price(base_price_raw),
+        "modifiers": normalize_modifiers(item),
+        "extras": normalize_extras(item.get("extras")),
+    }
+
+
+def categories_items_to_canonical(
+    *,
+    business_name: str,
+    email: str,
+    phone: str,
+    address: str,
+    opening_hours: str,
+    categories: list[dict[str, Any]],
+    slug: str | None = None,
+    currency: str = "GBP",
+    pickup_only: bool = True,
+    notes_allowed: bool = True,
+    warnings: list[str] | None = None,
+) -> dict[str, Any]:
+    slug = slug or slugify_dash(business_name)
+
+    out_categories: list[dict[str, str]] = []
+    out_items: list[dict[str, Any]] = []
+    seen_category_ids: set[str] = set()
+    seen_item_ids: set[str] = set()
+
+    for category in categories:
+        cat_name = clean_text(category.get("name"))
+        if not cat_name or is_ignorable_menu_line(cat_name):
+            continue
+
+        cat_id = clean_text(category.get("id")) or slugify(cat_name)
+
+        if cat_id not in seen_category_ids:
+            out_categories.append({"id": cat_id, "name": cat_name})
+            seen_category_ids.add(cat_id)
+
+        for raw_item in category.get("items", []) or []:
+            if not isinstance(raw_item, dict):
+                continue
+
+            item = normalize_item(raw_item, cat_id)
+
+            original_id = item["id"]
+            counter = 2
+            while item["id"] in seen_item_ids:
+                item["id"] = f"{original_id}_{counter}"
+                counter += 1
+
+            seen_item_ids.add(item["id"])
+            out_items.append(item)
+
+    return {
+        "meta": {
+            "slug": slug,
+            "currency": currency,
+            "notes_allowed": notes_allowed,
+            "order_email": email,
+            "business_name": business_name,
+            "phone": phone,
+            "address": address,
+            "opening_hours": opening_hours,
+            "pickup_only": pickup_only,
+        },
+        "categories": out_categories,
+        "items": out_items,
+        "warnings": warnings or [],
+    }
+
+
+# ----------------------------
+# FILE EXTRACTION
+# ----------------------------
+
+def extract_text_from_txt(file_bytes: bytes) -> str:
+    return file_bytes.decode("utf-8", errors="ignore")
+
+
+def extract_rows_from_csv(file_bytes: bytes) -> list[dict[str, str]]:
+    text = file_bytes.decode("utf-8", errors="ignore")
+    reader = csv.DictReader(io.StringIO(text))
+    return [dict(row) for row in reader]
+
+
+def extract_text_from_pdf(file_bytes: bytes) -> str:
+    try:
+        from pypdf import PdfReader
+    except ImportError as e:
+        raise RuntimeError("pypdf is required to parse PDF menus.") from e
+
+    reader = PdfReader(io.BytesIO(file_bytes))
+    parts: list[str] = []
+
+    for page in reader.pages:
+        parts.append(page.extract_text() or "")
+
+    text = "\n".join(parts).strip()
+    if not text:
+        raise RuntimeError(
+            "This PDF appears to be image-only or unreadable as text. "
+            "Use OCR/AI vision/manual review for this file."
+        )
+    return text
+
 
 # ----------------------------
 # PARSERS
@@ -465,6 +541,7 @@ def parse_existing_json_menu(raw: dict[str, Any]) -> tuple[list[dict[str, Any]],
                 "address": restaurant.get("address"),
                 "opening_hours": restaurant.get("opening_hours"),
                 "pickup_only": restaurant.get("pickup_only"),
+                "notes_allowed": restaurant.get("notes_allowed"),
             }
 
         return raw["categories"], extracted_meta, raw.get("warnings", []) or warnings
@@ -475,9 +552,11 @@ def parse_existing_json_menu(raw: dict[str, Any]) -> tuple[list[dict[str, Any]],
         for cat in raw["categories"]:
             if not isinstance(cat, dict):
                 continue
+
             cat_name = clean_text(cat.get("name"))
             if not cat_name:
                 continue
+
             cat_id = clean_text(cat.get("id")) or slugify(cat_name)
             categories_by_id[cat_id] = {
                 "id": cat_id,
@@ -593,8 +672,6 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
     warnings: list[str] = []
     current_category: dict[str, Any] | None = None
     last_item: dict[str, Any] | None = None
-
-    # holds a likely item name waiting for a price on the next line
     pending_item_name: str | None = None
 
     def ensure_category(name: str = "Menu") -> dict[str, Any]:
@@ -608,7 +685,6 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
         if is_ignorable_menu_line(line):
             continue
 
-        # 1) category headings
         if looks_like_category(line):
             current_category = {"name": line.title(), "items": []}
             categories.append(current_category)
@@ -616,7 +692,6 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
             pending_item_name = None
             continue
 
-        # 2) option hints attached to previous item
         option_match = OPTION_HINT_RE.match(line)
         if option_match and last_item is not None:
             option_name = option_match.group(1).lower().strip()
@@ -627,7 +702,6 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
             last_item["options"][normalized_key] = option_values
             continue
 
-        # 3) extras attached to previous item
         extra_match = EXTRA_LINE_RE.match(line)
         if extra_match and last_item is not None:
             last_item.setdefault("extras", [])
@@ -639,7 +713,6 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
             )
             continue
 
-        # 4) normal one-line item with price
         item_match = ITEM_WITH_PRICE_RE.match(line)
         if item_match:
             category = ensure_category()
@@ -662,7 +735,6 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
             pending_item_name = None
             continue
 
-        # 5) size upgrade line attached to previous item
         size_match = SIZE_UPGRADE_RE.match(line)
         if size_match and last_item is not None:
             size_name = size_match.group(1).title()
@@ -676,8 +748,6 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
             last_item["options"]["size"] = existing_sizes
             continue
 
-        # 6) two-line item support:
-        # if current line is just a price and we have a pending item name, attach it
         if is_price_only_line(line):
             if pending_item_name:
                 category = ensure_category()
@@ -691,11 +761,9 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
                 pending_item_name = None
                 continue
 
-            # no pending name, but previous item exists: ignore as stray
             warnings.append(f"Standalone price line could not be attached: {line}")
             continue
 
-        # 7) if line contains a price anywhere, try loose parse
         price_match = PRICE_RE.search(line)
         if price_match:
             category = ensure_category()
@@ -715,13 +783,10 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
                 warnings.append(f"Could not determine usable item name from line: {line}")
             continue
 
-        # 8) likely item-name-only line, wait for next line to be a price
-        # but only if it is not obviously junk
         if not looks_like_category(line) and not is_ignorable_menu_line(line):
             pending_item_name = clean_item_name(line)
             continue
 
-        # 9) fallback warnings
         if last_item is not None:
             warnings.append(f"Unattached line after item '{last_item['name']}': {line}")
         else:
@@ -729,6 +794,49 @@ def parse_text_menu_heuristic(text: str) -> tuple[list[dict[str, Any]], list[str
 
     categories = [c for c in categories if c.get("items")]
     return categories, warnings
+
+
+# ----------------------------
+# VALIDATION
+# ----------------------------
+
+def validate_extracted_categories(categories: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
+    cleaned: list[dict[str, Any]] = []
+    warnings: list[str] = []
+
+    for category in categories:
+        if not isinstance(category, dict):
+            continue
+
+        cat_name = clean_text(category.get("name")) or "Menu"
+        raw_items = category.get("items") or []
+        valid_items: list[dict[str, Any]] = []
+
+        for item in raw_items:
+            if not isinstance(item, dict):
+                continue
+
+            item_name = clean_text(item.get("name"))
+            if not item_name or is_ignorable_menu_line(item_name):
+                continue
+
+            base_price = clean_text(item.get("base_price", item.get("price", "")))
+            if not base_price:
+                warnings.append(f"Missing price for item '{item_name}'")
+                continue
+
+            try:
+                parse_price(base_price)
+            except Exception:
+                warnings.append(f"Invalid price for item '{item_name}': {base_price}")
+                continue
+
+            valid_items.append(item)
+
+        if valid_items:
+            cleaned.append({"name": cat_name, "items": valid_items})
+
+    return cleaned, warnings
 
 
 # ----------------------------
@@ -766,13 +874,22 @@ def ingest_menu_file_to_dataset(
         categories, warnings = parse_text_menu_heuristic(text)
 
     elif ext == ".pdf":
-        text = extract_text_from_pdf(file_bytes)
-        categories, warnings = parse_text_menu_heuristic(text)
+        try:
+            text = extract_text_from_pdf(file_bytes)
+            categories, warnings = parse_text_menu_heuristic(text)
+        except RuntimeError:
+            categories, warnings = extract_menu_from_pdf_images_with_ai(file_bytes)
+
+    elif ext in {".jpg", ".jpeg", ".png", ".webp"}:
+        categories, warnings = extract_menu_from_image_with_ai(
+            image_bytes=file_bytes,
+            filename=filename,
+        )
 
     else:
         raise RuntimeError(
             f"Unsupported file type: {ext}. "
-            "Supported: .json, .csv, .txt, .pdf (text-based PDFs only)."
+            "Supported: .json, .csv, .txt, .pdf, .jpg, .jpeg, .png, .webp."
         )
 
     effective_slug = clean_text(extracted_meta.get("slug")) or None
@@ -784,6 +901,9 @@ def ingest_menu_file_to_dataset(
     effective_opening_hours = clean_text(extracted_meta.get("opening_hours")) or opening_hours
     effective_pickup_only = bool(extracted_meta.get("pickup_only", pickup_only))
     effective_notes_allowed = bool(extracted_meta.get("notes_allowed", True))
+
+    categories, validation_warnings = validate_extracted_categories(categories)
+    warnings.extend(validation_warnings)
 
     return categories_items_to_canonical(
         business_name=effective_business_name,
