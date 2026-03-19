@@ -1,4 +1,8 @@
+# app/services/stripe_services.py
+from __future__ import annotations
+
 import os
+
 import stripe
 
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
@@ -33,7 +37,8 @@ def create_checkout_session(
     restaurant_id: int,
     customer_email: str,
 ) -> str:
-    price_id = get_price_id_for_plan(plan)
+    normalized_plan = (plan or "").strip().lower()
+    price_id = get_price_id_for_plan(normalized_plan)
 
     session = stripe.checkout.Session.create(
         payment_method_types=["card"],
@@ -45,9 +50,16 @@ def create_checkout_session(
             }
         ],
         customer_email=customer_email,
+        client_reference_id=str(restaurant_id),
         metadata={
             "restaurant_id": str(restaurant_id),
-            "plan": plan,
+            "plan_key": normalized_plan,
+        },
+        subscription_data={
+            "metadata": {
+                "restaurant_id": str(restaurant_id),
+                "plan_key": normalized_plan,
+            }
         },
         success_url=f"{base_url}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
         cancel_url=f"{base_url}/billing/cancel",
