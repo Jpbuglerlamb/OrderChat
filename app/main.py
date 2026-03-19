@@ -25,6 +25,7 @@ from app.routes.cart_api import router as cart_router
 from app.routes.command_router import router as command_router
 from app.routes.web_customer import router as web_customer_router
 from app.routes.stripe import router as stripe_router
+from app.routes.stripe_webhooks import router as stripe_webhooks_router
 
 
 
@@ -49,6 +50,7 @@ def create_app() -> FastAPI:
     app.include_router(command_router)
     app.include_router(web_customer_router)
     app.include_router(stripe_router, prefix="/billing")
+    app.include_router(stripe_webhooks_router)
 
     # ---------- Health ----------
     @app.get("/health")
