@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import os
-
 import stripe
 
+# -----------------------------
+# ENV VARIABLES
+# -----------------------------
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_MONTHLY_PRICE_ID = os.getenv("STRIPE_MONTHLY_PRICE_ID")
 STRIPE_YEARLY_PRICE_ID = os.getenv("STRIPE_YEARLY_PRICE_ID")
@@ -21,6 +23,9 @@ if not STRIPE_YEARLY_PRICE_ID:
 stripe.api_key = STRIPE_SECRET_KEY
 
 
+# -----------------------------
+# HELPERS
+# -----------------------------
 def get_price_id_for_plan(plan: str) -> str:
     normalized_plan = (plan or "").strip().lower()
 
@@ -30,6 +35,9 @@ def get_price_id_for_plan(plan: str) -> str:
     return STRIPE_MONTHLY_PRICE_ID
 
 
+# -----------------------------
+# MAIN: CREATE CHECKOUT SESSION
+# -----------------------------
 def create_checkout_session(
     *,
     base_url: str,
@@ -43,24 +51,39 @@ def create_checkout_session(
     session = stripe.checkout.Session.create(
         payment_method_types=["card"],
         mode="subscription",
+
         line_items=[
             {
                 "price": price_id,
                 "quantity": 1,
             }
         ],
+
+        # -----------------------------
+        # CUSTOMER
+        # -----------------------------
         customer_email=customer_email,
         client_reference_id=str(restaurant_id),
+
         metadata={
             "restaurant_id": str(restaurant_id),
             "plan_key": normalized_plan,
         },
+
+        # -----------------------------
+        # 🔥 TRIAL CONFIG (NEW)
+        # -----------------------------
         subscription_data={
+            "trial_period_days": 30,
             "metadata": {
                 "restaurant_id": str(restaurant_id),
                 "plan_key": normalized_plan,
-            }
+            },
         },
+
+        # -----------------------------
+        # REDIRECTS
+        # -----------------------------
         success_url=f"{base_url}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
         cancel_url=f"{base_url}/billing/cancel",
     )
