@@ -10,7 +10,7 @@ from app.db import get_db
 from app.models import Restaurant, User
 from app.routes.auth_platform import get_current_platform_user
 from app.services.storage import generate_download_url
-from app.services.stripe_services import create_billing_portal_session
+from app.services.stripe_service import create_billing_portal_session
 
 router = APIRouter()
 
