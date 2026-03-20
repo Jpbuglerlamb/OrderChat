@@ -1,7 +1,8 @@
-#app/routes/command_router.py
+# app/routes/command_router.py
 from __future__ import annotations
 
 import json
+import os
 import re
 import traceback
 from datetime import datetime
@@ -21,8 +22,9 @@ from fastapi import (
 )
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from itsdangerous import BadSignature, URLSafeSerializer
 from pydantic import BaseModel
-from sqlalchemy import or_, func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -38,8 +40,7 @@ from app.security.auth import (
     verify_password,
 )
 from app.services.storage import get_json_file
-from itsdangerous import BadSignature, URLSafeSerializer
-import os
+
 try:
     from app.ai_intent import interpret_message_llm
 except Exception:
@@ -58,10 +59,11 @@ CHAT_HTML_PATH = TEMPLATES_DIR / "chat.html"
 BASKET_HTML_PATH = TEMPLATES_DIR / "basket.html"
 STAFF_HTML_PATH = TEMPLATES_DIR / "staff.html"
 STAFF_LOGIN_HTML_PATH = TEMPLATES_DIR / "staff_login.html"
+
 CUSTOMER_COOKIE_NAME = os.getenv("CUSTOMER_SESSION_COOKIE", "jpai_customer_session")
 CUSTOMER_COOKIE_TTL_DAYS = int(os.getenv("CUSTOMER_SESSION_TTL_DAYS", "30"))
-
 CUSTOMER_SECRET = os.getenv("CUSTOMER_SESSION_SECRET", "dev-customer-secret-change-me")
+
 customer_serializer = URLSafeSerializer(CUSTOMER_SECRET, salt="jpai-customer-session")
 
 # ---------- Helpers ----------
@@ -191,10 +193,7 @@ def _ensure_template_exists(path: Path) -> None:
         raise HTTPException(status_code=500, detail=f"Missing frontend file: {path}")
 
 
-def get_owner_user_for_request(
-    request: Request,
-    db: Session,
-) -> User | None:
+def get_owner_user_for_request(request: Request, db: Session) -> User | None:
     session_email = get_session_email(request)
     if not session_email:
         return None
@@ -250,21 +249,18 @@ def require_user_id_or_guest(
     authorization: str | None = Header(default=None),
     guest_id: str | None = Cookie(default=None, alias="guest_id"),
 ) -> int:
-    # 1) API bearer token
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()
         user_id = decode_token(token)
         if user_id:
             return user_id
 
-    # 2) Customer session cookie only
     customer_email = get_customer_session_email(request)
     if customer_email:
         user = db.query(User).filter(User.email == customer_email).first()
         if user:
             return user.id
 
-    # 3) Guest fallback
     if not guest_id:
         guest_id = uuid4().hex
 
@@ -357,6 +353,7 @@ def _is_guest_email(email: str | None) -> bool:
     value = (email or "").strip().lower()
     return value.endswith("@demo.local") and value.startswith("guest+")
 
+
 def sign_customer_email(email: str) -> str:
     return customer_serializer.dumps({"email": email.strip().lower()})
 
@@ -397,6 +394,8 @@ def clear_customer_session_cookie(response: Response) -> None:
         key=CUSTOMER_COOKIE_NAME,
         path="/",
     )
+
+
 def get_latest_confirmed_order(db: Session, user_id: int, slug: str) -> Order | None:
     return (
         db.query(Order)
@@ -406,6 +405,7 @@ def get_latest_confirmed_order(db: Session, user_id: int, slug: str) -> Order | 
         .order_by(Order.id.desc())
         .first()
     )
+
 
 # ---------- "Me" endpoints ----------
 class MeOut(BaseModel):
@@ -552,7 +552,6 @@ def staff_page(
     owner_user = get_owner_user_for_request(request, db)
     dashboard_url = f"/r/{slug}/staff"
 
-    # Business owner can enter directly with normal platform session
     if _owner_can_access_restaurant(request, db, restaurant):
         return templates.TemplateResponse(
             "staff.html",
@@ -567,7 +566,6 @@ def staff_page(
             },
         )
 
-    # Optional: separate staff accounts kept for later use
     if _staff_can_access_restaurant(request, slug):
         return templates.TemplateResponse(
             "staff.html",
@@ -594,7 +592,6 @@ def staff_login_page(
 
     next_url = (request.query_params.get("next") or "").strip()
 
-    # If already signed in as owner, skip this page
     owner_user = get_owner_user_for_request(request, db)
     if owner_user and next_url.startswith("/r/") and next_url.endswith("/staff"):
         parts = next_url.strip("/").split("/")
@@ -805,9 +802,9 @@ async def chat_for_restaurant(
     order_submitted = bool(state.get("order_submitted"))
 
     looks_confirmed = (
-            "order placed" in reply_lower
-            or "order confirmed" in reply_lower
-            or "thanks for your order" in reply_lower
+        "order placed" in reply_lower
+        or "order confirmed" in reply_lower
+        or "thanks for your order" in reply_lower
     )
 
     if order_submitted or looks_confirmed:

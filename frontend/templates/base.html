@@ -18,11 +18,43 @@
 
         {% if current_user %}
           <a href="{{ dashboard_url or '/business' }}" class="nav-dashboard">Dashboard</a>
-          <span class="nav-user">Signed in as {{ current_user.name or current_user.email }}</span>
 
-          <form method="post" action="/business/auth/logout" style="display:inline;">
-            <button type="submit" class="nav-link-button">Log out</button>
-          </form>
+          <div class="nav-user-dropdown">
+            <button
+              type="button"
+              class="nav-user-btn"
+              id="nav-user-btn"
+              aria-haspopup="true"
+              aria-expanded="false"
+              aria-controls="nav-user-menu"
+            >
+              <span class="nav-user-status-dot"></span>
+              <span class="nav-user-label">{{ current_user.name or current_user.email }}</span>
+              <span class="nav-user-caret">▾</span>
+            </button>
+
+            <div
+              class="nav-user-menu"
+              id="nav-user-menu"
+              role="menu"
+              aria-labelledby="nav-user-btn"
+              hidden
+            >
+              <a href="{{ dashboard_url or '/business' }}" role="menuitem">Dashboard</a>
+              <a href="/business/menu" role="menuitem">Edit Menu</a>
+              <a href="/business/qr" role="menuitem">QR Code</a>
+              <a href="/business/settings" role="menuitem">Settings</a>
+              <a href="/billing/manage" role="menuitem">Manage Subscription</a>
+
+              <div class="nav-user-menu-divider"></div>
+
+              <form method="post" action="/business/auth/logout">
+                <button type="submit" class="nav-user-menu-button nav-user-menu-button-danger" role="menuitem">
+                  Log out
+                </button>
+              </form>
+            </div>
+          </div>
         {% else %}
           <a href="/business/login">Log in</a>
           <a href="/business/signup">Sign up</a>
@@ -46,5 +78,55 @@
       </div>
     </footer>
   </div>
+
+  {% if current_user %}
+  <script>
+    (function () {
+      const dropdown = document.querySelector(".nav-user-dropdown");
+      const button = document.getElementById("nav-user-btn");
+      const menu = document.getElementById("nav-user-menu");
+
+      if (!dropdown || !button || !menu) return;
+
+      function openMenu() {
+        menu.hidden = false;
+        button.setAttribute("aria-expanded", "true");
+        dropdown.classList.add("is-open");
+      }
+
+      function closeMenu() {
+        menu.hidden = true;
+        button.setAttribute("aria-expanded", "false");
+        dropdown.classList.remove("is-open");
+      }
+
+      function toggleMenu() {
+        if (menu.hidden) {
+          openMenu();
+        } else {
+          closeMenu();
+        }
+      }
+
+      button.addEventListener("click", function (event) {
+        event.stopPropagation();
+        toggleMenu();
+      });
+
+      document.addEventListener("click", function (event) {
+        if (!dropdown.contains(event.target)) {
+          closeMenu();
+        }
+      });
+
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") {
+          closeMenu();
+          button.focus();
+        }
+      });
+    })();
+  </script>
+  {% endif %}
 </body>
 </html>
