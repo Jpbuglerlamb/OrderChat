@@ -7,7 +7,7 @@
       <h1>Create Business Account</h1>
 
       <p class="subtitle">
-        Set up your restaurant account and start onboarding your takeaway.
+        Set up your restaurant account to begin your 30-day free trial and start onboarding your takeaway.
       </p>
 
       {% if plan %}
@@ -15,13 +15,17 @@
           Selected plan:
           <strong>
             {% if plan == "monthly" %}
-              Monthly · £200/month for 12 months
+              Monthly · 30-day free trial, then £200/month
             {% elif plan == "yearly" %}
-              Yearly · £2,400 annually
+              Yearly · 30-day free trial, then £2,000/year
             {% else %}
               {{ plan|capitalize }}
             {% endif %}
           </strong>
+        </p>
+
+        <p class="muted" style="margin-top: 0.35rem;">
+          You’ll enter payment details at checkout, but you won’t be charged until your free trial ends.
         </p>
       {% endif %}
 
@@ -117,7 +121,7 @@
 
         <div class="button-row">
           <button id="submit-btn" type="submit" class="btn btn-primary">
-            Create Account
+            Continue to Free Trial
           </button>
           <a href="/business/pricing" class="btn btn-secondary" id="back-btn">Back</a>
         </div>
@@ -131,7 +135,7 @@
 
       <h2>Setting up your restaurant</h2>
       <p class="subtitle">
-        Uploading your menu and building your ordering system. This usually takes a few seconds.
+        Uploading your menu and preparing your restaurant workspace. This usually takes a few seconds.
       </p>
 
       <div class="processing-steps">
