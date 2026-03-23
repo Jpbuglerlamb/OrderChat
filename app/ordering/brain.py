@@ -375,6 +375,7 @@ def _extract_browse_keyword(msg_norm: str) -> str | None:
         r"^which\s+(.+?)\s+do\s+you\s+have$",
         r"^show\s+me\s+(.+)$",
         r"^any\s+(.+)$",
+        r"^some\s+(.+)$",
         r"^do\s+you\s+have\s+any\s+(.+)$",
         r"^what\s+(.+?)\s+have\s+you\s+got$",
         r"^what\s+(.+?)\s+is\s+there$",
@@ -382,12 +383,20 @@ def _extract_browse_keyword(msg_norm: str) -> str | None:
 
     for pat in patterns:
         m = re.match(pat, s, flags=re.IGNORECASE)
-        if m:
-            kw = (m.group(1) or "").strip()
-            kw = re.sub(r"\b(dishes|dish|items|item|options|option|stuff|meals|meal)\b$", "", kw, flags=re.I).strip()
-            kw = re.sub(r"^(some|any|a|an|the)\s+", "", kw, flags=re.I).strip()
-            if kw:
-                return kw
+        if not m:
+            continue
+
+        kw = (m.group(1) or "").strip()
+        kw = re.sub(
+            r"\b(dishes|dish|items|item|options|option|stuff|meals|meal)\b$",
+            "",
+            kw,
+            flags=re.IGNORECASE,
+        ).strip()
+        kw = re.sub(r"^(some|any|a|an|the)\s+", "", kw, flags=re.IGNORECASE).strip()
+
+        if kw:
+            return kw
 
     return None
 
@@ -415,7 +424,11 @@ def _keyword_matches(menu: Dict[str, Any], keyword: str, synonyms: Dict[str, str
         blob_norm = normalize_text(blob_raw, synonyms).lower()
         blob_tokens = set(blob_norm.split())
 
-        if kw_raw in blob_raw or (kw_norm and kw_norm in blob_norm):
+        if kw_raw in blob_raw:
+            hits.append(it)
+            continue
+
+        if kw_norm and kw_norm in blob_norm:
             hits.append(it)
             continue
 
@@ -847,17 +860,6 @@ def handle_message(
             return reply, dump_cart(cart), dump_state(state)
         return _format_category_items(cat, items, cur), dump_cart(cart), dump_state(state)
 
-    # 9) Keyword query like “do you have beef?”
-    kw = _try_keyword_query(msg_norm)
-    if kw:
-        hits = _keyword_matches(menu, kw, synonyms)
-        if hits:
-            _set_suggestions(state, hits, reason=f"keyword:{kw}")
-            reply = _format_suggestions_list(hits, cur, f"Yep, we have {kw} dishes:")
-        else:
-            reply = f"I couldn’t find any {kw} dishes on this menu."
-        return reply, dump_cart(cart), dump_state(state)
-
     # 9) Browse keyword query like “what chicken do you have?”
     browse_kw = _extract_browse_keyword(msg_norm)
     if browse_kw:
@@ -874,6 +876,17 @@ def handle_message(
             dump_cart(cart),
             dump_state(state),
         )
+
+    # 9) Keyword query like “do you have beef?”
+    kw = _try_keyword_query(msg_norm)
+    if kw:
+        hits = _keyword_matches(menu, kw, synonyms)
+        if hits:
+            _set_suggestions(state, hits, reason=f"keyword:{kw}")
+            reply = _format_suggestions_list(hits, cur, f"Yep, we have {kw} dishes:")
+        else:
+            reply = f"I couldn’t find any {kw} dishes on this menu."
+        return reply, dump_cart(cart), dump_state(state)
 
     # 10) Remove
     if msg_norm.startswith("remove ") or msg_norm.startswith("delete "):
