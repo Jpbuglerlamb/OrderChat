@@ -531,19 +531,27 @@ def basket_page(
     db: Session = Depends(get_db),
 ):
     slug = _normalize_slug(slug)
-    restaurant, menu_data = get_restaurant_and_menu(db, slug)
 
-    _ensure_template_exists(BASKET_HTML_PATH)
+    try:
+        restaurant, menu_data = get_restaurant_and_menu(db, slug)
+        _ensure_template_exists(BASKET_HTML_PATH)
 
-    return templates.TemplateResponse(
-        "basket.html",
-        {
-            "request": request,
-            "restaurant": restaurant,
-            "restaurant_slug": slug,
-            "menu_data": menu_data,
-        },
-    )
+        return templates.TemplateResponse(
+            request=request,
+            name="basket.html",
+            context={
+                "restaurant": restaurant,
+                "restaurant_slug": slug,
+                "menu_data": menu_data or {},
+                "current_user": None,
+                "dashboard_url": "/business",
+            },
+        )
+    except Exception as exc:
+        return HTMLResponse(
+            content=f"<h1>Could not load basket page</h1><pre>{str(exc)}</pre>",
+            status_code=500,
+        )
 
 
 @router.get("/r/{slug}/staff", response_class=HTMLResponse)
