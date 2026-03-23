@@ -342,9 +342,9 @@ def home(request: Request, db: Session = Depends(get_db)):
     dashboard_url = build_dashboard_url_for_user(db, current_user)
 
     return templates.TemplateResponse(
-        "home.html",
-        {
-            "request": request,
+        request=request,
+        name="home.html",
+        context={
             "current_user": current_user,
             "dashboard_url": dashboard_url,
         },
