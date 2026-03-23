@@ -52,21 +52,33 @@ def build_menu_lookup(menu_data: dict[str, Any] | None) -> dict[str, str]:
         if not item_id:
             continue
 
-        variants = {
-            canonicalize_text(item_id),
-            canonicalize_text(item_name),
-        }
+        variants = set()
 
-        # extra variant: remove common filler words
-        simplified_name = canonicalize_text(item_name)
+        canonical_id = canonicalize_text(item_id)
+        canonical_name = canonicalize_text(item_name)
+
+        if canonical_id:
+            variants.add(canonical_id)
+        if canonical_name:
+            variants.add(canonical_name)
+
         simplified_name = re.sub(
             r"\b(size|large|small|regular|portion|meal|deal|sauce|can|bottle)\b",
             "",
-            simplified_name,
+            canonical_name,
         )
         simplified_name = re.sub(r"\s+", " ", simplified_name).strip()
         if simplified_name:
             variants.add(simplified_name)
+
+        extra_variants = set()
+        for variant in variants:
+            if variant.endswith("s"):
+                extra_variants.add(variant[:-1])
+            else:
+                extra_variants.add(variant + "s")
+
+        variants |= extra_variants
 
         for variant in variants:
             if variant:
@@ -82,10 +94,22 @@ def resolve_item_id(raw_item_id: str, menu_lookup: dict[str, str]) -> tuple[str,
     if not canonical:
         return "", False
 
-    # exact canonical match
+    # exact match
     matched_id = menu_lookup.get(canonical)
     if matched_id:
         return matched_id, True
+
+    # singular/plural fallback
+    plural_variants = {canonical}
+    if canonical.endswith("s"):
+        plural_variants.add(canonical[:-1])
+    else:
+        plural_variants.add(canonical + "s")
+
+    for variant in plural_variants:
+        matched_id = menu_lookup.get(variant)
+        if matched_id:
+            return matched_id, True
 
     # containment fallback
     for lookup_key, lookup_item_id in menu_lookup.items():
@@ -105,7 +129,7 @@ def resolve_item_id(raw_item_id: str, menu_lookup: dict[str, str]) -> tuple[str,
             best_score = overlap
             best_match = lookup_item_id
 
-    if best_match and best_score >= 2:
+    if best_match and best_score >= 1:
         return best_match, True
 
     fallback = canonical.replace(" ", "_")
