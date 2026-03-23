@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.models import Restaurant
 from app.services.storage import get_json_file
 from app.business_ai.pipeline import run_pipeline
-from app.routes.web_platform import get_saved_orders_for_restaurant
+from app.services.order_analytics_service import get_saved_orders_for_restaurant
 
 
 def recompute_and_store_optimiser_snapshot(

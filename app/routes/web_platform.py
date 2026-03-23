@@ -33,7 +33,7 @@ from app.business_ai.services.snapshot_service import (
     get_saved_optimiser_snapshot,
 )
 from app.business_ai.services.snapshot_service import recompute_and_store_optimiser_snapshot
-
+from app.services.order_analytics_service import get_saved_orders_for_restaurant
 router = APIRouter()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -169,74 +169,6 @@ def build_items_by_category(menu_data: dict) -> tuple[list[dict], dict]:
         items_by_category.setdefault(category_name, []).append(item)
 
     return categories, items_by_category
-
-
-def db_orders_to_pipeline_orders(db_orders: list[Order]) -> list[dict]:
-    orders: list[dict] = []
-
-    for order in db_orders:
-        try:
-            raw_items = json.loads(order.items_json or "[]")
-        except Exception:
-            raw_items = []
-
-        if not isinstance(raw_items, list):
-            raw_items = []
-
-        items: list[dict] = []
-        total = 0.0
-
-        for item in raw_items:
-            if not isinstance(item, dict):
-                continue
-
-            item_id = str(item.get("id") or item.get("item_id") or "").strip()
-            if not item_id:
-                continue
-
-            try:
-                quantity = int(item.get("quantity") or 1)
-            except Exception:
-                quantity = 1
-
-            try:
-                price = float(item.get("price") or item.get("base_price") or 0.0)
-            except Exception:
-                price = 0.0
-
-            items.append(
-                {
-                    "id": item_id,
-                    "quantity": quantity,
-                    "price": price,
-                }
-            )
-            total += quantity * price
-
-        if not items:
-            continue
-
-        orders.append(
-            {
-                "id": f"db_order_{order.id}",
-                "created_at": order.created_at.isoformat() if order.created_at else "",
-                "items": items,
-                "total": round(total, 2),
-            }
-        )
-
-    return orders
-
-
-def get_saved_orders_for_restaurant(db: Session, restaurant: Restaurant) -> list[dict]:
-    db_orders = (
-        db.query(Order)
-        .filter(Order.restaurant_slug == restaurant.slug)
-        .filter(Order.status == "confirmed")
-        .all()
-    )
-    return db_orders_to_pipeline_orders(db_orders)
-
 
 def render_signup_error(
     request: Request,
