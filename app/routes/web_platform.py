@@ -29,6 +29,10 @@ from app.services.storage import (
     upload_file_bytes,
 )
 from app.services.stripe_service import create_checkout_session
+from app.business_ai.services.snapshot_service import (
+    get_saved_optimiser_snapshot,
+)
+from app.business_ai.services.snapshot_service import recompute_and_store_optimiser_snapshot
 
 router = APIRouter()
 
@@ -974,24 +978,10 @@ def business_ai_optimiser_live(request: Request, db: Session = Depends(get_db)):
     if not restaurant:
         return {"ok": False, "error": "No restaurant found"}
 
-    if not restaurant.menu_json_path:
-        return {"ok": False, "error": "No menu connected"}
+    recompute_and_store_optimiser_snapshot(db, restaurant)
 
-    try:
-        menu_data = get_json_file(restaurant.menu_json_path)
-    except Exception as exc:
-        return {"ok": False, "error": f"Could not load menu: {str(exc)}"}
-
-    saved_orders = get_saved_orders_for_restaurant(db, restaurant)
-    result = run_pipeline(menu_data, saved_orders)
-
-    if not result.get("ok"):
-        return {
-            "ok": False,
-            "error": " | ".join(result.get("errors", ["Unknown analysis error"])),
-        }
-
-    return result
+    # ⚡ INSTANT RESPONSE (no pipeline run)
+    return get_saved_optimiser_snapshot(restaurant)
 
 # --------------------------------
 # Public Pages

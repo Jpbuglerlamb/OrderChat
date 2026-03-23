@@ -40,6 +40,9 @@ from app.security.auth import (
     verify_password,
 )
 from app.services.storage import get_json_file
+from app.business_ai.services.snapshot_service import (
+    recompute_and_store_optimiser_snapshot,
+)
 
 try:
     from app.ai_intent import interpret_message_llm
@@ -331,6 +334,15 @@ def get_or_create_draft(db: Session, user_id: int) -> Order:
     db.add(order)
     db.commit()
     db.refresh(order)
+
+    # 🔥 NEW: trigger optimiser snapshot rebuild when order confirmed
+    if order.status == "confirmed":
+        try:
+            restaurant = db.query(Restaurant).filter(Restaurant.slug == slug).first()
+            if restaurant:
+                recompute_and_store_optimiser_snapshot(db, restaurant)
+        except Exception as exc:
+            print("[OPTIMISER SNAPSHOT ERROR]", repr(exc), flush=True)
     return order
 
 

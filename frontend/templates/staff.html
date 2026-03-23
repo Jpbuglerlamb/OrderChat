@@ -4,30 +4,29 @@
 <section class="hero">
   <div class="card staff-dashboard-shell">
 
-    <!-- HEADER -->
     <div class="staff-topbar">
       <div class="staff-heading">
+        <span class="plan-tag">Workspace</span>
         <h1>Staff Dashboard</h1>
-        <p class="subtitle">
-          Live order control for <strong>{{ restaurant_slug }}</strong>.
+        <p class="subtitle staff-subtitle">
+          Live order control for <strong>{{ restaurant.name or restaurant_slug }}</strong>.
         </p>
       </div>
 
-      <div class="button-row staff-actions">
+      <div class="staff-action-grid">
         <button id="refreshBtn" type="button" class="btn btn-secondary">Refresh</button>
         <a href="/r/{{ restaurant_slug }}" class="btn btn-secondary">Back to Chat</a>
         <a href="/business/qr" class="btn btn-secondary">View QR Code</a>
         <a href="/business/menu" class="btn btn-secondary">Edit Menu</a>
         <a href="/business/settings" class="btn btn-secondary">Settings</a>
+        <a href="/business/ai-optimiser" class="btn btn-primary">Open Full Optimiser</a>
       </div>
     </div>
 
-    <!-- TOP GRID -->
     <div class="staff-grid">
-      <!-- META CARD -->
       <div class="pricing-plan staff-summary-card">
-        <span class="plan-tag">Workspace</span>
-        <h2>Overview</h2>
+        <span class="plan-tag">Overview</span>
+        <h2>Workspace status</h2>
 
         <div class="staff-summary-list">
           <div class="staff-summary-row">
@@ -36,8 +35,18 @@
           </div>
 
           <div class="staff-summary-row">
+            <span class="muted">Restaurant</span>
+            <strong>{{ restaurant.name or restaurant_slug }}</strong>
+          </div>
+
+          <div class="staff-summary-row">
             <span class="muted">Active orders</span>
             <strong id="ordersCountText">Loading...</strong>
+          </div>
+
+          <div class="staff-summary-row">
+            <span class="muted">AI status</span>
+            <strong id="aiStatusText">Loading...</strong>
           </div>
         </div>
 
@@ -46,7 +55,6 @@
         </div>
       </div>
 
-      <!-- AI OPTIMISER -->
       <div class="pricing-plan staff-ai-card" id="aiInsightsCard">
         <div class="staff-ai-head">
           <div>
@@ -56,10 +64,6 @@
               Fast business signals based on current order flow and uploaded history.
             </p>
           </div>
-
-          <a href="/business/ai-optimiser" class="btn btn-secondary staff-ai-open-btn">
-            Open Full Optimiser
-          </a>
         </div>
 
         <div id="aiInsightsMount" class="staff-ai-mount">
@@ -68,10 +72,10 @@
       </div>
     </div>
 
-    <!-- ORDERS SECTION -->
     <div class="staff-orders-section">
       <div class="staff-orders-head">
         <div>
+          <span class="plan-tag">Orders</span>
           <h2>Live Orders</h2>
           <p class="muted">Incoming customer orders that still need kitchen attention.</p>
         </div>
@@ -86,35 +90,44 @@
 <style>
   .staff-dashboard-shell {
     text-align: left;
+    max-width: 1180px;
   }
 
   .staff-topbar {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 18px;
+    gap: 24px;
     flex-wrap: wrap;
-    margin-bottom: 24px;
+    margin-bottom: 28px;
   }
 
   .staff-heading h1 {
-    margin: 0 0 8px;
+    margin: 10px 0 8px;
+    font-size: clamp(2.2rem, 4vw, 3.2rem);
+    line-height: 1.05;
   }
 
-  .staff-heading .subtitle {
+  .staff-subtitle {
     margin: 0;
-    max-width: none;
+    max-width: 680px;
   }
 
-  .staff-actions {
-    margin-top: 0;
-    justify-content: flex-end;
+  .staff-action-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+    gap: 12px;
+    width: min(440px, 100%);
+  }
+
+  .staff-action-grid .btn {
+    width: 100%;
   }
 
   .staff-grid {
     display: grid;
     grid-template-columns: 320px minmax(0, 1fr);
-    gap: 20px;
+    gap: 22px;
     align-items: start;
   }
 
@@ -140,10 +153,10 @@
     display: flex;
     justify-content: space-between;
     gap: 12px;
-    padding: 12px 14px;
+    padding: 14px 16px;
     border-radius: 14px;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .staff-summary-links {
@@ -169,12 +182,10 @@
     margin-top: 0;
   }
 
-  .staff-ai-open-btn {
-    min-width: 190px;
-  }
-
   .staff-ai-mount {
     margin-top: 18px;
+    display: grid;
+    gap: 12px;
   }
 
   .staff-ai-list {
@@ -187,8 +198,17 @@
     margin-top: 10px;
   }
 
+  .staff-ai-pill {
+    padding: 14px 16px;
+    border-radius: 16px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.10);
+    color: #fff;
+    line-height: 1.55;
+  }
+
   .staff-orders-section {
-    margin-top: 28px;
+    margin-top: 30px;
   }
 
   .staff-orders-head {
@@ -201,7 +221,8 @@
   }
 
   .staff-orders-head h2 {
-    margin-top: 0;
+    margin-top: 10px;
+    margin-bottom: 8px;
   }
 
   .staff-orders-head p {
@@ -210,7 +231,6 @@
 
   .staff-orders-mount {
     display: grid;
-    grid-template-columns: 1fr;
     gap: 18px;
   }
 
@@ -229,7 +249,7 @@
 
   .staff-order-meta h3 {
     margin: 0 0 6px;
-    font-size: 1.5rem;
+    font-size: 1.35rem;
   }
 
   .staff-order-summary {
@@ -265,11 +285,16 @@
     .staff-grid {
       grid-template-columns: 1fr;
     }
+
+    .staff-action-grid {
+      grid-template-columns: 1fr 1fr;
+      width: 100%;
+    }
   }
 
   @media (max-width: 760px) {
-    .staff-actions {
-      justify-content: flex-start;
+    .staff-action-grid {
+      grid-template-columns: 1fr;
     }
 
     .staff-order-actions {
@@ -277,8 +302,7 @@
       align-items: stretch;
     }
 
-    .staff-order-actions .btn,
-    .staff-ai-open-btn {
+    .staff-order-actions .btn {
       width: 100%;
     }
   }
@@ -288,8 +312,11 @@
   const slug = "{{ restaurant_slug }}";
   const ordersMount = document.getElementById("ordersMount");
   const ordersCountText = document.getElementById("ordersCountText");
+  const aiStatusText = document.getElementById("aiStatusText");
   const refreshBtn = document.getElementById("refreshBtn");
   const aiInsightsMount = document.getElementById("aiInsightsMount");
+
+  let isRefreshing = false;
 
   function escapeHtml(text) {
     return String(text || "")
@@ -314,6 +341,7 @@
     const res = await fetch(`/r/${slug}/staff/orders`, {
       method: "GET",
       credentials: "same-origin",
+      cache: "no-store",
     });
 
     if (res.status === 401 || res.status === 403) {
@@ -355,9 +383,10 @@
   }
 
   async function apiBusinessInsights() {
-    const res = await fetch(`/business/ai-optimiser/json`, {
+    const res = await fetch(`/business/ai-optimiser/live`, {
       method: "GET",
       credentials: "same-origin",
+      cache: "no-store",
     });
 
     if (res.status === 401 || res.status === 403) {
@@ -439,7 +468,7 @@
           btn.disabled = true;
           btn.textContent = "Updating...";
           await apiUpdateStatus(orderId, newStatus);
-          await loadOrders();
+          await refreshDashboard(false);
         } catch (err) {
           alert(String(err.message || err));
         } finally {
@@ -451,58 +480,70 @@
   }
 
   function renderInsights(result) {
-    if (!result || !result.ok || !Array.isArray(result.insights) || !result.insights.length) {
+    if (!result || !result.ok) {
+      aiStatusText.textContent = "Unavailable";
+      aiInsightsMount.innerHTML = `<p class="muted">Could not load AI insights right now.</p>`;
+      return;
+    }
+
+    const insights = Array.isArray(result.insights) ? result.insights : [];
+    aiStatusText.textContent = insights.length ? "Live" : "Idle";
+
+    if (!insights.length) {
       aiInsightsMount.innerHTML = `
         <p class="muted">No insights yet. Upload past order history in the full AI Optimiser page.</p>
       `;
       return;
     }
 
-    aiInsightsMount.innerHTML = `
-      <ul class="staff-ai-list">
-        ${result.insights.map((insight) => `<li>${escapeHtml(insight)}</li>`).join("")}
-      </ul>
-    `;
+    aiInsightsMount.innerHTML = insights
+      .slice(0, 4)
+      .map((insight) => `<div class="staff-ai-pill">${escapeHtml(insight)}</div>`)
+      .join("");
   }
 
   async function loadOrders() {
-    try {
-      const orders = await apiStaffOrders();
-      renderOrders(orders);
-    } catch (err) {
-      ordersMount.innerHTML = `
-        <div class="pricing-plan staff-error-card">
-          <h2>Couldn't load orders</h2>
-          <p class="muted">${escapeHtml(err.message || "Something went wrong.")}</p>
-        </div>
-      `;
-      ordersCountText.textContent = "Error loading orders";
-    }
+    const orders = await apiStaffOrders();
+    renderOrders(orders);
   }
 
   async function loadInsights() {
+    const data = await apiBusinessInsights();
+    renderInsights(data);
+  }
+
+  async function refreshDashboard(showButtonState = true) {
+    if (isRefreshing) return;
+    isRefreshing = true;
+
+    const oldText = refreshBtn.textContent;
+
     try {
-      const data = await apiBusinessInsights();
-      renderInsights(data);
+      if (showButtonState) {
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = "Refreshing...";
+      }
+
+      await Promise.all([
+        loadOrders(),
+        loadInsights(),
+      ]);
     } catch (err) {
-      aiInsightsMount.innerHTML = `
-        <p class="muted">Could not load AI insights right now.</p>
-      `;
+      console.error(err);
+    } finally {
+      if (showButtonState) {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = oldText;
+      }
+      isRefreshing = false;
     }
   }
 
   refreshBtn.addEventListener("click", async () => {
-    refreshBtn.disabled = true;
-    refreshBtn.textContent = "Refreshing...";
-
-    await loadOrders();
-    await loadInsights();
-
-    refreshBtn.disabled = false;
-    refreshBtn.textContent = "Refresh";
+    await refreshDashboard(true);
   });
 
-  loadOrders();
-  loadInsights();
+  refreshDashboard(true);
+  setInterval(() => refreshDashboard(false), 5000);
 </script>
 {% endblock %}

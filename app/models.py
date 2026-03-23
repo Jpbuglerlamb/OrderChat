@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, Boolean
 from sqlalchemy.orm import relationship
 
@@ -54,6 +53,8 @@ class Restaurant(Base):
     subscription_status = Column(String(40), default="pending", nullable=False)
     stripe_customer_id = Column(String(255), nullable=True)
     stripe_subscription_id = Column(String(255), nullable=True)
+    optimiser_snapshot_json = Column(Text, nullable=True)
+    optimiser_last_updated = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
