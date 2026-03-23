@@ -243,9 +243,9 @@ def render_signup_error(
     status_code: int = 400,
 ):
     return templates.TemplateResponse(
-        "business_signup.html",
-        {
-            "request": request,
+        request=request,
+        name="business_signup.html",
+        context={
             "error": message,
             "plan": normalize_plan(plan),
             "current_user": None,
@@ -287,9 +287,9 @@ def render_business_menu_page(
         categories, items_by_category = build_items_by_category(menu_data)
 
     return templates.TemplateResponse(
-        "business_menu.html",
-        {
-            "request": request,
+        request=request,
+        name="business_menu.html",
+        context={
             "current_user": current_user,
             "dashboard_url": dashboard_url,
             "restaurant": restaurant,
@@ -314,9 +314,9 @@ def render_ai_optimiser_page(
     status_code: int = 200,
 ):
     return templates.TemplateResponse(
-        "business_ai_optimiser.html",
-        {
-            "request": request,
+        request=request,
+        name="business_ai_optimiser.html",
+        context={
             "current_user": current_user,
             "dashboard_url": dashboard_url,
             "restaurant": restaurant,
@@ -357,9 +357,9 @@ def customer_page(request: Request, db: Session = Depends(get_db)):
     dashboard_url = build_dashboard_url_for_user(db, current_user)
 
     return templates.TemplateResponse(
-        "customer_home.html",
-        {
-            "request": request,
+        request=request,
+        name="customer_home.html",
+        context={
             "current_user": current_user,
             "dashboard_url": dashboard_url,
         },
@@ -375,9 +375,9 @@ def business_page(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(url=dashboard_url, status_code=302)
 
     return templates.TemplateResponse(
-        "business_home.html",
-        {
-            "request": request,
+        request=request,
+        name="business_home.html",
+        context={
             "current_user": current_user,
             "dashboard_url": dashboard_url,
         },
@@ -401,9 +401,9 @@ def business_settings_page(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(url="/business/signup", status_code=302)
 
     return templates.TemplateResponse(
-        "business_settings.html",
-        {
-            "request": request,
+        request=request,
+        name="business_settings.html",
+        context={
             "current_user": current_user,
             "dashboard_url": dashboard_url,
             "restaurant": restaurant,
@@ -441,9 +441,9 @@ def business_settings_submit(
     db.refresh(restaurant)
 
     return templates.TemplateResponse(
-        "business_settings.html",
-        {
-            "request": request,
+        request=request,
+        name="business_settings.html",
+        context={
             "current_user": current_user,
             "dashboard_url": dashboard_url,
             "restaurant": restaurant,
@@ -937,23 +937,36 @@ def business_ai_optimiser_json(request: Request, db: Session = Depends(get_db)):
 
     return run_pipeline(menu_data, orders)
 
+
 # --------------------------------
 # Public Pages
 # --------------------------------
 
 @router.get("/privacy", response_class=HTMLResponse)
 def privacy_page(request: Request):
-    return templates.TemplateResponse("privacy.html", {"request": request})
+    return templates.TemplateResponse(
+        request=request,
+        name="privacy.html",
+        context={},
+    )
 
 
 @router.get("/terms", response_class=HTMLResponse)
 def terms_page(request: Request):
-    return templates.TemplateResponse("terms.html", {"request": request})
+    return templates.TemplateResponse(
+        request=request,
+        name="terms.html",
+        context={},
+    )
 
 
 @router.get("/feedback", response_class=HTMLResponse)
 def feedback_page(request: Request):
-    return templates.TemplateResponse("feedback.html", {"request": request})
+    return templates.TemplateResponse(
+        request=request,
+        name="feedback.html",
+        context={},
+    )
 
 
 # --------------------------------
@@ -966,9 +979,9 @@ def business_pricing_page(request: Request, db: Session = Depends(get_db)):
     dashboard_url = build_dashboard_url_for_user(db, current_user)
 
     return templates.TemplateResponse(
-        "business_pricing.html",
-        {
-            "request": request,
+        request=request,
+        name="business_pricing.html",
+        context={
             "current_user": current_user,
             "dashboard_url": dashboard_url,
         },
@@ -990,9 +1003,9 @@ def business_signup_page(
     normalized_plan = normalize_plan(plan)
 
     return templates.TemplateResponse(
-        "business_signup.html",
-        {
-            "request": request,
+        request=request,
+        name="business_signup.html",
+        context={
             "error": None,
             "plan": normalized_plan,
             "current_user": current_user,
@@ -1225,9 +1238,9 @@ def onboarding_complete(
     restaurant = db.query(Restaurant).filter(Restaurant.slug == slug).first()
 
     return templates.TemplateResponse(
-        "business_onboarding_complete.html",
-        {
-            "request": request,
+        request=request,
+        name="business_onboarding_complete.html",
+        context={
             "slug": slug,
             "restaurant": restaurant,
             "qr_download_url": get_qr_download_url(restaurant),
@@ -1248,9 +1261,9 @@ def business_login_page(
     dashboard_url = build_dashboard_url_for_user(db, current_user)
 
     return templates.TemplateResponse(
-        "business_login.html",
-        {
-            "request": request,
+        request=request,
+        name="business_login.html",
+        context={
             "next": next,
             "error": error,
             "current_user": current_user,
@@ -1272,9 +1285,9 @@ def business_qr_page(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(url="/business/signup", status_code=302)
 
     return templates.TemplateResponse(
-        "business_qr.html",
-        {
-            "request": request,
+        request=request,
+        name="business_qr.html",
+        context={
             "current_user": current_user,
             "dashboard_url": dashboard_url,
             "restaurant": restaurant,
