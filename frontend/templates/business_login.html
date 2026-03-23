@@ -1,35 +1,67 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="hero narrow">
-  <div class="card">
-    <h1>Business Sign In</h1>
-    <p class="subtitle">Sign in to manage your restaurant orders.</p>
+<section class="hero narrow auth-hero">
+  <div class="card auth-card">
+
+    <div class="auth-header">
+      <span class="plan-tag highlight">Business Access</span>
+      <h1>Welcome back</h1>
+      <p class="subtitle auth-subtitle">
+        Sign in to access your restaurant dashboard, orders, QR tools, and AI insights.
+      </p>
+    </div>
 
     {% if error %}
-      <p class="muted error-text">
+      <div class="menu-editor-alert menu-editor-alert-error auth-alert">
         {% if error == "bad_login" %}
           Invalid email or password.
         {% else %}
           {{ error }}
         {% endif %}
-      </p>
+      </div>
     {% endif %}
 
-    <form class="manual-form" method="post" action="/business/auth/login">
+    <form class="manual-form auth-form" method="post" action="/business/auth/login">
       <input type="hidden" name="next" value="{{ next or '/business' }}">
 
-      <label for="email">Email</label>
-      <input id="email" name="email" type="email" required>
+      <div class="auth-field">
+        <label for="email">Email</label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          placeholder="you@restaurant.com"
+          autocomplete="email"
+          required
+        >
+      </div>
 
-      <label for="password">Password</label>
-      <input id="password" name="password" type="password" required>
+      <div class="auth-field">
+        <label for="password">Password</label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          placeholder="Enter your password"
+          autocomplete="current-password"
+          required
+        >
+      </div>
 
-      <div class="button-row">
+      <div class="button-row auth-button-row">
         <button type="submit" class="btn btn-primary">Sign In</button>
         <a href="/business" class="btn btn-secondary">Back</a>
       </div>
     </form>
+
+    <div class="auth-footer">
+      <p class="muted auth-footer-text">
+        New here?
+        <a href="/business/signup">Start your free trial</a>
+      </p>
+    </div>
+
   </div>
 </section>
 {% endblock %}

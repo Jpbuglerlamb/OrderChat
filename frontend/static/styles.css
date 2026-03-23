@@ -645,3 +645,86 @@ img {
 .nav-user-menu-button-danger {
   color: var(--danger);
 }
+
+.auth-hero {
+  width: 100%;
+}
+
+.auth-card {
+  max-width: 520px;
+  margin: 24px auto 0;
+  padding: 36px 30px;
+  text-align: left;
+}
+
+.auth-header {
+  text-align: center;
+  margin-bottom: 22px;
+}
+
+.auth-header .plan-tag {
+  margin: 0 auto 16px;
+}
+
+.auth-card h1 {
+  margin: 0 0 12px;
+}
+
+.auth-subtitle {
+  margin: 0 auto;
+  max-width: 460px;
+}
+
+.auth-alert {
+  margin-bottom: 18px;
+}
+
+.auth-form {
+  max-width: none;
+  margin: 0;
+  gap: 16px;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-field label {
+  margin-bottom: 8px;
+}
+
+.auth-field input {
+  width: 100%;
+}
+
+.auth-button-row {
+  margin-top: 8px;
+}
+
+.auth-button-row .btn {
+  min-width: 170px;
+}
+
+.auth-footer {
+  margin-top: 22px;
+  text-align: center;
+}
+
+.auth-footer-text {
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .auth-card {
+    padding: 28px 20px;
+  }
+
+  .auth-button-row {
+    flex-direction: column;
+  }
+
+  .auth-button-row .btn {
+    width: 100%;
+  }
+}
