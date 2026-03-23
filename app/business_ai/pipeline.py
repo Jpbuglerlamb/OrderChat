@@ -1,4 +1,4 @@
-#app/business_ai/utils/pipeline.py
+# app/business_ai/pipeline.py
 from app.business_ai.analytics.item_stats import compute_item_stats
 from app.business_ai.analytics.order_stats import compute_order_stats
 from app.business_ai.analytics.pairings import compute_pairings
@@ -11,7 +11,7 @@ from app.business_ai.data.validator import validate_orders
 
 
 def run_pipeline(menu_data, orders):
-    orders = normalise_orders(orders)
+    orders, unmatched_items = normalise_orders(orders, menu_data=menu_data)
     errors = validate_orders(orders)
 
     if errors:
@@ -37,6 +37,19 @@ def run_pipeline(menu_data, orders):
     )
 
     insights = generate_insights(memory)
+
+    if unmatched_items:
+        insights.append(
+            "🧩 Some uploaded order items could not be matched to the current menu: "
+            + ", ".join(unmatched_items[:10])
+            + ("." if len(unmatched_items) <= 10 else "...")
+        )
+
+    if not insights and not orders:
+        insights.append(
+            "No order history has been analysed yet. Upload past orders to unlock menu and sales insights."
+        )
+
     formatted = format_insights(insights)
 
     return {
@@ -45,4 +58,6 @@ def run_pipeline(menu_data, orders):
         "memory": memory,
         "insights": insights,
         "formatted_insights": formatted,
+        "unmatched_items": unmatched_items,
+        "order_count": len(orders),
     }

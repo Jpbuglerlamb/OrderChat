@@ -937,6 +937,58 @@ def business_ai_optimiser_json(request: Request, db: Session = Depends(get_db)):
 
     return run_pipeline(menu_data, orders)
 
+@router.get("/business/ai-optimiser/status")
+def business_ai_optimiser_status(request: Request, db: Session = Depends(get_db)):
+    current_user = get_current_platform_user(request, db)
+
+    if not current_user:
+        return {"ok": False, "error": "Not authenticated"}
+
+    restaurant = get_latest_restaurant_for_user(db, current_user)
+    if not restaurant:
+        return {"ok": False, "error": "No restaurant found"}
+
+    saved_orders = get_saved_orders_for_restaurant(db, restaurant)
+
+    latest_summary = {
+        "menu_connected": bool(restaurant.menu_json_path),
+        "confirmed_orders_count": len(saved_orders),
+        "last_updated": saved_orders[-1]["created_at"] if saved_orders else None,
+    }
+
+    return {
+        "ok": True,
+        "restaurant_name": restaurant.name,
+        "status": latest_summary,
+    }
+
+@router.get("/business/ai-optimiser/live")
+def business_ai_optimiser_live(request: Request, db: Session = Depends(get_db)):
+    current_user = get_current_platform_user(request, db)
+
+    if not current_user:
+        return {"ok": False, "error": "Not authenticated"}
+
+    restaurant = get_latest_restaurant_for_user(db, current_user)
+    if not restaurant:
+        return {"ok": False, "error": "No restaurant found"}
+
+    if not restaurant.menu_json_path:
+        return {"ok": False, "error": "No menu connected"}
+
+    try:
+        menu_data = get_json_file(restaurant.menu_json_path)
+    except Exception as exc:
+        return {"ok": False, "error": f"Could not load menu: {str(exc)}"}
+
+    saved_orders = get_saved_orders_for_restaurant(db, restaurant)
+    orders = normalise_orders(saved_orders)
+    errors = validate_orders(orders)
+
+    if errors:
+        return {"ok": False, "error": " | ".join(errors)}
+
+    return run_pipeline(menu_data, orders)
 
 # --------------------------------
 # Public Pages
