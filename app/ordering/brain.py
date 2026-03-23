@@ -365,6 +365,31 @@ def _all_items_flat(menu: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     return flat
 
+def _extract_browse_keyword(msg_norm: str) -> str | None:
+    s = (msg_norm or "").strip()
+    if not s:
+        return None
+
+    patterns = [
+        r"^what\s+(.+?)\s+do\s+you\s+have$",
+        r"^which\s+(.+?)\s+do\s+you\s+have$",
+        r"^show\s+me\s+(.+)$",
+        r"^any\s+(.+)$",
+        r"^do\s+you\s+have\s+any\s+(.+)$",
+        r"^what\s+(.+?)\s+have\s+you\s+got$",
+        r"^what\s+(.+?)\s+is\s+there$",
+    ]
+
+    for pat in patterns:
+        m = re.match(pat, s, flags=re.IGNORECASE)
+        if m:
+            kw = (m.group(1) or "").strip()
+            kw = re.sub(r"\b(dishes|dish|items|item|options|option|stuff|meals|meal)\b$", "", kw, flags=re.I).strip()
+            kw = re.sub(r"^(some|any|a|an|the)\s+", "", kw, flags=re.I).strip()
+            if kw:
+                return kw
+
+    return None
 
 def _item_text_blob(it: Dict[str, Any]) -> str:
     name = str(it.get("name") or it.get("title") or it.get("item") or "").strip()
@@ -378,15 +403,25 @@ def _keyword_matches(menu: Dict[str, Any], keyword: str, synonyms: Dict[str, str
         return []
 
     kw_norm = normalize_text(kw_raw, synonyms).lower().strip()
+    kw_tokens = set(kw_norm.split())
 
     hits: List[Dict[str, Any]] = []
+
     for it in _all_items_flat(menu):
         blob_raw = _item_text_blob(it).lower()
         if not blob_raw:
             continue
+
         blob_norm = normalize_text(blob_raw, synonyms).lower()
+        blob_tokens = set(blob_norm.split())
+
         if kw_raw in blob_raw or (kw_norm and kw_norm in blob_norm):
             hits.append(it)
+            continue
+
+        if kw_tokens and kw_tokens.issubset(blob_tokens):
+            hits.append(it)
+            continue
 
     return hits
 
@@ -823,6 +858,23 @@ def handle_message(
             reply = f"I couldn’t find any {kw} dishes on this menu."
         return reply, dump_cart(cart), dump_state(state)
 
+    # 9) Browse keyword query like “what chicken do you have?”
+    browse_kw = _extract_browse_keyword(msg_norm)
+    if browse_kw:
+        hits = _keyword_matches(menu, browse_kw, synonyms)
+        if hits:
+            _set_suggestions(state, hits, reason=f"browse:{browse_kw}")
+            return (
+                _format_suggestions_list(hits, cur, f"Here are the {browse_kw} options:"),
+                dump_cart(cart),
+                dump_state(state),
+            )
+        return (
+            f"I couldn’t find any {browse_kw} options on this menu.",
+            dump_cart(cart),
+            dump_state(state),
+        )
+
     # 10) Remove
     if msg_norm.startswith("remove ") or msg_norm.startswith("delete "):
         target_text = msg_norm.split(" ", 1)[1].strip()
@@ -951,9 +1003,11 @@ def handle_message(
             )
 
     return (
-        "I didn’t catch that. You can say things like:\n"
+        "I didn’t catch that. You can try:\n"
         "• menu\n"
         "• basket\n"
+        "• what chicken do you have\n"
+        "• show me drinks\n"
         "• sweet and sour chicken\n"
         "• remove egg fried rice\n"
         "• confirm",
