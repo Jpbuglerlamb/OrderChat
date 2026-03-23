@@ -13,9 +13,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.business_ai.data.normaliser import normalise_orders
 from app.business_ai.data.order_history_ingest import ingest_order_history_file_to_dataset
-from app.business_ai.data.validator import validate_orders
 from app.business_ai.pipeline import run_pipeline
 from app.db import get_db
 from app.models import Order, Restaurant, User
@@ -736,11 +734,17 @@ def business_ai_optimiser_page(request: Request, db: Session = Depends(get_db)):
 
     menu_connected = False
     menu_error = None
+    insights_result = None
 
     if restaurant.menu_json_path:
         try:
-            get_json_file(restaurant.menu_json_path)
+            menu_data = get_json_file(restaurant.menu_json_path)
             menu_connected = True
+
+            saved_orders = get_saved_orders_for_restaurant(db, restaurant)
+            if saved_orders:
+                insights_result = run_pipeline(menu_data, saved_orders)
+
         except Exception as exc:
             menu_error = f"Could not load menu dataset: {str(exc)}"
 
@@ -751,7 +755,7 @@ def business_ai_optimiser_page(request: Request, db: Session = Depends(get_db)):
         restaurant=restaurant,
         menu_connected=menu_connected,
         menu_error=menu_error,
-        insights_result=None,
+        insights_result=insights_result,
     )
 
 
@@ -825,11 +829,10 @@ async def business_ai_optimiser_submit(
         saved_orders = get_saved_orders_for_restaurant(db, restaurant)
         combined_orders = saved_orders + uploaded_orders
 
-        orders = normalise_orders(combined_orders)
-        errors = validate_orders(orders)
+        result = run_pipeline(menu_data, combined_orders)
 
-        if errors:
-            raise ValueError(" | ".join(errors))
+        if not result.get("ok"):
+            raise ValueError(" | ".join(result.get("errors", ["Unknown analysis error"])))
 
     except Exception as exc:
         return render_ai_optimiser_page(
@@ -847,8 +850,6 @@ async def business_ai_optimiser_submit(
             },
             status_code=400,
         )
-
-    result = run_pipeline(menu_data, orders)
 
     return render_ai_optimiser_page(
         request=request,
@@ -916,16 +917,17 @@ def business_ai_optimiser_json(request: Request, db: Session = Depends(get_db)):
         saved_orders = get_saved_orders_for_restaurant(db, restaurant)
         combined_orders = saved_orders + uploaded_orders
 
-        orders = normalise_orders(combined_orders)
-        errors = validate_orders(orders)
+        result = run_pipeline(menu_data, combined_orders)
 
-        if errors:
+        if not result.get("ok"):
             return {
                 "ok": False,
-                "error": " | ".join(errors),
+                "error": " | ".join(result.get("errors", ["Unknown analysis error"])),
                 "insights": [],
                 "formatted_insights": "",
             }
+
+        return result
 
     except Exception as exc:
         return {
@@ -935,7 +937,6 @@ def business_ai_optimiser_json(request: Request, db: Session = Depends(get_db)):
             "formatted_insights": "",
         }
 
-    return run_pipeline(menu_data, orders)
 
 @router.get("/business/ai-optimiser/status")
 def business_ai_optimiser_status(request: Request, db: Session = Depends(get_db)):
@@ -982,13 +983,15 @@ def business_ai_optimiser_live(request: Request, db: Session = Depends(get_db)):
         return {"ok": False, "error": f"Could not load menu: {str(exc)}"}
 
     saved_orders = get_saved_orders_for_restaurant(db, restaurant)
-    orders = normalise_orders(saved_orders)
-    errors = validate_orders(orders)
+    result = run_pipeline(menu_data, saved_orders)
 
-    if errors:
-        return {"ok": False, "error": " | ".join(errors)}
+    if not result.get("ok"):
+        return {
+            "ok": False,
+            "error": " | ".join(result.get("errors", ["Unknown analysis error"])),
+        }
 
-    return run_pipeline(menu_data, orders)
+    return result
 
 # --------------------------------
 # Public Pages
