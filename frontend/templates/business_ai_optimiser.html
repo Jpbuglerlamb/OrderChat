@@ -19,33 +19,32 @@
       </div>
     </div>
 
-    <div class="pricing-plan featured ai-optimiser-insights-panel">
-      <div class="ai-optimiser-panel-head">
-        <div>
-          <span class="plan-tag highlight">Business Intelligence</span>
-          <h2 class="ai-optimiser-panel-title">AI insights</h2>
-          <p class="muted ai-optimiser-panel-subtitle">
-            Strategic suggestions based on your order history and current menu.
-          </p>
-        </div>
+    <section class="ai-optimiser-section ai-optimiser-insights-section">
+      <div class="ai-optimiser-section-head">
+        <span class="plan-tag highlight">Business Intelligence</span>
+        <h2 class="ai-optimiser-panel-title">AI insights</h2>
+        <p class="muted ai-optimiser-panel-subtitle">
+          Strategic suggestions based on your order history and current menu.
+        </p>
+      </div>
 
-        <div class="ai-optimiser-status-stack">
-          <div class="menu-editor-alert {% if menu_connected %}menu-editor-alert-success{% else %}menu-editor-alert-error{% endif %} ai-optimiser-status-alert">
-            {% if menu_connected %}
-              <strong>Menu connected.</strong><br>
-              Your menu dataset is ready.
-            {% else %}
-              <strong>Menu not connected.</strong><br>
-              Upload or generate a menu first.
-            {% endif %}
-          </div>
-
-          {% if menu_error %}
-            <div class="menu-editor-alert menu-editor-alert-error ai-optimiser-status-alert">
-              {{ menu_error }}
-            </div>
+      <div class="ai-optimiser-status-stack">
+        <div class="ai-optimiser-status-card {% if menu_connected %}is-success{% else %}is-error{% endif %}">
+          {% if menu_connected %}
+            <strong>Menu connected</strong>
+            <span>Your menu dataset is ready.</span>
+          {% else %}
+            <strong>Menu not connected</strong>
+            <span>Upload or generate a menu first.</span>
           {% endif %}
         </div>
+
+        {% if menu_error %}
+          <div class="ai-optimiser-status-card is-error">
+            <strong>Menu error</strong>
+            <span>{{ menu_error }}</span>
+          </div>
+        {% endif %}
       </div>
 
       <div class="ai-optimiser-results">
@@ -54,15 +53,15 @@
             {% if insights_result.insights %}
               <div class="ai-optimiser-insight-list">
                 {% for insight in insights_result.insights %}
-                  <div class="menu-editor-alert menu-editor-alert-success ai-optimiser-insight-item">
+                  <div class="ai-optimiser-insight-item">
                     {{ insight }}
                   </div>
                 {% endfor %}
               </div>
             {% else %}
-              <div class="menu-editor-alert ai-optimiser-empty-state ai-optimiser-neutral-box">
-                <strong>No insights yet.</strong><br>
-                Upload order history below to generate suggestions.
+              <div class="ai-optimiser-empty-state ai-optimiser-neutral-box">
+                <strong>No insights yet.</strong>
+                <span>Upload order history below to generate suggestions.</span>
               </div>
             {% endif %}
 
@@ -73,8 +72,8 @@
               </details>
             {% endif %}
           {% else %}
-            <div class="menu-editor-alert menu-editor-alert-error ai-optimiser-empty-state">
-              Could not analyse the uploaded order history.
+            <div class="ai-optimiser-empty-state ai-optimiser-error-box">
+              <strong>Could not analyse the uploaded order history.</strong>
             </div>
 
             {% if insights_result.errors %}
@@ -86,21 +85,24 @@
             {% endif %}
           {% endif %}
         {% else %}
-          <div class="menu-editor-alert ai-optimiser-empty-state ai-optimiser-neutral-box">
-            <strong>No analysis yet.</strong><br>
-            Upload past order history below to generate pricing ideas, combo suggestions, and order-pattern insights.
+          <div class="ai-optimiser-empty-state ai-optimiser-neutral-box">
+            <strong>No analysis yet.</strong>
+            <span>
+              Upload past order history below to generate pricing ideas, combo suggestions, and order-pattern insights.
+            </span>
           </div>
         {% endif %}
       </div>
-    </div>
+    </section>
 
-    <div class="pricing-plan ai-optimiser-upload-panel">
-      <span class="plan-tag">Upload order history</span>
-
-      <h2 class="ai-optimiser-panel-title">Add past orders</h2>
-      <p class="muted ai-optimiser-panel-subtitle">
-        Supported formats: <strong>JSON, CSV, PDF, JPG, JPEG, PNG</strong>. Structured files usually work best, but screenshots and exported documents are also supported.
-      </p>
+    <section class="ai-optimiser-section ai-optimiser-upload-section">
+      <div class="ai-optimiser-section-head">
+        <span class="plan-tag">Upload order history</span>
+        <h2 class="ai-optimiser-panel-title">Add past orders</h2>
+        <p class="muted ai-optimiser-panel-subtitle">
+          Supported formats: <strong>JSON, CSV, PDF, JPG, JPEG, PNG</strong>. Structured files usually work best, but screenshots and exported documents are also supported.
+        </p>
+      </div>
 
       <form
         method="post"
@@ -138,7 +140,7 @@
   }
 ]</pre>
       </details>
-    </div>
+    </section>
 
   </div>
 </section>
