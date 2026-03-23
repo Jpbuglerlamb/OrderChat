@@ -545,18 +545,33 @@ def staff_page(
     db: Session = Depends(get_db),
 ):
     slug = _normalize_slug(slug)
-    restaurant, menu_data = get_restaurant_and_menu(db, slug)
+    dashboard_url = f"/r/{slug}/staff"
+    owner_user = get_owner_user_for_request(request, db)
 
     _ensure_template_exists(STAFF_HTML_PATH)
 
-    owner_user = get_owner_user_for_request(request, db)
-    dashboard_url = f"/r/{slug}/staff"
+    try:
+        restaurant, menu_data = get_restaurant_and_menu(db, slug)
+    except Exception as exc:
+        return HTMLResponse(
+            content=f"<h1>Could not load staff page</h1><pre>{str(exc)}</pre>",
+            status_code=500,
+        )
+
+    if not restaurant:
+        return HTMLResponse(
+            content=f"<h1>Restaurant not found</h1><p>No restaurant exists for slug: {slug}</p>",
+            status_code=404,
+        )
+
+    if menu_data is None:
+        menu_data = {}
 
     if _owner_can_access_restaurant(request, db, restaurant):
         return templates.TemplateResponse(
-            "staff.html",
-            {
-                "request": request,
+            request=request,
+            name="staff.html",
+            context={
                 "restaurant": restaurant,
                 "restaurant_slug": slug,
                 "menu_data": menu_data,
@@ -568,9 +583,9 @@ def staff_page(
 
     if _staff_can_access_restaurant(request, slug):
         return templates.TemplateResponse(
-            "staff.html",
-            {
-                "request": request,
+            request=request,
+            name="staff.html",
+            context={
                 "restaurant": restaurant,
                 "restaurant_slug": slug,
                 "menu_data": menu_data,
