@@ -3,119 +3,138 @@
 {% block content %}
 <section class="hero narrow">
   <div class="card signup-shell">
-    <div id="signup-panel">
+    <div id="signup-panel" class="signup-panel">
       <h1>Create Business Account</h1>
 
-      <p class="subtitle">
+      <p class="subtitle signup-subtitle">
         Set up your restaurant account to begin your 30-day free trial and start onboarding your takeaway.
       </p>
 
       {% if plan %}
-        <p class="success-card-meta">
-          Selected plan:
-          <strong>
-            {% if plan == "monthly" %}
-              Monthly · 30-day free trial, then £200/month
-            {% elif plan == "yearly" %}
-              Yearly · 30-day free trial, then £2,000/year
-            {% else %}
-              {{ plan|capitalize }}
-            {% endif %}
-          </strong>
-        </p>
+        <div class="signup-plan-card">
+          <p class="signup-plan-line">
+            Selected plan:
+            <strong>
+              {% if plan == "monthly" %}
+                Monthly · 30-day free trial, then £200/month
+              {% elif plan == "yearly" %}
+                Yearly · 30-day free trial, then £2,000/year
+              {% else %}
+                {{ plan|capitalize }}
+              {% endif %}
+            </strong>
+          </p>
 
-        <p class="muted" style="margin-top: 0.35rem;">
-          You’ll enter payment details at checkout, but you won’t be charged until your free trial ends.
-        </p>
+          <p class="muted signup-plan-note">
+            You’ll enter payment details at checkout, but you won’t be charged until your free trial ends.
+          </p>
+        </div>
       {% endif %}
 
       {% if error %}
-        <p class="muted error-text">{{ error }}</p>
+        <p class="muted error-text signup-server-error">{{ error }}</p>
       {% endif %}
 
       <form
         id="business-signup-form"
-        class="manual-form"
+        class="signup-form"
         method="post"
         action="/business/signup"
         enctype="multipart/form-data"
       >
         <input type="hidden" name="plan" value="{{ plan }}">
 
-        <label for="name">Your name</label>
-        <input
-          id="name"
-          name="name"
-          type="text"
-          placeholder="e.g. Joan Lamb"
-          required
-        >
+        <div class="signup-form-grid">
+          <div class="signup-field">
+            <label for="name">Your name</label>
+            <input
+              id="name"
+              name="name"
+              type="text"
+              placeholder="e.g. Joan Lamb"
+              required
+            >
+          </div>
 
-        <label for="business_name">Business name</label>
-        <input
-          id="business_name"
-          name="business_name"
-          type="text"
-          placeholder="e.g. Pizza Palace"
-          required
-        >
+          <div class="signup-field">
+            <label for="business_name">Business name</label>
+            <input
+              id="business_name"
+              name="business_name"
+              type="text"
+              placeholder="e.g. Pizza Palace"
+              required
+            >
+          </div>
 
-        <label for="email">Email</label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          placeholder="you@restaurant.com"
-          required
-        >
+          <div class="signup-field">
+            <label for="email">Email</label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              placeholder="you@restaurant.com"
+              required
+            >
+          </div>
 
-        <label for="password">Password</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          placeholder="Create a password"
-          required
-        >
+          <div class="signup-field">
+            <label for="password">Password</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              placeholder="Create a password"
+              required
+            >
+          </div>
 
-        <label for="phone">Phone</label>
-        <input
-          id="phone"
-          name="phone"
-          type="text"
-          placeholder="e.g. 07700 900123"
-        >
+          <div class="signup-field">
+            <label for="phone">Phone</label>
+            <input
+              id="phone"
+              name="phone"
+              type="text"
+              placeholder="e.g. 07700 900123"
+            >
+          </div>
 
-        <label for="address">Address</label>
-        <input
-          id="address"
-          name="address"
-          type="text"
-          placeholder="e.g. 123 High Street, Dundee"
-          required
-        >
+          <div class="signup-field signup-field-span-2">
+            <label for="address">Address</label>
+            <input
+              id="address"
+              name="address"
+              type="text"
+              placeholder="e.g. 123 High Street, Dundee"
+              required
+            >
+          </div>
 
-        <label for="opening_hours">Opening hours</label>
-        <textarea
-          id="opening_hours"
-          name="opening_hours"
-          rows="4"
-          placeholder="Mon-Fri: 11:00-22:00&#10;Sat-Sun: 12:00-23:00"
-          required
-        ></textarea>
+          <div class="signup-field signup-field-span-2">
+            <label for="opening_hours">Opening hours</label>
+            <textarea
+              id="opening_hours"
+              name="opening_hours"
+              rows="4"
+              placeholder="Mon-Fri: 11:00-22:00&#10;Sat-Sun: 12:00-23:00"
+              required
+            ></textarea>
+          </div>
 
-        <label for="menu_file">Upload menu</label>
-        <input
-          id="menu_file"
-          name="menu_file"
-          type="file"
-          accept=".pdf,.csv,.txt,.json,image/*"
-          required
-        >
-
-        <p class="muted" id="file-help">
-          Accepted formats: PDF, CSV, TXT, JSON, or image files.
-        </p>
+          <div class="signup-field signup-field-span-2">
+            <label for="menu_file">Upload menu</label>
+            <input
+              id="menu_file"
+              name="menu_file"
+              type="file"
+              accept=".pdf,.csv,.txt,.json,image/*"
+              required
+            >
+            <p class="muted file-help-text">
+              Accepted formats: PDF, CSV, TXT, JSON, or image files.
+            </p>
+          </div>
+        </div>
 
         <div class="terms-check">
           <label class="terms-check-label">
@@ -129,9 +148,9 @@
           </label>
         </div>
 
-        <p class="muted error-text" id="client-error" style="display:none;"></p>
+        <p class="muted error-text signup-client-error" id="client-error" style="display:none;"></p>
 
-        <div class="button-row">
+        <div class="button-row signup-button-row">
           <button id="submit-btn" type="submit" class="btn btn-primary">
             Continue to Free Trial
           </button>
@@ -180,6 +199,162 @@
   .signup-shell {
     position: relative;
     overflow: hidden;
+    max-width: 920px;
+    margin: 0 auto;
+    text-align: left;
+  }
+
+  .signup-panel {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+
+  .signup-panel h1,
+  .signup-subtitle,
+  .signup-plan-card,
+  .signup-server-error {
+    text-align: center;
+  }
+
+  .signup-subtitle {
+    max-width: 700px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .signup-plan-card {
+    margin: 0 auto 20px;
+    padding: 16px 18px;
+    max-width: 720px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+  }
+
+  .signup-plan-line {
+    margin: 0;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  .signup-plan-note {
+    margin: 8px 0 0;
+  }
+
+  .signup-form {
+    margin-top: 26px;
+  }
+
+  .signup-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 16px;
+  }
+
+  .signup-field {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .signup-field-span-2 {
+    grid-column: 1 / -1;
+  }
+
+  .signup-field label {
+    margin-bottom: 8px;
+    color: #fff;
+    font-size: 0.98rem;
+    font-weight: 700;
+  }
+
+  .signup-field input,
+  .signup-field textarea {
+    width: 100%;
+    min-width: 0;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    padding: 14px 16px;
+    font-size: 1rem;
+    font-weight: 500;
+    outline: none;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 8px 18px rgba(0, 0, 0, 0.14);
+    transition:
+      border-color 0.2s ease,
+      background 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+
+  .signup-field textarea {
+    resize: vertical;
+    min-height: 110px;
+  }
+
+  .signup-field input::placeholder,
+  .signup-field textarea::placeholder {
+    color: rgba(243, 245, 255, 0.45);
+  }
+
+  .signup-field input:hover,
+  .signup-field textarea:hover {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(255, 255, 255, 0.24);
+  }
+
+  .signup-field input:focus,
+  .signup-field textarea:focus {
+    border-color: rgba(139, 92, 246, 0.75);
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow:
+      0 0 0 3px rgba(139, 92, 246, 0.16),
+      0 10px 24px rgba(0, 0, 0, 0.18);
+  }
+
+  .signup-field input[type="file"] {
+    padding: 12px 14px;
+    cursor: pointer;
+  }
+
+  .file-help-text {
+    margin: 8px 0 0;
+    font-size: 0.92rem;
+  }
+
+  .terms-check {
+    margin-top: 22px;
+  }
+
+  .terms-check-label {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    text-align: left;
+    line-height: 1.5;
+    color: var(--text);
+  }
+
+  .terms-check-label input[type="checkbox"] {
+    margin-top: 4px;
+    flex: 0 0 auto;
+    transform: scale(1.05);
+  }
+
+  .signup-client-error {
+    margin-top: 14px;
+    text-align: left;
+  }
+
+  .signup-button-row {
+    margin-top: 24px;
+    justify-content: center;
+  }
+
+  .signup-button-row .btn {
+    min-width: 220px;
   }
 
   .processing-panel {
@@ -252,28 +427,34 @@
     margin-top: 1.25rem;
   }
 
-  .terms-check {
-    margin-top: 16px;
-  }
-
-  .terms-check-label {
-    display: flex;
-    gap: 10px;
-    align-items: flex-start;
-    text-align: left;
-    line-height: 1.5;
-    color: var(--text);
-  }
-
-  .terms-check-label input[type="checkbox"] {
-    margin-top: 3px;
-    flex: 0 0 auto;
-  }
-
   .is-submitting .btn,
   .is-submitting input,
   .is-submitting textarea {
     pointer-events: none;
+  }
+
+  @media (max-width: 760px) {
+    .signup-shell {
+      padding-left: 20px;
+      padding-right: 20px;
+    }
+
+    .signup-form-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .signup-field-span-2 {
+      grid-column: auto;
+    }
+
+    .signup-button-row {
+      flex-direction: column;
+    }
+
+    .signup-button-row .btn {
+      width: 100%;
+      min-width: 0;
+    }
   }
 </style>
 
@@ -327,6 +508,7 @@
       document.body.classList.add("is-submitting");
 
       submitBtn.disabled = true;
+
       if (backBtn) {
         backBtn.setAttribute("aria-disabled", "true");
         backBtn.style.pointerEvents = "none";
