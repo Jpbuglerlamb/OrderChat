@@ -28,7 +28,6 @@ from app.routes.stripe import router as stripe_router
 from app.routes.stripe_webhooks import router as stripe_webhooks_router
 
 
-
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Takeaway Ordering API",
@@ -51,6 +50,7 @@ def create_app() -> FastAPI:
     app.include_router(web_customer_router)
     app.include_router(stripe_router, prefix="/billing")
     app.include_router(stripe_webhooks_router)
+
 
     # ---------- Health ----------
     @app.get("/health")

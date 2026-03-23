@@ -1,3 +1,4 @@
+#app/business_ai/utils/helpers.py
 def simulate_price_increase(item_id, item_stats, increase=0.5):
     current_count = item_stats["counts"].get(item_id, 0)
     current_revenue = item_stats["revenue"].get(item_id, 0)

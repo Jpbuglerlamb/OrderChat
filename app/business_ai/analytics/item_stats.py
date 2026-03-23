@@ -1,4 +1,4 @@
-#app/business_ai/items_stats
+#app/business_ai/analytics/item_stats.py
 from collections import defaultdict
 
 def compute_item_stats(orders):
