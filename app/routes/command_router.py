@@ -334,15 +334,6 @@ def get_or_create_draft(db: Session, user_id: int) -> Order:
     db.add(order)
     db.commit()
     db.refresh(order)
-
-    # 🔥 NEW: trigger optimiser snapshot rebuild when order confirmed
-    if order.status == "confirmed":
-        try:
-            restaurant = db.query(Restaurant).filter(Restaurant.slug == slug).first()
-            if restaurant:
-                recompute_and_store_optimiser_snapshot(db, restaurant)
-        except Exception as exc:
-            print("[OPTIMISER SNAPSHOT ERROR]", repr(exc), flush=True)
     return order
 
 
@@ -492,13 +483,18 @@ def restaurant_chat(
 
     _ensure_template_exists(CHAT_HTML_PATH)
 
+    current_user = get_owner_user_for_request(request, db)
+    dashboard_url = f"/r/{slug}/staff" if current_user else "/business"
+
     response = templates.TemplateResponse(
-        "chat.html",
-        {
-            "request": request,
+        request=request,
+        name="chat.html",
+        context={
             "restaurant": restaurant,
             "restaurant_slug": slug,
-            "menu_data": menu_data,
+            "menu_data": menu_data or {},
+            "current_user": current_user,
+            "dashboard_url": dashboard_url,
         },
     )
 
@@ -849,6 +845,14 @@ async def chat_for_restaurant(
     db.add(order)
     db.commit()
     db.refresh(order)
+
+    if order.status == "confirmed":
+        try:
+            restaurant = db.query(Restaurant).filter(Restaurant.slug == slug).first()
+            if restaurant:
+                recompute_and_store_optimiser_snapshot(db, restaurant)
+        except Exception as exc:
+            print("[OPTIMISER SNAPSHOT ERROR]", repr(exc), flush=True)
 
     return {
         "reply": reply,
