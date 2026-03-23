@@ -13,19 +13,15 @@
         </p>
       </div>
 
-      <div class="staff-action-grid">
+      <div class="staff-action-grid staff-action-grid-main">
         <button id="refreshBtn" type="button" class="btn btn-secondary">Refresh</button>
         <a href="/r/{{ restaurant_slug }}" class="btn btn-secondary">Back to Chat</a>
-        <a href="/business/qr" class="btn btn-secondary">View QR Code</a>
-        <a href="/business/menu" class="btn btn-secondary">Edit Menu</a>
-        <a href="/business/settings" class="btn btn-secondary">Settings</a>
         <a href="/business/ai-optimiser" class="btn btn-primary">Open Full Optimiser</a>
       </div>
     </div>
 
     <div class="staff-grid">
       <div class="pricing-plan staff-summary-card">
-        <span class="plan-tag">Overview</span>
         <h2>Workspace status</h2>
 
         <div class="staff-summary-list">
@@ -51,6 +47,9 @@
         </div>
 
         <div class="staff-summary-links">
+          <a href="/business/qr" class="btn btn-secondary">View QR Code</a>
+          <a href="/business/menu" class="btn btn-secondary">Edit Menu</a>
+          <a href="/business/settings" class="btn btn-secondary">Settings</a>
           <a href="/" class="btn btn-secondary">Home</a>
         </div>
       </div>
@@ -60,14 +59,16 @@
           <div>
             <span class="plan-tag highlight">Live Analysis</span>
             <h2>AI Optimiser</h2>
-            <p class="muted">
+            <p class="muted staff-ai-subtitle">
               Fast business signals based on current order flow and uploaded history.
             </p>
           </div>
         </div>
 
         <div id="aiInsightsMount" class="staff-ai-mount">
-          <p class="muted">Analysing your business...</p>
+          <div class="staff-ai-pill">
+            Analysing your business...
+          </div>
         </div>
       </div>
     </div>
@@ -75,7 +76,6 @@
     <div class="staff-orders-section">
       <div class="staff-orders-head">
         <div>
-          <span class="plan-tag">Orders</span>
           <h2>Live Orders</h2>
           <p class="muted">Incoming customer orders that still need kitchen attention.</p>
         </div>
@@ -91,21 +91,26 @@
   .staff-dashboard-shell {
     text-align: left;
     max-width: 1180px;
+    padding: 42px 30px;
   }
 
   .staff-topbar {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 24px;
+    gap: 32px;
     flex-wrap: wrap;
-    margin-bottom: 28px;
+    margin-bottom: 34px;
+  }
+
+  .staff-heading {
+    max-width: 560px;
   }
 
   .staff-heading h1 {
-    margin: 10px 0 8px;
+    margin: 10px 0 10px;
     font-size: clamp(2.2rem, 4vw, 3.2rem);
-    line-height: 1.05;
+    line-height: 1.03;
   }
 
   .staff-subtitle {
@@ -113,21 +118,26 @@
     max-width: 680px;
   }
 
-  .staff-action-grid {
+  .staff-action-grid-main {
     display: grid;
     grid-template-columns: repeat(2, minmax(180px, 1fr));
     gap: 12px;
-    width: min(440px, 100%);
+    width: min(420px, 100%);
   }
 
-  .staff-action-grid .btn {
+  .staff-action-grid-main .btn {
     width: 100%;
+    text-align: center;
+  }
+
+  .staff-action-grid-main .btn:last-child {
+    grid-column: 1 / -1;
   }
 
   .staff-grid {
     display: grid;
-    grid-template-columns: 320px minmax(0, 1fr);
-    gap: 22px;
+    grid-template-columns: 280px minmax(0, 1fr);
+    gap: 28px;
     align-items: start;
   }
 
@@ -139,31 +149,47 @@
   .staff-summary-card h2,
   .staff-ai-card h2,
   .staff-orders-head h2 {
-    margin: 14px 0 8px;
-    font-size: 1.5rem;
+    margin: 0 0 10px;
+    font-size: 1.6rem;
+    line-height: 1.1;
   }
 
   .staff-summary-list {
     display: grid;
-    gap: 12px;
-    margin-top: 16px;
+    gap: 10px;
+    margin-top: 18px;
   }
 
   .staff-summary-row {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
-    padding: 14px 16px;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
     border-radius: 14px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+  }
+
+  .staff-summary-row .muted {
+    font-size: 0.92rem;
+  }
+
+  .staff-summary-row strong {
+    font-size: 0.96rem;
+    text-align: right;
+    color: #fff;
   }
 
   .staff-summary-links {
     margin-top: 18px;
-    display: flex;
+    display: grid;
     gap: 10px;
-    flex-wrap: wrap;
+  }
+
+  .staff-summary-links .btn {
+    width: 100%;
+    text-align: center;
   }
 
   .staff-ai-head {
@@ -175,34 +201,25 @@
   }
 
   .staff-ai-head .plan-tag {
-    margin-bottom: 10px;
+    margin-bottom: 12px;
   }
 
-  .staff-ai-head h2 {
-    margin-top: 0;
+  .staff-ai-subtitle {
+    margin: 0;
+    max-width: 640px;
   }
 
   .staff-ai-mount {
-    margin-top: 18px;
+    margin-top: 20px;
     display: grid;
     gap: 12px;
-  }
-
-  .staff-ai-list {
-    margin: 0;
-    padding-left: 20px;
-    line-height: 1.65;
-  }
-
-  .staff-ai-list li + li {
-    margin-top: 10px;
   }
 
   .staff-ai-pill {
     padding: 14px 16px;
     border-radius: 16px;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.10);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.10);
     color: #fff;
     line-height: 1.55;
   }
@@ -221,7 +238,6 @@
   }
 
   .staff-orders-head h2 {
-    margin-top: 10px;
     margin-bottom: 8px;
   }
 
@@ -237,6 +253,7 @@
   .staff-order-card {
     display: grid;
     gap: 16px;
+    text-align: left;
   }
 
   .staff-order-top {
@@ -276,6 +293,10 @@
     font-size: 1rem;
   }
 
+  .staff-order-actions .statusSelect option {
+    color: #000;
+  }
+
   .staff-empty-card,
   .staff-error-card {
     text-align: left;
@@ -286,15 +307,22 @@
       grid-template-columns: 1fr;
     }
 
-    .staff-action-grid {
-      grid-template-columns: 1fr 1fr;
+    .staff-action-grid-main {
       width: 100%;
     }
   }
 
   @media (max-width: 760px) {
-    .staff-action-grid {
+    .staff-dashboard-shell {
+      padding: 28px 18px;
+    }
+
+    .staff-action-grid-main {
       grid-template-columns: 1fr;
+    }
+
+    .staff-action-grid-main .btn:last-child {
+      grid-column: auto;
     }
 
     .staff-order-actions {
@@ -302,7 +330,8 @@
       align-items: stretch;
     }
 
-    .staff-order-actions .btn {
+    .staff-order-actions .btn,
+    .staff-order-actions .statusSelect {
       width: 100%;
     }
   }
@@ -482,7 +511,11 @@
   function renderInsights(result) {
     if (!result || !result.ok) {
       aiStatusText.textContent = "Unavailable";
-      aiInsightsMount.innerHTML = `<p class="muted">Could not load AI insights right now.</p>`;
+      aiInsightsMount.innerHTML = `
+        <div class="staff-ai-pill">
+          Could not load AI insights right now.
+        </div>
+      `;
       return;
     }
 
@@ -491,7 +524,9 @@
 
     if (!insights.length) {
       aiInsightsMount.innerHTML = `
-        <p class="muted">No insights yet. Upload past order history in the full AI Optimiser page.</p>
+        <div class="staff-ai-pill">
+          No insights yet. Upload past order history in the full AI Optimiser page.
+        </div>
       `;
       return;
     }
