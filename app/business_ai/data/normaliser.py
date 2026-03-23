@@ -52,13 +52,25 @@ def build_menu_lookup(menu_data: dict[str, Any] | None) -> dict[str, str]:
         if not item_id:
             continue
 
-        canonical_id = canonicalize_text(item_id)
-        if canonical_id:
-            lookup[canonical_id] = item_id
+        variants = {
+            canonicalize_text(item_id),
+            canonicalize_text(item_name),
+        }
 
-        canonical_name = canonicalize_text(item_name)
-        if canonical_name:
-            lookup[canonical_name] = item_id
+        # extra variant: remove common filler words
+        simplified_name = canonicalize_text(item_name)
+        simplified_name = re.sub(
+            r"\b(size|large|small|regular|portion|meal|deal|sauce|can|bottle)\b",
+            "",
+            simplified_name,
+        )
+        simplified_name = re.sub(r"\s+", " ", simplified_name).strip()
+        if simplified_name:
+            variants.add(simplified_name)
+
+        for variant in variants:
+            if variant:
+                lookup[variant] = item_id
 
     return lookup
 
@@ -70,11 +82,32 @@ def resolve_item_id(raw_item_id: str, menu_lookup: dict[str, str]) -> tuple[str,
     if not canonical:
         return "", False
 
+    # exact canonical match
     matched_id = menu_lookup.get(canonical)
     if matched_id:
         return matched_id, True
 
-    # fallback to slug-ish canonical id
+    # containment fallback
+    for lookup_key, lookup_item_id in menu_lookup.items():
+        if canonical in lookup_key or lookup_key in canonical:
+            return lookup_item_id, True
+
+    # token overlap fallback
+    raw_tokens = set(canonical.split())
+    best_match = None
+    best_score = 0
+
+    for lookup_key, lookup_item_id in menu_lookup.items():
+        lookup_tokens = set(lookup_key.split())
+        overlap = len(raw_tokens & lookup_tokens)
+
+        if overlap > best_score:
+            best_score = overlap
+            best_match = lookup_item_id
+
+    if best_match and best_score >= 2:
+        return best_match, True
+
     fallback = canonical.replace(" ", "_")
     return fallback, False
 

@@ -39,11 +39,14 @@ def run_pipeline(menu_data, orders):
     insights = generate_insights(memory)
 
     if unmatched_items:
-        insights.append(
-            "🧩 Some uploaded order items could not be matched to the current menu: "
-            + ", ".join(unmatched_items[:10])
-            + ("." if len(unmatched_items) <= 10 else "...")
+        unmatched_message = (
+                "🧩 Some uploaded order items could not be matched to the current menu: "
+                + ", ".join(unmatched_items[:10])
+                + ("." if len(unmatched_items) <= 10 else "...")
         )
+
+        if unmatched_message not in insights:
+            insights.append(unmatched_message)
 
     if not insights and not orders:
         insights.append(
