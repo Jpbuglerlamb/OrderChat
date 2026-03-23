@@ -1005,6 +1005,7 @@ async def business_signup_submit(
     phone: str = Form(""),
     address: str = Form(...),
     opening_hours: str = Form(...),
+    terms_agreed: str | None = Form(default=None),
     plan: str = Form("monthly"),
     menu_file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -1016,6 +1017,23 @@ async def business_signup_submit(
     address = address.strip()
     opening_hours = opening_hours.strip()
     normalized_plan = normalize_plan(plan)
+
+    if str(terms_agreed).lower() not in {"on", "true", "1", "yes"}:
+        return render_signup_error(
+            request,
+            normalized_plan,
+            "You must agree to the Terms and Privacy Policy to create an account.",
+            status_code=400,
+        )
+
+    existing_user = db.query(User).filter(func.lower(User.email) == email_norm).first()
+    if existing_user:
+        return render_signup_error(
+            request,
+            normalized_plan,
+            "An account with that email already exists.",
+            status_code=400,
+        )
 
     existing_user = db.query(User).filter(func.lower(User.email) == email_norm).first()
     if existing_user:
@@ -1040,6 +1058,8 @@ async def business_signup_submit(
     base_slug = slugify(business_name)
     slug = unique_slug(db, base_slug)
     raw_menu_s3_key = build_s3_menu_key(slug, original_filename)
+    menu_json_s3_key = f"restaurants/{slug}/menu.json"
+    qr_s3_key = f"restaurants/{slug}/qr.png"
 
     try:
         upload_file_bytes(
@@ -1082,10 +1102,9 @@ async def business_signup_submit(
             status_code=400,
         )
 
-    menu_json_s3_key = f"restaurants/{slug}/menu.json"
-
     try:
         save_json_file(menu_json_s3_key, menu_dataset)
+        clear_menu_cache(slug)
     except Exception as exc:
         print("MENU JSON SAVE ERROR:", repr(exc), flush=True)
         return HTMLResponse(
@@ -1093,9 +1112,7 @@ async def business_signup_submit(
             status_code=500,
         )
 
-    clear_menu_cache(slug)
-
-    public_base_url = os.getenv("PUBLIC_BASE_URL", "").strip()
+    public_base_url = (os.getenv("PUBLIC_BASE_URL") or "").strip()
     if not public_base_url:
         return HTMLResponse(
             content="<h1>Missing PUBLIC_BASE_URL</h1>",
@@ -1111,8 +1128,6 @@ async def business_signup_submit(
             content=f"<h1>QR generation failed</h1><pre>{repr(exc)}</pre>",
             status_code=500,
         )
-
-    qr_s3_key = f"restaurants/{slug}/qr.png"
 
     try:
         upload_file_bytes(
@@ -1134,6 +1149,9 @@ async def business_signup_submit(
             phone=phone or None,
             address=address,
             password_hash=hash_password(password),
+            # add these only if the columns already exist in your User model
+            # terms_accepted=True,
+            # privacy_accepted=True,
         )
         db.add(user)
         db.flush()
@@ -1151,7 +1169,6 @@ async def business_signup_submit(
             selected_plan=normalized_plan,
             subscription_status="pending",
         )
-
         db.add(restaurant)
         db.commit()
         db.refresh(user)
