@@ -2,43 +2,294 @@
 
 {% block content %}
 <section class="hero">
-  <div class="card" style="text-align:left;">
-    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px;">
-      <div>
-        <h1 style="margin-bottom:8px;">Staff Dashboard</h1>
-        <p class="subtitle" style="margin:0; max-width:none;">
+  <div class="card staff-dashboard-shell">
+
+    <!-- HEADER -->
+    <div class="staff-topbar">
+      <div class="staff-heading">
+        <h1>Staff Dashboard</h1>
+        <p class="subtitle">
           Live order control for <strong>{{ restaurant_slug }}</strong>.
         </p>
       </div>
 
-      <div class="button-row" style="margin-top:0;">
+      <div class="button-row staff-actions">
         <button id="refreshBtn" type="button" class="btn btn-secondary">Refresh</button>
         <a href="/r/{{ restaurant_slug }}" class="btn btn-secondary">Back to Chat</a>
         <a href="/business/qr" class="btn btn-secondary">View QR Code</a>
         <a href="/business/menu" class="btn btn-secondary">Edit Menu</a>
         <a href="/business/settings" class="btn btn-secondary">Settings</a>
-        <a href="/" class="btn btn-secondary">Home</a>
       </div>
     </div>
 
-    <div class="success-card-meta">
-      Access mode:
-      <strong>{{ access_mode or "unknown" }}</strong>
+    <!-- TOP GRID -->
+    <div class="staff-grid">
+      <!-- META CARD -->
+      <div class="pricing-plan staff-summary-card">
+        <span class="plan-tag">Workspace</span>
+        <h2>Overview</h2>
+
+        <div class="staff-summary-list">
+          <div class="staff-summary-row">
+            <span class="muted">Access mode</span>
+            <strong>{{ access_mode or "unknown" }}</strong>
+          </div>
+
+          <div class="staff-summary-row">
+            <span class="muted">Active orders</span>
+            <strong id="ordersCountText">Loading...</strong>
+          </div>
+        </div>
+
+        <div class="staff-summary-links">
+          <a href="/" class="btn btn-secondary">Home</a>
+        </div>
+      </div>
+
+      <!-- AI OPTIMISER -->
+      <div class="pricing-plan staff-ai-card" id="aiInsightsCard">
+        <div class="staff-ai-head">
+          <div>
+            <span class="plan-tag highlight">Live Analysis</span>
+            <h2>AI Optimiser</h2>
+            <p class="muted">
+              Fast business signals based on current order flow and uploaded history.
+            </p>
+          </div>
+
+          <a href="/business/ai-optimiser" class="btn btn-secondary staff-ai-open-btn">
+            Open Full Optimiser
+          </a>
+        </div>
+
+        <div id="aiInsightsMount" class="staff-ai-mount">
+          <p class="muted">Analysing your business...</p>
+        </div>
+      </div>
     </div>
 
-    <p class="muted" id="ordersCountText" style="margin-top:8px;">
-      Loading orders...
-    </p>
+    <!-- ORDERS SECTION -->
+    <div class="staff-orders-section">
+      <div class="staff-orders-head">
+        <div>
+          <h2>Live Orders</h2>
+          <p class="muted">Incoming customer orders that still need kitchen attention.</p>
+        </div>
+      </div>
 
-    <div id="ordersMount" style="display:grid; grid-template-columns:1fr; gap:18px; margin-top:20px;"></div>
+      <div id="ordersMount" class="staff-orders-mount"></div>
+    </div>
+
   </div>
 </section>
+
+<style>
+  .staff-dashboard-shell {
+    text-align: left;
+  }
+
+  .staff-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+
+  .staff-heading h1 {
+    margin: 0 0 8px;
+  }
+
+  .staff-heading .subtitle {
+    margin: 0;
+    max-width: none;
+  }
+
+  .staff-actions {
+    margin-top: 0;
+    justify-content: flex-end;
+  }
+
+  .staff-grid {
+    display: grid;
+    grid-template-columns: 320px minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+  }
+
+  .staff-summary-card,
+  .staff-ai-card {
+    min-height: 100%;
+  }
+
+  .staff-summary-card h2,
+  .staff-ai-card h2,
+  .staff-orders-head h2 {
+    margin: 14px 0 8px;
+    font-size: 1.5rem;
+  }
+
+  .staff-summary-list {
+    display: grid;
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .staff-summary-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+
+  .staff-summary-links {
+    margin-top: 18px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .staff-ai-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .staff-ai-head .plan-tag {
+    margin-bottom: 10px;
+  }
+
+  .staff-ai-head h2 {
+    margin-top: 0;
+  }
+
+  .staff-ai-open-btn {
+    min-width: 190px;
+  }
+
+  .staff-ai-mount {
+    margin-top: 18px;
+  }
+
+  .staff-ai-list {
+    margin: 0;
+    padding-left: 20px;
+    line-height: 1.65;
+  }
+
+  .staff-ai-list li + li {
+    margin-top: 10px;
+  }
+
+  .staff-orders-section {
+    margin-top: 28px;
+  }
+
+  .staff-orders-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+  }
+
+  .staff-orders-head h2 {
+    margin-top: 0;
+  }
+
+  .staff-orders-head p {
+    margin: 0;
+  }
+
+  .staff-orders-mount {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .staff-order-card {
+    display: grid;
+    gap: 16px;
+  }
+
+  .staff-order-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .staff-order-meta h3 {
+    margin: 0 0 6px;
+    font-size: 1.5rem;
+  }
+
+  .staff-order-summary {
+    white-space: pre-wrap;
+    line-height: 1.6;
+    color: #fff;
+  }
+
+  .staff-order-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .staff-order-actions .statusSelect {
+    flex: 1;
+    min-width: 180px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--panel-border);
+    background: rgba(255,255,255,0.07);
+    color: #fff;
+    padding: 12px 14px;
+    font-size: 1rem;
+  }
+
+  .staff-empty-card,
+  .staff-error-card {
+    text-align: left;
+  }
+
+  @media (max-width: 980px) {
+    .staff-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .staff-actions {
+      justify-content: flex-start;
+    }
+
+    .staff-order-actions {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .staff-order-actions .btn,
+    .staff-ai-open-btn {
+      width: 100%;
+    }
+  }
+</style>
 
 <script>
   const slug = "{{ restaurant_slug }}";
   const ordersMount = document.getElementById("ordersMount");
   const ordersCountText = document.getElementById("ordersCountText");
   const refreshBtn = document.getElementById("refreshBtn");
+  const aiInsightsMount = document.getElementById("aiInsightsMount");
 
   function escapeHtml(text) {
     return String(text || "")
@@ -103,11 +354,30 @@
     return data;
   }
 
+  async function apiBusinessInsights() {
+    const res = await fetch(`/business/ai-optimiser/json`, {
+      method: "GET",
+      credentials: "same-origin",
+    });
+
+    if (res.status === 401 || res.status === 403) {
+      return null;
+    }
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      throw new Error(data.detail || data.error || "Failed to load AI insights");
+    }
+
+    return data;
+  }
+
   function renderEmpty() {
     ordersMount.innerHTML = `
-      <div class="pricing-plan">
+      <div class="pricing-plan staff-empty-card">
         <h2>No active orders</h2>
-        <p class="muted">Fresh air. Quiet kitchen. Nothing waiting right now.</p>
+        <p class="muted">Quiet kitchen. Nothing waiting right now.</p>
       </div>
     `;
     ordersCountText.textContent = "0 active orders";
@@ -127,22 +397,20 @@
       const summary = String(o.summary || "").trim();
 
       return `
-        <article class="pricing-plan ${status === "new" ? "featured" : ""}" data-order-id="${escapeHtml(o.id)}">
-          <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:flex-start;">
-            <div>
-              <h2 style="margin-bottom:8px;">${escapeHtml(o.name || "Customer")}</h2>
-              <p class="muted" style="margin:0;">${phone ? escapeHtml(phone) : "No phone provided"}</p>
+        <article class="pricing-plan staff-order-card ${status === "new" ? "featured" : ""}" data-order-id="${escapeHtml(o.id)}">
+          <div class="staff-order-top">
+            <div class="staff-order-meta">
+              <h3>${escapeHtml(o.name || "Customer")}</h3>
+              <p class="muted" style="margin:0;">${phone ? escapeHtml(phone) : "No phone"}</p>
             </div>
 
             <span class="plan-tag">${escapeHtml(prettyStatus(status))}</span>
           </div>
 
-          <div style="margin-top:16px; white-space:pre-wrap; line-height:1.5;">
-${escapeHtml(summary || "No summary available.")}
-          </div>
+          <div class="staff-order-summary">${escapeHtml(summary || "No summary available.")}</div>
 
-          <div class="plan-actions" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:16px;">
-            <select class="statusSelect" style="flex:1; min-width:180px;">
+          <div class="staff-order-actions">
+            <select class="statusSelect">
               <option value="new" ${status === "new" ? "selected" : ""}>New</option>
               <option value="accepted" ${status === "accepted" ? "selected" : ""}>Accepted</option>
               <option value="preparing" ${status === "preparing" ? "selected" : ""}>Preparing</option>
@@ -182,27 +450,59 @@ ${escapeHtml(summary || "No summary available.")}
     });
   }
 
+  function renderInsights(result) {
+    if (!result || !result.ok || !Array.isArray(result.insights) || !result.insights.length) {
+      aiInsightsMount.innerHTML = `
+        <p class="muted">No insights yet. Upload past order history in the full AI Optimiser page.</p>
+      `;
+      return;
+    }
+
+    aiInsightsMount.innerHTML = `
+      <ul class="staff-ai-list">
+        ${result.insights.map((insight) => `<li>${escapeHtml(insight)}</li>`).join("")}
+      </ul>
+    `;
+  }
+
   async function loadOrders() {
     try {
-      refreshBtn.disabled = true;
-      refreshBtn.textContent = "Refreshing...";
       const orders = await apiStaffOrders();
       renderOrders(orders);
     } catch (err) {
       ordersMount.innerHTML = `
-        <div class="pricing-plan">
+        <div class="pricing-plan staff-error-card">
           <h2>Couldn't load orders</h2>
           <p class="muted">${escapeHtml(err.message || "Something went wrong.")}</p>
         </div>
       `;
       ordersCountText.textContent = "Error loading orders";
-    } finally {
-      refreshBtn.disabled = false;
-      refreshBtn.textContent = "Refresh";
     }
   }
 
-  refreshBtn.addEventListener("click", loadOrders);
+  async function loadInsights() {
+    try {
+      const data = await apiBusinessInsights();
+      renderInsights(data);
+    } catch (err) {
+      aiInsightsMount.innerHTML = `
+        <p class="muted">Could not load AI insights right now.</p>
+      `;
+    }
+  }
+
+  refreshBtn.addEventListener("click", async () => {
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = "Refreshing...";
+
+    await loadOrders();
+    await loadInsights();
+
+    refreshBtn.disabled = false;
+    refreshBtn.textContent = "Refresh";
+  });
+
   loadOrders();
+  loadInsights();
 </script>
 {% endblock %}

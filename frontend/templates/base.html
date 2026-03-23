@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>JP AI Platform</title>
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/styles.css?v=123" />
 </head>
 <body>
   <div class="site-shell">
@@ -15,6 +15,7 @@
         <a href="/">Home</a>
         <a href="/customer">Customer</a>
         <a href="/business">Business</a>
+        <a href="/business/ai-optimiser" role="menuitem">AI Optimiser</a>
 
         {% if current_user %}
           <a href="{{ dashboard_url or '/business' }}" class="nav-dashboard">Dashboard</a>
