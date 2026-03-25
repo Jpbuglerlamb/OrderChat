@@ -1,3 +1,4 @@
+#app/business_ai/insights/formatter.py
 def format_insights(insights):
     if not insights:
         return "No insights available yet."

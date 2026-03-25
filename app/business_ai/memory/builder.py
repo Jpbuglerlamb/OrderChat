@@ -1,3 +1,4 @@
+#app/business_ai/insights/formatter.py
 from __future__ import annotations
 
 import re
