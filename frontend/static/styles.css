@@ -217,6 +217,19 @@ img {
   line-height: 1.7;
 }
 
+.brand-link {
+  text-decoration: none;
+  color: inherit;
+}
+
+.nav-signup {
+  font-weight: 700;
+}
+
+.footer-copy {
+  opacity: 0.8;
+}
+
 /* -------------------------------------------------- */
 /* PLAN TAG (THE IMPORTANT BIT) */
 /* -------------------------------------------------- */

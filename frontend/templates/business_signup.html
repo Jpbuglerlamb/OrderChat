@@ -4,11 +4,19 @@
 <section class="hero narrow">
   <div class="card signup-shell">
     <div id="signup-panel" class="signup-panel">
-      <h1>Create Business Account</h1>
+      <h1>Create your restaurant account</h1>
 
       <p class="subtitle signup-subtitle">
-        Set up your restaurant account to begin your 30-day free trial and start onboarding your takeaway.
+        Start your 30-day free trial and set up your restaurant for direct ordering. Once your menu is uploaded, we’ll prepare your ordering workspace and QR code.
       </p>
+
+      <div class="signup-trust-strip">
+        <span>30-day free trial</span>
+        <span>•</span>
+        <span>No charge today</span>
+        <span>•</span>
+        <span>Built for independent restaurants</span>
+      </div>
 
       {% if plan %}
         <div class="signup-plan-card">
@@ -26,10 +34,20 @@
           </p>
 
           <p class="muted signup-plan-note">
-            You’ll enter payment details at checkout, but you won’t be charged until your free trial ends.
+            Payment details are entered at checkout, but you will not be charged until your free trial ends.
           </p>
         </div>
       {% endif %}
+
+      <div class="signup-info-card">
+        <h2>What happens after signup?</h2>
+        <ul class="signup-info-list">
+          <li>Upload your menu</li>
+          <li>We prepare your restaurant ordering setup</li>
+          <li>Your QR code and dashboard are generated</li>
+          <li>You can review everything before going live</li>
+        </ul>
+      </div>
 
       {% if error %}
         <p class="muted error-text signup-server-error">{{ error }}</p>
@@ -68,7 +86,7 @@
           </div>
 
           <div class="signup-field">
-            <label for="email">Email</label>
+            <label for="email">Business email</label>
             <input
               id="email"
               name="email"
@@ -90,7 +108,7 @@
           </div>
 
           <div class="signup-field">
-            <label for="phone">Phone</label>
+            <label for="phone">Phone number</label>
             <input
               id="phone"
               name="phone"
@@ -100,7 +118,7 @@
           </div>
 
           <div class="signup-field signup-field-span-2">
-            <label for="address">Address</label>
+            <label for="address">Business address</label>
             <input
               id="address"
               name="address"
@@ -133,6 +151,9 @@
             <p class="muted file-help-text">
               Accepted formats: PDF, CSV, TXT, JSON, or image files.
             </p>
+            <p class="muted file-help-text">
+              This helps us prepare your restaurant ordering setup automatically.
+            </p>
           </div>
         </div>
 
@@ -147,6 +168,10 @@
             </span>
           </label>
         </div>
+
+        <p class="muted signup-reassurance">
+          You can review your setup before using it in your restaurant.
+        </p>
 
         <p class="muted error-text signup-client-error" id="client-error" style="display:none;"></p>
 
@@ -166,7 +191,7 @@
 
       <h2>Setting up your restaurant</h2>
       <p class="subtitle">
-        Uploading your menu and preparing your restaurant workspace. This usually takes a few seconds.
+        We’re uploading your menu, preparing your dashboard, and generating your QR code. This usually takes a few seconds.
       </p>
 
       <div class="processing-steps">
@@ -180,7 +205,7 @@
         </div>
         <div class="processing-step" id="step-3">
           <span class="step-dot"></span>
-          <span>Building ordering system</span>
+          <span>Preparing restaurant dashboard</span>
         </div>
         <div class="processing-step" id="step-4">
           <span class="step-dot"></span>
@@ -189,7 +214,7 @@
       </div>
 
       <p class="muted processing-note" id="processing-note">
-        Please don’t close this page while setup is in progress.
+        Please keep this page open while setup is in progress.
       </p>
     </div>
   </div>
@@ -211,6 +236,7 @@
 
   .signup-panel h1,
   .signup-subtitle,
+  .signup-trust-strip,
   .signup-plan-card,
   .signup-server-error {
     text-align: center;
@@ -222,8 +248,21 @@
     margin-right: auto;
   }
 
-  .signup-plan-card {
-    margin: 0 auto 20px;
+  .signup-trust-strip {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 16px auto 0;
+    color: rgba(243, 245, 255, 0.82);
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+
+  .signup-plan-card,
+  .signup-info-card {
+    margin: 20px auto 0;
     padding: 16px 18px;
     max-width: 720px;
     border-radius: 18px;
@@ -239,6 +278,19 @@
 
   .signup-plan-note {
     margin: 8px 0 0;
+  }
+
+  .signup-info-card h2 {
+    margin: 0 0 12px;
+    font-size: 1.05rem;
+    color: #fff;
+  }
+
+  .signup-info-list {
+    margin: 0;
+    padding-left: 18px;
+    color: rgba(243, 245, 255, 0.88);
+    line-height: 1.7;
   }
 
   .signup-form {
@@ -341,6 +393,11 @@
     margin-top: 4px;
     flex: 0 0 auto;
     transform: scale(1.05);
+  }
+
+  .signup-reassurance {
+    margin-top: 14px;
+    text-align: left;
   }
 
   .signup-client-error {
@@ -454,6 +511,11 @@
     .signup-button-row .btn {
       width: 100%;
       min-width: 0;
+    }
+
+    .signup-trust-strip {
+      gap: 6px;
+      font-size: 0.9rem;
     }
   }
 </style>

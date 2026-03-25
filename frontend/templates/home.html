@@ -11,7 +11,7 @@
     <h1>Welcome back {{ current_user.name or current_user.email }}</h1>
 
     <p class="subtitle">
-      Your restaurant workspace is ready. Open your dashboard, manage incoming orders, and access your QR setup.
+      Your restaurant workspace is ready. Manage live orders, access your QR code, and keep service moving from one place.
     </p>
 
     <div class="button-row">
@@ -34,15 +34,15 @@
 <section class="hero">
   <div class="card hero-card">
 
-    <h1>AI Ordering for Restaurants</h1>
+    <h1>Take direct orders and keep more profit</h1>
 
     <p class="subtitle">
-      Let customers scan a QR code, order through chat, and send every order straight to your kitchen dashboard in seconds.
+      Give customers a simple way to order through your own restaurant system. They scan your QR code, place an order through chat, and every order goes straight to your kitchen dashboard.
     </p>
 
     <div class="button-row">
-      <a href="/customer" class="btn btn-primary">Try Ordering</a>
-      <a href="/business/signup" class="btn btn-secondary">Start 30-Day Free Trial</a>
+      <a href="/business/signup" class="btn btn-primary">Start 30-Day Free Trial</a>
+      <a href="/customer" class="btn btn-secondary">Try Ordering</a>
     </div>
 
     <p class="muted" style="margin-top:14px;">
@@ -52,27 +52,115 @@
   </div>
 </section>
 
-<!-- COMING SOON -->
+<!-- TRUST BAR -->
+<section class="feature-section" style="padding-top: 18px; padding-bottom: 18px;">
+  <div class="feature-container">
+    <div class="feature-text" style="max-width: 100%; text-align: center;">
+      <p class="muted" style="margin: 0;">
+        Built for independent restaurants • Direct ordering • UK-based platform • No complicated setup
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- VALUE SECTION -->
 <section class="feature-section">
   <div class="feature-container">
+
+    <div class="feature-text">
+      <span class="plan-tag highlight">Why restaurants use it</span>
+
+      <h2 style="margin-top:14px;">
+        More control. Less chaos. Better margins.
+      </h2>
+
+      <p>
+        JP AI Ordering helps restaurants take direct orders without relying on expensive third-party platforms. Reduce order confusion, keep service smooth, and give customers a faster way to order.
+      </p>
+
+      <ul style="margin-top:16px; opacity:0.9;">
+        <li>✅ Take direct orders through your own system</li>
+        <li>✅ Reduce manual order-taking during busy periods</li>
+        <li>✅ Keep everything in one kitchen dashboard</li>
+        <li>✅ Create a smoother experience for staff and customers</li>
+      </ul>
+    </div>
+
+    <div class="feature-image">
+      <div class="bi-preview-card">
+        <span class="plan-tag highlight">Restaurant benefits</span>
+        <h3>Built for real service flow</h3>
+        <p class="bi-preview-subtitle">
+          A practical ordering system designed to support independent restaurant teams.
+        </p>
+
+        <div class="bi-preview-alert">
+          📲 Customers order by scanning your QR code
+        </div>
+
+        <div class="bi-preview-alert">
+          🍽️ Orders go straight to your kitchen dashboard
+        </div>
+
+        <div class="bi-preview-alert">
+          ⚙️ Less back-and-forth during busy periods
+        </div>
+
+        <div class="bi-preview-alert">
+          💷 More control over your own orders and margins
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- BUSINESS INTELLIGENCE -->
+<section class="feature-section alt">
+  <div class="feature-container">
+
+    <div class="feature-image">
+      <div class="bi-preview-card">
+        <span class="plan-tag highlight">Live insights</span>
+        <h3>Revenue insights</h3>
+        <p class="bi-preview-subtitle">
+          Clear suggestions based on your menu and order activity.
+        </p>
+
+        <div class="bi-preview-alert">
+          🔥 'Coke Can' is performing strongly — test a small price increase.
+        </div>
+
+        <div class="bi-preview-alert">
+          ⚠️ 'Sweet &amp; Sour Chicken' is underperforming — consider repositioning it.
+        </div>
+
+        <div class="bi-preview-alert">
+          🧠 Customers often pair these items — create a bundle to increase basket value.
+        </div>
+
+        <div class="bi-preview-alert">
+          ⏱️ Orders slow around 16:00 — run a timed promotion.
+        </div>
+      </div>
+    </div>
 
     <div class="feature-text">
       <span class="plan-tag highlight">Business Intelligence</span>
 
       <h2 style="margin-top:14px;">
-        Turn your orders into revenue insights
+        Turn orders into smarter business decisions
       </h2>
 
       <p>
-        Instantly see what customers actually buy, identify your best-sellers,
-        spot underperforming items, and get AI suggestions to increase profit.
+        See what sells, identify weak items, spot buying patterns, and get practical suggestions to improve revenue without guessing.
       </p>
 
       <ul style="margin-top:16px; opacity:0.9;">
-        <li>🔥 Find your most profitable items</li>
-        <li>⚠️ Detect underperforming dishes</li>
-        <li>🧠 Discover buying patterns and combos</li>
-        <li>⏱️ Optimise slow hours with smart offers</li>
+        <li>🔥 See which items are driving revenue</li>
+        <li>⚠️ Spot dishes that are underperforming</li>
+        <li>🧠 Find popular combinations and patterns</li>
+        <li>⏱️ Improve quiet periods with smarter offers</li>
       </ul>
 
       <div style="margin-top:20px;">
@@ -82,103 +170,117 @@
       </div>
     </div>
 
+  </div>
+</section>
+
+<!-- WHO IT IS FOR -->
+<section class="feature-section">
+  <div class="feature-container">
+
+    <div class="feature-text">
+      <h2>Built for independent restaurants</h2>
+      <p>
+        Designed for takeaways and small restaurant teams that want a simple, reliable way to take direct orders without adding more devices, more confusion, or more admin.
+      </p>
+    </div>
+
     <div class="feature-image">
-      <div class="bi-preview-card">
-        <span class="plan-tag highlight">Live AI Analysis</span>
-        <h3>AI insights</h3>
-        <p class="bi-preview-subtitle">
-          Real-time suggestions based on your menu and order data.
-        </p>
-
-        <div class="bi-preview-alert">
-          🔥 'coke can' performing strongly — test a small price increase.
-        </div>
-
-        <div class="bi-preview-alert">
-          ⚠️ 'sweet sour chicken' underperforming — consider repositioning.
-        </div>
-
-        <div class="bi-preview-alert">
-          🧠 Customers often pair items — bundle for higher order value.
-        </div>
-
-        <div class="bi-preview-alert">
-          ⏱️ Low activity at 16:00 — run targeted promotions.
-        </div>
-      </div>
+      <img src="/static/images/Dashboard.png" alt="Kitchen staff dashboard">
     </div>
 
   </div>
 </section>
 
 <!-- HOW IT WORKS INTRO -->
-<section class="feature-section">
+<section class="feature-section alt">
   <div class="feature-container">
+
+    <div class="feature-image">
+      <img src="/static/images/chat-demo1.jpg" alt="Customer ordering through chat">
+    </div>
 
     <div class="feature-text">
       <h2>Customers order by chatting naturally</h2>
       <p>
-        No app download. No complicated menus. Customers simply type what they want, and the AI understands the request like a member of staff would.
+        No app download. No confusing checkout flow. Customers simply type what they want, and the system understands the request in a fast, natural way.
       </p>
-    </div>
-
-    <div class="feature-image">
-      <img src="/static/images/chat-demo1.jpg" alt="Customer ordering through chat">
     </div>
 
   </div>
 </section>
 
 <!-- STEP 2 -->
-<section class="feature-section alt">
+<section class="feature-section">
   <div class="feature-container">
+
+    <div class="feature-text">
+      <h2>The order is built automatically</h2>
+      <p>
+        Menu items are recognised, totals are calculated, and the order is confirmed before it is sent through. That means fewer misunderstandings and less back-and-forth.
+      </p>
+    </div>
 
     <div class="feature-image">
       <img src="/static/images/chat-demo2.jpg" alt="AI building an order">
-    </div>
-
-    <div class="feature-text">
-      <h2>The AI builds the order automatically</h2>
-      <p>
-        The system recognises menu items, adds them correctly, calculates totals, and confirms the order before it is sent through. Fewer misunderstandings, less back-and-forth.
-      </p>
     </div>
 
   </div>
 </section>
 
 <!-- STEP 3 -->
-<section class="feature-section">
+<section class="feature-section alt">
   <div class="feature-container">
-
-    <div class="feature-text">
-      <h2>Your QR code becomes your digital ordering point</h2>
-      <p>
-        Place your QR code on tables, counters, takeaway windows, or printed flyers. Customers scan and begin ordering instantly, without waiting for staff to take the order manually.
-      </p>
-    </div>
 
     <div class="feature-image">
       <img src="/static/images/QRcode.png" alt="Restaurant QR code">
+    </div>
+
+    <div class="feature-text">
+      <h2>Your QR code becomes your direct ordering point</h2>
+      <p>
+        Place your QR code on tables, counters, takeaway windows, printed menus, or flyers. Customers scan and start ordering instantly without waiting for staff to take the order manually.
+      </p>
     </div>
 
   </div>
 </section>
 
 <!-- STEP 4 -->
-<section class="feature-section alt">
+<section class="feature-section">
   <div class="feature-container">
+
+    <div class="feature-text">
+      <h2>Orders appear instantly in your kitchen dashboard</h2>
+      <p>
+        Every incoming order appears live in the staff dashboard so your team can accept it, prepare it, and keep service moving during busy periods.
+      </p>
+    </div>
 
     <div class="feature-image">
       <img src="/static/images/Dashboard.png" alt="Kitchen staff dashboard">
     </div>
 
-    <div class="feature-text">
-      <h2>Orders appear instantly in your kitchen dashboard</h2>
-      <p>
-        Every incoming order appears live in the staff dashboard so your team can accept it, prepare it, and keep service moving smoothly during busy periods.
-      </p>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="hero">
+  <div class="card hero-card">
+
+    <h2>Run your orders through your own system</h2>
+
+    <p class="subtitle">
+      Start your 30-day free trial and give your restaurant a simpler, more reliable way to take direct orders.
+    </p>
+
+    <div class="button-row">
+      <a href="/business/signup" class="btn btn-primary">Start Free Trial</a>
+      <a href="/customer" class="btn btn-secondary">Try Ordering</a>
     </div>
+
+    <p class="muted" style="margin-top:14px;">
+      No complicated setup • Built for independent restaurants • Start quickly
+    </p>
 
   </div>
 </section>

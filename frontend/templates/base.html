@@ -3,19 +3,27 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>JP AI Platform</title>
-  <link rel="stylesheet" href="/static/styles.css?v=123" />
+
+  <title>JP AI Ordering</title>
+  <meta
+    name="description"
+    content="Direct restaurant ordering with QR code chat, kitchen dashboard, and business insights for independent restaurants."
+  />
+
+  <link rel="stylesheet" href="/static/styles.css?v=124" />
 </head>
 <body>
   <div class="site-shell">
     <header class="topbar">
-      <div class="brand">JP AI Platform</div>
+      <a href="/" class="brand brand-link" aria-label="JP AI Ordering home">
+        JP AI Ordering
+      </a>
 
-      <nav class="nav">
+      <nav class="nav" aria-label="Primary navigation">
         <a href="/">Home</a>
-        <a href="/customer">Customer</a>
-        <a href="/business">Business</a>
-        <a href="/business/ai-optimiser" role="menuitem">AI Optimiser</a>
+        <a href="/customer">Try Demo</a>
+        <a href="/business">For Restaurants</a>
+        <a href="/business/ai-optimiser">Insights</a>
 
         {% if current_user %}
           <a href="{{ dashboard_url or '/business' }}" class="nav-dashboard">Dashboard</a>
@@ -58,7 +66,7 @@
           </div>
         {% else %}
           <a href="/business/login">Log in</a>
-          <a href="/business/signup">Sign up</a>
+          <a href="/business/signup" class="nav-signup">Start Free Trial</a>
         {% endif %}
       </nav>
     </header>
@@ -74,8 +82,8 @@
         <a href="/feedback">Feedback</a>
       </div>
 
-      <div>
-        © JP AI · Universal login for chat ordering
+      <div class="footer-copy">
+        © JP AI Ordering • Direct ordering for independent restaurants
       </div>
     </footer>
   </div>

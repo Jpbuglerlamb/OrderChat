@@ -6,24 +6,24 @@
 
     <div class="staff-header">
       <div class="staff-heading">
-        <span class="plan-tag">Workspace</span>
+        <span class="plan-tag">Restaurant Workspace</span>
         <h1>Staff Dashboard</h1>
         <p class="subtitle staff-subtitle">
-          Live order control for <strong>{{ restaurant.name or restaurant_slug }}</strong>.
+          Manage live orders for <strong>{{ restaurant.name or restaurant_slug }}</strong> from one place.
         </p>
       </div>
 
       <div class="staff-primary-actions">
         <button id="refreshBtn" type="button" class="btn btn-secondary">Refresh</button>
-        <a href="/r/{{ restaurant_slug }}" class="btn btn-secondary">Back to Chat</a>
-        <a href="/business/ai-optimiser" class="btn btn-primary">Open Full Optimiser</a>
+        <a href="/r/{{ restaurant_slug }}" class="btn btn-secondary">View Ordering Page</a>
+        <a href="/business/ai-optimiser" class="btn btn-primary">Open Insights</a>
       </div>
     </div>
 
     <div class="staff-overview-strip">
       <div class="staff-overview-card">
-        <span class="muted">Access mode</span>
-        <strong>{{ access_mode or "unknown" }}</strong>
+        <span class="muted">Access</span>
+        <strong>{{ access_mode or "Unknown" }}</strong>
       </div>
 
       <div class="staff-overview-card">
@@ -32,12 +32,12 @@
       </div>
 
       <div class="staff-overview-card">
-        <span class="muted">Active orders</span>
+        <span class="muted">Live orders</span>
         <strong id="ordersCountText">Loading...</strong>
       </div>
 
       <div class="staff-overview-card">
-        <span class="muted">AI status</span>
+        <span class="muted">Insights</span>
         <strong id="aiStatusText">Loading...</strong>
       </div>
     </div>
@@ -55,7 +55,7 @@
           <div>
             <span class="plan-tag">Orders</span>
             <h2>Live Orders</h2>
-            <p class="muted">Incoming customer orders that still need kitchen attention.</p>
+            <p class="muted">Orders waiting for staff action.</p>
           </div>
         </div>
 
@@ -65,17 +65,17 @@
       <div class="pricing-plan staff-panel staff-ai-panel" id="aiInsightsCard">
         <div class="staff-panel-head">
           <div>
-            <span class="plan-tag highlight">Live Analysis</span>
-            <h2>AI Optimiser</h2>
+            <span class="plan-tag highlight">Business Signals</span>
+            <h2>Live Insights</h2>
             <p class="muted staff-ai-subtitle">
-              Fast business signals based on current order flow and uploaded history.
+              Practical suggestions based on current order flow and available order history.
             </p>
           </div>
         </div>
 
         <div id="aiInsightsMount" class="staff-ai-mount">
           <div class="staff-ai-pill">
-            Analysing your business...
+            Checking current business signals...
           </div>
         </div>
       </div>
@@ -262,6 +262,10 @@
     text-align: left;
   }
 
+  .staff-order-phone {
+    margin: 0;
+  }
+
   @media (max-width: 1080px) {
     .staff-overview-strip {
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -400,7 +404,7 @@
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      throw new Error(data.detail || data.error || "Failed to load AI insights");
+      throw new Error(data.detail || data.error || "Failed to load insights");
     }
 
     return data;
@@ -409,11 +413,21 @@
   function renderEmpty() {
     ordersMount.innerHTML = `
       <div class="pricing-plan staff-empty-card">
-        <h2>No active orders</h2>
-        <p class="muted">Quiet kitchen. Nothing waiting right now.</p>
+        <h2>No live orders</h2>
+        <p class="muted">Nothing is waiting for staff action right now.</p>
       </div>
     `;
-    ordersCountText.textContent = "0 active orders";
+    ordersCountText.textContent = "0 live orders";
+  }
+
+  function renderError(message) {
+    ordersMount.innerHTML = `
+      <div class="pricing-plan staff-error-card">
+        <h2>Could not load orders</h2>
+        <p class="muted">${escapeHtml(message || "Please try refreshing the page.")}</p>
+      </div>
+    `;
+    ordersCountText.textContent = "Unavailable";
   }
 
   function renderOrders(orders) {
@@ -422,7 +436,7 @@
       return;
     }
 
-    ordersCountText.textContent = `${orders.length} active order${orders.length === 1 ? "" : "s"}`;
+    ordersCountText.textContent = `${orders.length} live order${orders.length === 1 ? "" : "s"}`;
 
     ordersMount.innerHTML = orders.map((o) => {
       const status = String(o.status || "new").toLowerCase();
@@ -434,16 +448,16 @@
           <div class="staff-order-top">
             <div class="staff-order-meta">
               <h3>${escapeHtml(o.name || "Customer")}</h3>
-              <p class="muted" style="margin:0;">${phone ? escapeHtml(phone) : "No phone"}</p>
+              <p class="muted staff-order-phone">${phone ? escapeHtml(phone) : "No phone provided"}</p>
             </div>
 
             <span class="plan-tag">${escapeHtml(prettyStatus(status))}</span>
           </div>
 
-          <div class="staff-order-summary">${escapeHtml(summary || "No summary available.")}</div>
+          <div class="staff-order-summary">${escapeHtml(summary || "No order summary available.")}</div>
 
           <div class="staff-order-actions">
-            <select class="statusSelect">
+            <select class="statusSelect" aria-label="Update order status">
               <option value="new" ${status === "new" ? "selected" : ""}>New</option>
               <option value="accepted" ${status === "accepted" ? "selected" : ""}>Accepted</option>
               <option value="preparing" ${status === "preparing" ? "selected" : ""}>Preparing</option>
@@ -451,7 +465,7 @@
               <option value="completed" ${status === "completed" ? "selected" : ""}>Completed</option>
             </select>
 
-            <button class="btn btn-primary updateBtn" type="button">Update status</button>
+            <button class="btn btn-primary updateBtn" type="button">Update Status</button>
           </div>
         </article>
       `;
@@ -488,7 +502,7 @@
       aiStatusText.textContent = "Unavailable";
       aiInsightsMount.innerHTML = `
         <div class="staff-ai-pill">
-          Could not load AI insights right now.
+          Live insights are not available right now.
         </div>
       `;
       return;
@@ -500,7 +514,7 @@
     if (!insights.length) {
       aiInsightsMount.innerHTML = `
         <div class="staff-ai-pill">
-          No insights yet. Upload past order history in the full AI Optimiser page.
+          No live insights yet. Add order history in the full insights page to unlock more business signals.
         </div>
       `;
       return;
@@ -513,13 +527,26 @@
   }
 
   async function loadOrders() {
-    const orders = await apiStaffOrders();
-    renderOrders(orders);
+    try {
+      const orders = await apiStaffOrders();
+      renderOrders(orders);
+    } catch (err) {
+      renderError(err.message || "Failed to load staff orders");
+    }
   }
 
   async function loadInsights() {
-    const data = await apiBusinessInsights();
-    renderInsights(data);
+    try {
+      const data = await apiBusinessInsights();
+      renderInsights(data);
+    } catch (err) {
+      aiStatusText.textContent = "Unavailable";
+      aiInsightsMount.innerHTML = `
+        <div class="staff-ai-pill">
+          Could not load live insights right now.
+        </div>
+      `;
+    }
   }
 
   async function refreshDashboard(showButtonState = true) {
@@ -538,8 +565,6 @@
         loadOrders(),
         loadInsights(),
       ]);
-    } catch (err) {
-      console.error(err);
     } finally {
       if (showButtonState) {
         refreshBtn.disabled = false;
