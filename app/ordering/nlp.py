@@ -199,8 +199,17 @@ _DEFAULT_SYNONYMS: Dict[str, str] = {
     "large": "large",
 }
 
-_SPLIT_RE = re.compile(r"\s*(?:,|&|\+)\s*", re.IGNORECASE)
-_QTY_RE = re.compile(r"^\s*(\d+)\s*[x×]\s*(.+?)\s*$", re.IGNORECASE)
+# Split on commas and plus.
+# We DO NOT split on '&' here because plenty of menu items use it as part of a real item name.
+_SPLIT_RE = re.compile(r"\s*(?:,|\+)\s*", re.IGNORECASE)
+
+# 2x burger / 2 burger / x2 burger / 2 burgers
+_QTY_PATTERNS = [
+    re.compile(r"^\s*(\d+)\s*[x×]\s*(.+?)\s*$", re.IGNORECASE),
+    re.compile(r"^\s*x\s*(\d+)\s+(.+?)\s*$", re.IGNORECASE),
+    re.compile(r"^\s*(\d+)\s+(.+?)\s*$", re.IGNORECASE),
+]
+
 _PUNCT_RE = re.compile(r"[^\w\s]+")
 
 _LEADING_FILLER_RE = re.compile(
@@ -269,11 +278,31 @@ _GENERIC_MENU_Q_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Keep these intact when splitting on "and"
 _PROTECTED_AND_PHRASES = [
     "sweet and sour",
     "salt and pepper",
     "fish and chips",
     "salt and sauce",
+    "mac and cheese",
+]
+
+# Phrases that should usually stay together when users say "... and ..."
+_COMPOUND_FOOD_PHRASES = [
+    "chips cheese curry",
+    "chips cheese doner",
+    "salt and pepper chicken",
+    "sweet and sour chicken",
+    "sweet and sour pork",
+    "fried rice",
+    "egg fried rice",
+    "special fried rice",
+    "black bean sauce",
+    "satay sauce",
+    "curry sauce",
+    "chow mein",
+    "spring rolls",
+    "prawn crackers",
 ]
 
 _STOPWORDS = {
@@ -286,6 +315,9 @@ _HEADWORDS = {
     "pizza", "rice", "noodles", "coke", "cola", "water", "fanta", "sprite",
     "chips", "fries", "prawn", "king prawn", "curry", "satay",
 }
+
+_REPEAT_ORDER_RE = re.compile(r"^\s*(?:same again|same|again|one more|another one)\s*$", re.IGNORECASE)
+_ADD_ON_RE = re.compile(r"^\s*(?:and|with|plus)\s+(.+?)\s*$", re.IGNORECASE)
 
 
 def default_synonyms() -> Dict[str, str]:
@@ -332,6 +364,7 @@ def _apply_pattern_synonyms(s: str) -> str:
     if not s:
         return s
 
+    # drinks
     s = re.sub(r"\b(coca\s*cola|coca-cola|coke|cocacola)\b", "coca cola", s)
     s = re.sub(r"\b(diet\s+coke|diet\s+coca\s*cola)\b", "diet coca cola", s)
     s = re.sub(r"\b(coke\s*zero|coca\s*cola\s*zero|zero\s*coke)\b", "coca cola zero", s)
@@ -340,13 +373,16 @@ def _apply_pattern_synonyms(s: str) -> str:
     s = re.sub(r"\b(irn\s*bru|irn-bru)\b", "irn bru", s)
     s = re.sub(r"\b(fanta(?:\s*orange)?)\b", "fanta orange", s)
 
+    # water
     s = re.sub(r"\b(sparkling\s+water|fizzy\s+water)\b", "sparkling water", s)
-    s = re.sub(r"\b(still\s+water|water)\b", "still water", s)
+    s = re.sub(r"\b(still\s+water|tap\s+water|bottled\s+water)\b", "still water", s)
 
+    # food typos
     s = re.sub(r"\b(donner|donar)\b", "doner", s)
     s = re.sub(r"\b(peperoni|pepperonni)\b", "pepperoni", s)
     s = re.sub(r"\b(margarita)\b", "margherita", s)
 
+    # shorthand connectors
     s = re.sub(r"\b(n)\b", "and", s)
 
     s = re.sub(r"\s+", " ", s).strip()
@@ -374,49 +410,71 @@ def _apply_dictionary_synonyms(s: str, synonyms: Dict[str, str]) -> str:
 
 
 def normalize_text(s: str, synonyms: Dict[str, str]) -> str:
-    s0 = _basic_normalize(s)
+    raw_basic = _basic_normalize(s)
 
-    if _GENERIC_MENU_Q_RE.match(s0):
+    if _GENERIC_MENU_Q_RE.match(raw_basic):
         return "menu"
 
-    s0 = strip_filler_prefix(s0)
+    cleaned = strip_filler_prefix(raw_basic)
 
-    if _GENERIC_MENU_Q_RE.match(s0):
+    if _GENERIC_MENU_Q_RE.match(cleaned):
         return "menu"
 
-    s0 = strip_question_wrapper(s0)
+    cleaned = strip_question_wrapper(cleaned)
 
-    if not s0 and _GENERIC_MENU_Q_RE.match(_basic_normalize(s)):
+    if not cleaned and _GENERIC_MENU_Q_RE.match(raw_basic):
         return "menu"
 
-    s0 = _basic_normalize(s0)
-    s0 = _apply_pattern_synonyms(s0)
-    s0 = _apply_dictionary_synonyms(s0, synonyms)
-    return re.sub(r"\s+", " ", s0).strip()
+    cleaned = _basic_normalize(cleaned)
+    cleaned = _apply_pattern_synonyms(cleaned)
+    cleaned = _apply_dictionary_synonyms(cleaned, synonyms)
+    return re.sub(r"\s+", " ", cleaned).strip()
 
 
 def parse_qty_prefix(msg: str) -> Tuple[int, str]:
-    m = _QTY_RE.match(msg or "")
-    if not m:
-        return 1, (msg or "").strip()
-    return max(1, int(m.group(1))), (m.group(2) or "").strip()
+    raw = (msg or "").strip()
+    if not raw:
+        return 1, ""
+
+    for pattern in _QTY_PATTERNS:
+        m = pattern.match(raw)
+        if not m:
+            continue
+
+        qty = max(1, int(m.group(1)))
+        rest = (m.group(2) or "").strip()
+
+        # Avoid treating question phrases like "what chicken" as qty phrases
+        if not rest:
+            continue
+
+        # If first token after quantity is obviously not a noun-ish phrase, still let it pass.
+        # This keeps parsing simple and takeaway-friendly.
+        return qty, rest
+
+    return 1, raw
 
 
 def _protect_and_phrases(s: str) -> str:
     if not s:
         return s
+
     out = s
-    for phrase in _PROTECTED_AND_PHRASES:
+    protected_phrases = list(_PROTECTED_AND_PHRASES) + list(_COMPOUND_FOOD_PHRASES)
+
+    for phrase in protected_phrases:
         ph = _basic_normalize(phrase)
         if not ph:
             continue
         protected = ph.replace(" and ", " _and_ ")
+        protected = protected.replace(" ", "_")
         out = re.sub(rf"(?<!\w){re.escape(ph)}(?!\w)", protected, out)
+
     return out
 
 
 def _unprotect_and_phrases(s: str) -> str:
-    return (s or "").replace(" _and_ ", " and ")
+    return (s or "").replace("_and_", " and ").replace("_", " ")
 
 
 def split_intents(msg_norm: str) -> List[str]:
@@ -428,12 +486,20 @@ def split_intents(msg_norm: str) -> List[str]:
     chunks = [c.strip() for c in _SPLIT_RE.split(s) if c and c.strip()]
 
     parts: List[str] = []
-    for c in chunks:
-        sub = [p.strip() for p in re.split(r"\s+\band\b\s+", c, flags=re.IGNORECASE) if p and p.strip()]
-        parts.extend(sub or [c])
+    for chunk in chunks:
+        sub = [p.strip() for p in re.split(r"\s+\band\b\s+", chunk, flags=re.IGNORECASE) if p and p.strip()]
+        parts.extend(sub or [chunk])
 
-    parts = [_unprotect_and_phrases(p) for p in parts]
-    return parts or [msg_norm or ""]
+    cleaned: List[str] = []
+    seen = set()
+    for part in parts:
+        p = _unprotect_and_phrases(part).strip()
+        if not p or p in seen:
+            continue
+        seen.add(p)
+        cleaned.append(p)
+
+    return cleaned or [msg_norm or ""]
 
 
 def is_order_status_query(raw: str) -> bool:
@@ -460,6 +526,18 @@ def extract_status_target(raw: str) -> Optional[str]:
     return t
 
 
+def is_repeat_order_phrase(raw: str) -> bool:
+    return bool(_REPEAT_ORDER_RE.match((raw or "").strip()))
+
+
+def extract_add_on_phrase(raw: str) -> Optional[str]:
+    m = _ADD_ON_RE.match((raw or "").strip())
+    if not m:
+        return None
+    value = (m.group(1) or "").strip()
+    return value or None
+
+
 def fuzzy_best_key(keys: List[str], query: str, cutoff: float = 0.68) -> Optional[str]:
     if not query or not keys:
         return None
@@ -479,7 +557,8 @@ def similarity(a: str, b: str) -> float:
 def tokenize_for_match(text: str) -> Set[str]:
     if not text:
         return set()
-    tokens = set()
+
+    tokens: Set[str] = set()
     for tok in text.split():
         tok = tok.strip()
         if not tok or tok in _STOPWORDS:
@@ -491,10 +570,14 @@ def tokenize_for_match(text: str) -> Set[str]:
 def token_overlap_score(query_tokens: Set[str], candidate_tokens: Set[str]) -> float:
     if not query_tokens or not candidate_tokens:
         return 0.0
+
     common = query_tokens & candidate_tokens
     if not common:
         return 0.0
-    return len(common) / max(len(candidate_tokens), 1)
+
+    precision = len(common) / max(len(candidate_tokens), 1)
+    recall = len(common) / max(len(query_tokens), 1)
+    return max(precision, recall * 0.9)
 
 
 def head_token(text: str) -> Optional[str]:
@@ -534,13 +617,18 @@ def generate_aliases(name: str, synonyms: Dict[str, str]) -> List[str]:
 
     if tokens:
         aliases.add(tokens[0])
+
         if len(tokens) >= 2:
             aliases.add(" ".join(tokens[:2]))
             aliases.add(" ".join(tokens[-2:]))
+
         if len(tokens) >= 3:
             aliases.add(" ".join(tokens[:3]))
 
-    # noun-ish trailing phrases
+        # allow useful trailing noun-ish combos
+        if len(tokens) >= 2:
+            aliases.add(" ".join(tokens[1:]))
+
     for phrase in (
         "black bean sauce",
         "sweet and sour",
@@ -552,6 +640,13 @@ def generate_aliases(name: str, synonyms: Dict[str, str]) -> List[str]:
         "curry sauce",
         "spring rolls",
         "prawn crackers",
+        "soft drink",
+        "still water",
+        "sparkling water",
+        "coca cola",
+        "diet coca cola",
+        "coca cola zero",
+        "pepsi max",
     ):
         if phrase in base:
             aliases.add(phrase)
@@ -569,10 +664,12 @@ def score_candidate(query: str, aliases: List[str], candidate_name: str) -> floa
     q_head = head_token(q)
     best = 0.0
 
+    raw_candidate = candidate_name.strip().lower()
+
     for alias in aliases:
         alias_tokens = tokenize_for_match(alias)
 
-        # exact
+        # exact match
         if q == alias:
             best = max(best, 1.0)
 
@@ -597,5 +694,11 @@ def score_candidate(query: str, aliases: List[str], candidate_name: str) -> floa
             best = max(best, 0.95)
 
     # slight extra comparison against raw candidate name
-    best = max(best, similarity(q, candidate_name))
+    best = max(best, similarity(q, raw_candidate))
+
+    # boost when all query tokens appear in candidate name
+    candidate_tokens = tokenize_for_match(raw_candidate)
+    if q_tokens and candidate_tokens and q_tokens.issubset(candidate_tokens):
+        best = max(best, 0.91)
+
     return min(best, 1.0)
