@@ -715,8 +715,12 @@ def staff_orders(
         db.query(Order)
         .filter(Order.restaurant_slug == slug)
         .filter(Order.status == "confirmed")
-        .filter(Order.kitchen_status != "completed")  # hide completed
-        .filter(Order.status != "archived")           # 🔥 THIS IS KEY
+        .filter(
+            or_(
+                Order.kitchen_status.is_(None),
+                ~Order.kitchen_status.in_(["completed", "archived"]),
+            )
+        )
         .order_by(Order.created_at.desc())
         .all()
     )
@@ -791,7 +795,7 @@ def archive_order(
             detail="Only ready or completed orders can be removed",
         )
 
-    order.status = "archived"
+    order.kitchen_status = "archived"
     order.updated_at = datetime.utcnow()
 
     db.add(order)
