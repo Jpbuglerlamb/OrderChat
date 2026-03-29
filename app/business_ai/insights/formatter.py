@@ -1,28 +1,27 @@
-# app/business_ai/actions/formatter.py
+# app/business_ai/insights/formatter.py
 from __future__ import annotations
 
-from app.business_ai.actions.recommendations import Recommendation
+from app.business_ai.insights.types import Insight
 
 
 _PRIORITY_EMOJI = {
-    "high": "🚀",
+    "high": "🔥",
     "medium": "⚡",
     "low": "🧩",
 }
 
 
-def format_recommendations(recommendations: list[Recommendation]) -> str:
-    if not recommendations:
-        return "No recommendations available yet."
+def format_insights(insights: list[Insight]) -> str:
+    if not insights:
+        return "No insights available yet."
 
-    lines: list[str] = ["🎯 Recommended Actions", ""]
+    lines: list[str] = ["📊 Business AI Insights", ""]
 
-    for index, rec in enumerate(recommendations, start=1):
-        emoji = _PRIORITY_EMOJI.get(rec.get("priority", "low"), "•")
-        title = rec.get("title", "Recommendation")
-        summary = rec.get("summary", "").strip()
-        action = rec.get("action", "").strip()
-        reason = rec.get("reason", "").strip()
+    for index, insight in enumerate(insights, start=1):
+        emoji = _PRIORITY_EMOJI.get(insight.get("priority", "low"), "•")
+        title = insight.get("title", "Insight")
+        summary = insight.get("summary", "").strip()
+        action = insight.get("action", "").strip()
 
         lines.append(f"{index}. {emoji} {title}")
 
@@ -31,9 +30,6 @@ def format_recommendations(recommendations: list[Recommendation]) -> str:
 
         if action:
             lines.append(f"   Action: {action}")
-
-        if reason:
-            lines.append(f"   Why: {reason}")
 
         lines.append("")
 
