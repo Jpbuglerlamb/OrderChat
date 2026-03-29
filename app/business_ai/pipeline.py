@@ -1,18 +1,50 @@
 # app/business_ai/pipeline.py
+from __future__ import annotations
+
+from app.business_ai.actions.formatter import format_recommendations
+from app.business_ai.actions.recommendations import generate_recommendations
 from app.business_ai.analytics.item_stats import compute_item_stats
 from app.business_ai.analytics.order_stats import compute_order_stats
 from app.business_ai.analytics.pairings import compute_pairings
 from app.business_ai.analytics.time_patterns import compute_time_patterns
+from app.business_ai.data.normaliser import normalise_orders
+from app.business_ai.data.validator import validate_orders
 from app.business_ai.insights.formatter import format_insights
 from app.business_ai.insights.rules import generate_insights
 from app.business_ai.memory.builder import build_memory
-from app.business_ai.data.normaliser import normalise_orders
-from app.business_ai.data.validator import validate_orders
 
 
-def run_pipeline(menu_data, orders):
-    orders, unmatched_items = normalise_orders(orders, menu_data=menu_data)
-    errors = validate_orders(orders)
+def _priority_rank(priority: str) -> int:
+    ranking = {
+        "high": 0,
+        "medium": 1,
+        "low": 2,
+    }
+    return ranking.get(priority, 99)
+
+
+def _confidence_value(insight: dict) -> float:
+    evidence = insight.get("evidence", {}) or {}
+    try:
+        return float(evidence.get("confidence", 0))
+    except Exception:
+        return 0.0
+
+
+def _sort_insights(insights: list[dict]) -> list[dict]:
+    return sorted(
+        insights,
+        key=lambda x: (
+            _priority_rank(str(x.get("priority", ""))),
+            -_confidence_value(x),
+            str(x.get("title", "")),
+        ),
+    )
+
+
+def run_pipeline(menu_data: dict, orders: list[dict]) -> dict:
+    normalised_orders, unmatched_items = normalise_orders(orders, menu_data=menu_data)
+    errors = validate_orders(normalised_orders)
 
     if errors:
         return {
@@ -20,53 +52,73 @@ def run_pipeline(menu_data, orders):
             "errors": errors,
             "insights": [],
             "formatted_insights": "Uploaded order history contains errors.",
+            "recommendations": [],
+            "formatted_recommendations": "No recommendations available.",
+            "unmatched_items": unmatched_items,
+            "order_count": len(normalised_orders),
         }
 
-    item_stats = compute_item_stats(orders)
-    order_stats = compute_order_stats(orders)
-    pairings = compute_pairings(orders)
-    time_patterns = compute_time_patterns(orders)
+    item_stats = compute_item_stats(normalised_orders)
+    order_stats = compute_order_stats(normalised_orders)
+    pairings = compute_pairings(normalised_orders)
+    time_patterns = compute_time_patterns(normalised_orders)
 
     memory = build_memory(
         menu_data=menu_data,
-        orders=orders,
+        orders=normalised_orders,
         item_stats=item_stats,
         order_stats=order_stats,
         pairings=pairings,
         time_patterns=time_patterns,
     )
 
-    insights = generate_insights(memory)
-
     if unmatched_items:
-        unmatched_message = (
-                "🧩 Some uploaded order items could not be matched to the current menu: "
-                + ", ".join(sorted(set(unmatched_items))[:10])
-                + ("." if len(set(unmatched_items)) <= 10 else "...")
+        sample = ", ".join(sorted(set(unmatched_items))[:10])
+        warning = (
+            "Some uploaded order items could not be matched to the current menu: "
+            + sample
+            + ("." if len(set(unmatched_items)) <= 10 else "...")
         )
 
-        if not any(
-                isinstance(insight, str) and insight.startswith("🧩 Some uploaded order items could not be matched")
-                for insight in insights
-        ):
-            insights.append(unmatched_message)
+        existing_warnings = memory.get("warnings", []) or []
+        if warning not in existing_warnings:
+            existing_warnings.append(warning)
+            memory["warnings"] = existing_warnings
 
-        if unmatched_message not in insights:
-            insights.append(unmatched_message)
+    insights = generate_insights(memory)
+    insights = _sort_insights(insights)
 
-    if not insights and not orders:
-        insights.append(
-            "No order history has been analysed yet. Upload past orders to unlock menu and sales insights."
-        )
+    if not insights and not normalised_orders:
+        insights = [
+            {
+                "type": "empty_dataset",
+                "priority": "low",
+                "title": "No order history analysed yet",
+                "summary": "No valid order history has been analysed yet.",
+                "action": "Upload past orders to unlock menu and sales insights.",
+                "evidence": {"confidence": 1.0},
+            }
+        ]
+
+    recommendations = generate_recommendations(insights, limit=3)
 
     formatted = format_insights(insights)
+    formatted_recommendations = format_recommendations(recommendations)
 
     return {
         "ok": True,
         "menu_meta": menu_data.get("meta", {}),
         "memory": memory,
+        "analytics": {
+            "item_stats": item_stats,
+            "order_stats": order_stats,
+            "pairings": pairings,
+            "time_patterns": time_patterns,
+        },
         "insights": insights,
         "formatted_insights": formatted,
+        "recommendations": recommendations,
+        "formatted_recommendations": formatted_recommendations,
         "unmatched_items": unmatched_items,
-        "order_count": len(orders),
+        "order_count": len(normalised_orders),
     }

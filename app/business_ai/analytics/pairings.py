@@ -1,18 +1,24 @@
 #app/business_ai/analytics/pairings.py
+from __future__ import annotations
+
 from collections import defaultdict
 from itertools import combinations
 
-def compute_pairings(orders):
+
+def compute_pairings(orders: list[dict]) -> list[tuple[tuple[str, str], int]]:
     pair_counts = defaultdict(int)
 
     for order in orders:
-        item_ids = [item["id"] for item in order["items"]]
+        unique_item_ids = sorted(
+            {
+                str(item.get("id", "")).strip()
+                for item in order.get("items", []) or []
+                if str(item.get("id", "")).strip()
+            }
+        )
 
-        # get all pairs in this order
-        for pair in combinations(sorted(item_ids), 2):
+        for pair in combinations(unique_item_ids, 2):
             pair_counts[pair] += 1
 
-    # sort by frequency
     sorted_pairs = sorted(pair_counts.items(), key=lambda x: x[1], reverse=True)
-
-    return sorted_pairs[:5]  # top 5 pairings
+    return sorted_pairs[:10]

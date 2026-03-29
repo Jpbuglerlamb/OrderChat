@@ -1,4 +1,4 @@
-#app/business_ai/data/loader.py
+# app/business_ai/data/loader.py
 from __future__ import annotations
 
 import json
@@ -26,7 +26,7 @@ def load_orders(filename: str = "orders.json"):
             filename=path.name,
         )
 
-    orders = normalise_orders(dataset["orders"])
+    orders, unmatched_items = normalise_orders(dataset["orders"])
     errors = validate_orders(orders)
 
     if errors:
