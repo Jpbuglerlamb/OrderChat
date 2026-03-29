@@ -50,13 +50,86 @@
       <div class="ai-optimiser-results">
         {% if insights_result %}
           {% if insights_result.ok %}
+
+            {% if insights_result.recommendations %}
+              <div class="ai-optimiser-block">
+                <div class="ai-optimiser-section-head ai-optimiser-sub-head">
+                  <span class="plan-tag highlight">Top actions</span>
+                  <h3 class="ai-optimiser-panel-title">Recommended next moves</h3>
+                  <p class="muted ai-optimiser-panel-subtitle">
+                    The most useful actions based on your current analysis.
+                  </p>
+                </div>
+
+                <div class="ai-optimiser-recommendation-list">
+                  {% for rec in insights_result.recommendations %}
+                    <article class="ai-optimiser-insight-card">
+                      <div class="ai-optimiser-insight-card-head">
+                        <span class="ai-priority-badge ai-priority-{{ rec.priority|default('low') }}">
+                          {{ rec.priority|default('low')|capitalize }}
+                        </span>
+                        <h4 class="ai-optimiser-insight-title">{{ rec.title }}</h4>
+                      </div>
+
+                      {% if rec.summary %}
+                        <p class="ai-optimiser-insight-summary">{{ rec.summary }}</p>
+                      {% endif %}
+
+                      {% if rec.action %}
+                        <p class="ai-optimiser-insight-action">
+                          <strong>Action:</strong> {{ rec.action }}
+                        </p>
+                      {% endif %}
+
+                      {% if rec.reason %}
+                        <p class="ai-optimiser-insight-reason">
+                          <strong>Why:</strong> {{ rec.reason }}
+                        </p>
+                      {% endif %}
+                    </article>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+
             {% if insights_result.insights %}
-              <div class="ai-optimiser-insight-list">
-                {% for insight in insights_result.insights %}
-                  <div class="ai-optimiser-insight-item">
-                    {{ insight }}
-                  </div>
-                {% endfor %}
+              <div class="ai-optimiser-block">
+                <div class="ai-optimiser-section-head ai-optimiser-sub-head">
+                  <span class="plan-tag">Signals</span>
+                  <h3 class="ai-optimiser-panel-title">Structured insights</h3>
+                  <p class="muted ai-optimiser-panel-subtitle">
+                    The underlying signals the optimiser found in your data.
+                  </p>
+                </div>
+
+                <div class="ai-optimiser-insight-list">
+                  {% for insight in insights_result.insights %}
+                    <article class="ai-optimiser-insight-card">
+                      <div class="ai-optimiser-insight-card-head">
+                        <span class="ai-priority-badge ai-priority-{{ insight.priority|default('low') }}">
+                          {{ insight.priority|default('low')|capitalize }}
+                        </span>
+                        <h4 class="ai-optimiser-insight-title">{{ insight.title }}</h4>
+                      </div>
+
+                      {% if insight.summary %}
+                        <p class="ai-optimiser-insight-summary">{{ insight.summary }}</p>
+                      {% endif %}
+
+                      {% if insight.action %}
+                        <p class="ai-optimiser-insight-action">
+                          <strong>Action:</strong> {{ insight.action }}
+                        </p>
+                      {% endif %}
+
+                      {% if insight.evidence and insight.evidence.confidence is defined %}
+                        <p class="ai-optimiser-insight-meta">
+                          Confidence: {{ (insight.evidence.confidence * 100)|round(0)|int }}%
+                        </p>
+                      {% endif %}
+                    </article>
+                  {% endfor %}
+                </div>
               </div>
             {% else %}
               <div class="ai-optimiser-empty-state ai-optimiser-neutral-box">
@@ -71,6 +144,14 @@
                 <pre class="ai-optimiser-pre">{{ insights_result.formatted_insights }}</pre>
               </details>
             {% endif %}
+
+            {% if insights_result.formatted_recommendations %}
+              <details class="ai-optimiser-details">
+                <summary>Show recommendation text output</summary>
+                <pre class="ai-optimiser-pre">{{ insights_result.formatted_recommendations }}</pre>
+              </details>
+            {% endif %}
+
           {% else %}
             <div class="ai-optimiser-empty-state ai-optimiser-error-box">
               <strong>Could not analyse the uploaded order history.</strong>

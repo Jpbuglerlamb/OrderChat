@@ -37,7 +37,7 @@
       </div>
 
       <div class="staff-overview-card">
-        <span class="muted">Insights</span>
+        <span class="muted">Signals</span>
         <strong id="aiStatusText">Loading...</strong>
       </div>
     </div>
@@ -74,8 +74,9 @@
         </div>
 
         <div id="aiInsightsMount" class="staff-ai-mount">
-          <div class="staff-ai-pill">
-            Checking current business signals...
+          <div class="staff-ai-empty">
+            <strong>Checking current business signals...</strong>
+            <span>Please wait while the dashboard refreshes.</span>
           </div>
         </div>
       </div>
@@ -201,15 +202,6 @@
     gap: 14px;
   }
 
-  .staff-ai-pill {
-    padding: 14px 16px;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    color: #fff;
-    line-height: 1.55;
-  }
-
   .staff-order-card {
     display: grid;
     gap: 16px;
@@ -264,6 +256,80 @@
 
   .staff-order-phone {
     margin: 0;
+  }
+
+  .staff-ai-empty {
+    padding: 16px;
+    border-radius: 16px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.10);
+    display: grid;
+    gap: 6px;
+  }
+
+  .staff-ai-signal-card {
+    padding: 15px 16px;
+    border-radius: 16px;
+    background: rgba(255,255,255,0.045);
+    border: 1px solid rgba(255,255,255,0.10);
+    display: grid;
+    gap: 8px;
+  }
+
+  .staff-ai-signal-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .staff-ai-signal-title {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.3;
+    color: #fff;
+  }
+
+  .staff-ai-signal-summary,
+  .staff-ai-signal-action,
+  .staff-ai-signal-reason,
+  .staff-ai-signal-meta {
+    margin: 0;
+    line-height: 1.5;
+    color: #fff;
+  }
+
+  .staff-ai-signal-meta {
+    opacity: 0.8;
+    font-size: 0.92rem;
+  }
+
+  .staff-ai-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: 0.2rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+
+  .staff-ai-badge-high {
+    background: rgba(255, 110, 110, 0.16);
+    color: #ffd4d4;
+  }
+
+  .staff-ai-badge-medium {
+    background: rgba(255, 196, 87, 0.16);
+    color: #ffe7ad;
+  }
+
+  .staff-ai-badge-low {
+    background: rgba(160, 160, 160, 0.14);
+    color: #e7e7e7;
   }
 
   @media (max-width: 1080px) {
@@ -343,6 +409,20 @@
     if (s === "ready") return "Ready";
     if (s === "completed") return "Completed";
     return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  function prettyPriority(priority) {
+    const p = String(priority || "low").toLowerCase();
+    if (p === "high") return "High";
+    if (p === "medium") return "Medium";
+    return "Low";
+  }
+
+  function priorityClass(priority) {
+    const p = String(priority || "low").toLowerCase();
+    if (p === "high") return "staff-ai-badge-high";
+    if (p === "medium") return "staff-ai-badge-medium";
+    return "staff-ai-badge-low";
   }
 
   async function apiStaffOrders() {
@@ -442,6 +522,7 @@
       const status = String(o.status || "new").toLowerCase();
       const phone = String(o.phone || "").trim();
       const summary = String(o.summary || "").trim();
+      const createdAt = String(o.created_at || o.created || "").trim();
 
       return `
         <article class="pricing-plan staff-order-card ${status === "new" ? "featured" : ""}" data-order-id="${escapeHtml(o.id)}">
@@ -449,6 +530,7 @@
             <div class="staff-order-meta">
               <h3>${escapeHtml(o.name || "Customer")}</h3>
               <p class="muted staff-order-phone">${phone ? escapeHtml(phone) : "No phone provided"}</p>
+              ${createdAt ? `<p class="muted staff-order-phone">Received: ${escapeHtml(createdAt)}</p>` : ""}
             </div>
 
             <span class="plan-tag">${escapeHtml(prettyStatus(status))}</span>
@@ -497,32 +579,62 @@
     });
   }
 
+  function renderSignalCard(item) {
+    const priority = String(item.priority || "low").toLowerCase();
+    const title = escapeHtml(item.title || "Business signal");
+    const summary = escapeHtml(item.summary || "");
+    const action = escapeHtml(item.action || "");
+    const reason = escapeHtml(item.reason || "");
+    const confidence = item.evidence && typeof item.evidence.confidence === "number"
+      ? Math.round(item.evidence.confidence * 100)
+      : null;
+
+    return `
+      <article class="staff-ai-signal-card">
+        <div class="staff-ai-signal-head">
+          <span class="staff-ai-badge ${priorityClass(priority)}">${escapeHtml(prettyPriority(priority))}</span>
+          <h3 class="staff-ai-signal-title">${title}</h3>
+        </div>
+
+        ${summary ? `<p class="staff-ai-signal-summary">${summary}</p>` : ""}
+        ${action ? `<p class="staff-ai-signal-action"><strong>Action:</strong> ${action}</p>` : ""}
+        ${reason ? `<p class="staff-ai-signal-reason"><strong>Why:</strong> ${reason}</p>` : ""}
+        ${confidence !== null ? `<p class="staff-ai-signal-meta">Confidence: ${confidence}%</p>` : ""}
+      </article>
+    `;
+  }
+
   function renderInsights(result) {
     if (!result || !result.ok) {
       aiStatusText.textContent = "Unavailable";
       aiInsightsMount.innerHTML = `
-        <div class="staff-ai-pill">
-          Live insights are not available right now.
+        <div class="staff-ai-empty">
+          <strong>Live insights are unavailable.</strong>
+          <span>Try opening the full optimiser page to refresh the latest analysis.</span>
         </div>
       `;
       return;
     }
 
+    const recommendations = Array.isArray(result.recommendations) ? result.recommendations : [];
     const insights = Array.isArray(result.insights) ? result.insights : [];
-    aiStatusText.textContent = insights.length ? "Live" : "Idle";
+    const cards = recommendations.length ? recommendations : insights;
 
-    if (!insights.length) {
+    aiStatusText.textContent = cards.length ? "Live" : "Idle";
+
+    if (!cards.length) {
       aiInsightsMount.innerHTML = `
-        <div class="staff-ai-pill">
-          No live insights yet. Add order history in the full insights page to unlock more business signals.
+        <div class="staff-ai-empty">
+          <strong>No live insights yet.</strong>
+          <span>Add order history in the full insights page to unlock more business signals.</span>
         </div>
       `;
       return;
     }
 
-    aiInsightsMount.innerHTML = insights
+    aiInsightsMount.innerHTML = cards
       .slice(0, 4)
-      .map((insight) => `<div class="staff-ai-pill">${escapeHtml(insight)}</div>`)
+      .map(renderSignalCard)
       .join("");
   }
 
@@ -542,8 +654,9 @@
     } catch (err) {
       aiStatusText.textContent = "Unavailable";
       aiInsightsMount.innerHTML = `
-        <div class="staff-ai-pill">
-          Could not load live insights right now.
+        <div class="staff-ai-empty">
+          <strong>Could not load live insights.</strong>
+          <span>Please try refreshing the page.</span>
         </div>
       `;
     }

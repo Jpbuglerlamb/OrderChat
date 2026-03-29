@@ -22,8 +22,9 @@ def generate_insights(memory: dict) -> list[Insight]:
     quiet_hours = memory.get("quiet_hours", []) or []
     warnings = memory.get("warnings", []) or []
 
-    avg_order_value = float(memory.get("avg_order_value", 0) or 0)
-    avg_items_per_order = float(memory.get("avg_items_per_order", 0) or 0)
+    summary = memory.get("summary", {}) or {}
+    avg_order_value = float(summary.get("avg_order_value", 0) or 0)
+    avg_items_per_order = float(summary.get("avg_items_per_order", 0) or 0)
     item_stats = memory.get("item_stats", {}) or {}
 
     # ----------------------------
