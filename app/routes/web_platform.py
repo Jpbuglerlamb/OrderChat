@@ -915,6 +915,7 @@ def business_ai_optimiser_live(request: Request, db: Session = Depends(get_db)):
     # ⚡ INSTANT RESPONSE (no pipeline run)
     return get_saved_optimiser_snapshot(restaurant)
 
+
 # --------------------------------
 # Public Pages
 # --------------------------------

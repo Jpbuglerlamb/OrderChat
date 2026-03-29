@@ -203,9 +203,18 @@
   }
 
   .staff-order-card {
+    position: relative;
     display: grid;
     gap: 16px;
     text-align: left;
+    overflow: hidden;
+  }
+
+  .staff-order-card.is-removing {
+    opacity: 0.45;
+    transform: scale(0.985);
+    pointer-events: none;
+    transition: 0.2s ease;
   }
 
   .staff-order-top {
@@ -256,6 +265,49 @@
 
   .staff-order-phone {
     margin: 0;
+  }
+
+  .staff-order-received {
+    margin: 6px 0 0;
+    font-size: 0.92rem;
+    opacity: 0.82;
+  }
+
+  .staff-order-top-right {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .staff-delete-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.06);
+    color: #ffb0b0;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1;
+    transition: background 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+  }
+
+  .staff-delete-btn:hover {
+    background: rgba(255, 110, 110, 0.14);
+    border-color: rgba(255, 110, 110, 0.35);
+    transform: scale(1.04);
+  }
+
+  .staff-delete-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
   }
 
   .staff-ai-empty {
@@ -379,6 +431,11 @@
     .staff-order-actions .statusSelect {
       width: 100%;
     }
+
+    .staff-order-top-right {
+      width: 100%;
+      justify-content: space-between;
+    }
   }
 </style>
 
@@ -425,6 +482,11 @@
     return "staff-ai-badge-low";
   }
 
+  function canArchiveStatus(status) {
+    const s = String(status || "").toLowerCase();
+    return s === "ready" || s === "completed";
+  }
+
   async function apiStaffOrders() {
     const res = await fetch(`/r/${slug}/staff/orders`, {
       method: "GET",
@@ -465,6 +527,29 @@
 
     if (!res.ok) {
       throw new Error(data.detail || "Failed to update order status");
+    }
+
+    return data;
+  }
+
+  async function apiArchiveOrder(orderId) {
+    const res = await fetch(`/r/${slug}/staff/orders/${orderId}/archive`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (res.status === 401 || res.status === 403) {
+      window.location.href = `/business/login?next=/r/${slug}/staff`;
+      return null;
+    }
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      throw new Error(data.detail || "Failed to remove order");
     }
 
     return data;
@@ -523,6 +608,7 @@
       const phone = String(o.phone || "").trim();
       const summary = String(o.summary || "").trim();
       const createdAt = String(o.created_at || o.created || "").trim();
+      const showDelete = canArchiveStatus(status);
 
       return `
         <article class="pricing-plan staff-order-card ${status === "new" ? "featured" : ""}" data-order-id="${escapeHtml(o.id)}">
@@ -530,10 +616,13 @@
             <div class="staff-order-meta">
               <h3>${escapeHtml(o.name || "Customer")}</h3>
               <p class="muted staff-order-phone">${phone ? escapeHtml(phone) : "No phone provided"}</p>
-              ${createdAt ? `<p class="muted staff-order-phone">Received: ${escapeHtml(createdAt)}</p>` : ""}
+              ${createdAt ? `<p class="muted staff-order-received">Received: ${escapeHtml(createdAt)}</p>` : ""}
             </div>
 
-            <span class="plan-tag">${escapeHtml(prettyStatus(status))}</span>
+            <div class="staff-order-top-right">
+              <span class="plan-tag">${escapeHtml(prettyStatus(status))}</span>
+              ${showDelete ? `<button class="staff-delete-btn archiveBtn" type="button" title="Remove completed order" aria-label="Remove completed order">✕</button>` : ""}
+            </div>
           </div>
 
           <div class="staff-order-summary">${escapeHtml(summary || "No order summary available.")}</div>
@@ -574,6 +663,36 @@
         } finally {
           btn.disabled = false;
           btn.textContent = oldText;
+        }
+      });
+    });
+
+    document.querySelectorAll(".archiveBtn").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        const card = e.currentTarget.closest("[data-order-id]");
+        const orderId = card ? card.getAttribute("data-order-id") : null;
+        const statusTag = card ? card.querySelector(".plan-tag") : null;
+        const statusText = statusTag ? statusTag.textContent.trim().toLowerCase() : "";
+
+        if (!orderId) return;
+
+        if (statusText !== "ready" && statusText !== "completed") {
+          alert("Only ready or completed orders can be removed.");
+          return;
+        }
+
+        const confirmed = window.confirm("Remove this completed order from the dashboard?");
+        if (!confirmed) return;
+
+        try {
+          btn.disabled = true;
+          card.classList.add("is-removing");
+          await apiArchiveOrder(orderId);
+          await refreshDashboard(false);
+        } catch (err) {
+          card.classList.remove("is-removing");
+          btn.disabled = false;
+          alert(String(err.message || err));
         }
       });
     });

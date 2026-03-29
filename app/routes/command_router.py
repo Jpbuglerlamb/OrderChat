@@ -715,7 +715,8 @@ def staff_orders(
         db.query(Order)
         .filter(Order.restaurant_slug == slug)
         .filter(Order.status == "confirmed")
-        .filter(or_(Order.kitchen_status.is_(None), Order.kitchen_status != "completed"))
+        .filter(Order.kitchen_status != "completed")  # hide completed
+        .filter(Order.status != "archived")           # 🔥 THIS IS KEY
         .order_by(Order.created_at.desc())
         .all()
     )
@@ -727,6 +728,7 @@ def staff_orders(
             "phone": order.customer_phone,
             "summary": order.summary_text,
             "status": (order.kitchen_status or "new"),
+            "created_at": order.created_at.strftime("%H:%M") if order.created_at else None,
         }
         for order in orders
     ]
@@ -761,6 +763,41 @@ def update_order_status(
 
     return {"ok": True, "id": order.id, "status": order.kitchen_status}
 
+@router.post("/r/{slug}/staff/orders/{order_id}/archive")
+def archive_order(
+    slug: str,
+    order_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    slug = _normalize_slug(slug)
+    restaurant, _menu = get_restaurant_and_menu(db, slug)
+
+    if not _owner_can_access_restaurant(request, db, restaurant) and not _staff_can_access_restaurant(request, slug):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    order = (
+        db.query(Order)
+        .filter(Order.id == order_id, Order.restaurant_slug == slug)
+        .first()
+    )
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if (order.kitchen_status or "").lower() not in {"ready", "completed"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Only ready or completed orders can be removed",
+        )
+
+    order.status = "archived"
+    order.updated_at = datetime.utcnow()
+
+    db.add(order)
+    db.commit()
+
+    return {"ok": True}
 
 # ---------- Chat ----------
 @router.post("/r/{slug}/chat")
