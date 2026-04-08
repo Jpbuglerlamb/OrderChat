@@ -27,12 +27,8 @@ def generate_insights(memory: dict) -> list[Insight]:
     avg_items_per_order = float(summary.get("avg_items_per_order", 0) or 0)
     item_stats = memory.get("item_stats", {}) or {}
 
-    # ----------------------------
-    # Strong seller
-    # ----------------------------
     if top_items:
         top_item_id, top_count = top_items[0]
-
         insights.append(
             {
                 "type": "top_seller",
@@ -48,12 +44,8 @@ def generate_insights(memory: dict) -> list[Insight]:
             }
         )
 
-    # ----------------------------
-    # Underperformer
-    # ----------------------------
     if low_items:
         low_item_id, low_count = low_items[0]
-
         insights.append(
             {
                 "type": "underperformer",
@@ -69,13 +61,9 @@ def generate_insights(memory: dict) -> list[Insight]:
             }
         )
 
-    # ----------------------------
-    # Pairing opportunity
-    # ----------------------------
     if top_pairings:
         pair, pair_count = top_pairings[0]
         item_a, item_b = pair
-
         insights.append(
             {
                 "type": "pairing_opportunity",
@@ -91,9 +79,6 @@ def generate_insights(memory: dict) -> list[Insight]:
             }
         )
 
-    # ----------------------------
-    # Basket value opportunity
-    # ----------------------------
     if avg_order_value < 15:
         insights.append(
             {
@@ -110,9 +95,6 @@ def generate_insights(memory: dict) -> list[Insight]:
             }
         )
 
-    # ----------------------------
-    # Items per order opportunity
-    # ----------------------------
     if avg_items_per_order < 2.5:
         insights.append(
             {
@@ -129,12 +111,8 @@ def generate_insights(memory: dict) -> list[Insight]:
             }
         )
 
-    # ----------------------------
-    # Quiet hour opportunity
-    # ----------------------------
     if quiet_hours:
         quiet_hour, quiet_count = quiet_hours[0]
-
         insights.append(
             {
                 "type": "quiet_period",
@@ -150,9 +128,6 @@ def generate_insights(memory: dict) -> list[Insight]:
             }
         )
 
-    # ----------------------------
-    # Price test opportunity
-    # ----------------------------
     if top_items:
         top_item_id, _ = top_items[0]
         sim = simulate_price_increase(top_item_id, item_stats)
@@ -178,9 +153,6 @@ def generate_insights(memory: dict) -> list[Insight]:
                 }
             )
 
-    # ----------------------------
-    # Data quality warnings
-    # ----------------------------
     for warning in warnings:
         insights.append(
             {

@@ -9,9 +9,13 @@ def score_insight(insight: dict[str, Any]) -> float:
         "medium": 0.7,
         "low": 0.4,
     }
-    base = priority_weights.get(insight.get("priority", "low"), 0.4)
 
-    evidence = insight.get("evidence", {})
-    confidence = float(evidence.get("confidence", 0.7))
+    base = priority_weights.get(str(insight.get("priority", "low")), 0.4)
+
+    evidence = insight.get("evidence", {}) or {}
+    try:
+        confidence = float(evidence.get("confidence", 0.7) or 0.7)
+    except Exception:
+        confidence = 0.7
 
     return round(base * confidence, 3)

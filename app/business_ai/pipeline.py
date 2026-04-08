@@ -26,7 +26,7 @@ def _priority_rank(priority: str) -> int:
 def _confidence_value(insight: dict) -> float:
     evidence = insight.get("evidence", {}) or {}
     try:
-        return float(evidence.get("confidence", 0))
+        return float(evidence.get("confidence", 0) or 0)
     except Exception:
         return 0.0
 
@@ -58,6 +58,37 @@ def run_pipeline(menu_data: dict, orders: list[dict]) -> dict:
             "order_count": len(normalised_orders),
         }
 
+    if not normalised_orders:
+        insights = [
+            {
+                "type": "empty_dataset",
+                "priority": "low",
+                "title": "No order history analysed yet",
+                "summary": "No valid order history has been analysed yet.",
+                "action": "Upload past orders to unlock menu and sales insights.",
+                "evidence": {"confidence": 1.0},
+            }
+        ]
+        recommendations = generate_recommendations(insights, limit=3)
+
+        return {
+            "ok": True,
+            "menu_meta": menu_data.get("meta", {}),
+            "memory": {},
+            "analytics": {
+                "item_stats": {},
+                "order_stats": {},
+                "pairings": [],
+                "time_patterns": {},
+            },
+            "insights": insights,
+            "formatted_insights": format_insights(insights),
+            "recommendations": recommendations,
+            "formatted_recommendations": format_recommendations(recommendations),
+            "unmatched_items": unmatched_items,
+            "order_count": 0,
+        }
+
     item_stats = compute_item_stats(normalised_orders)
     order_stats = compute_order_stats(normalised_orders)
     pairings = compute_pairings(normalised_orders)
@@ -85,25 +116,8 @@ def run_pipeline(menu_data: dict, orders: list[dict]) -> dict:
             existing_warnings.append(warning)
             memory["warnings"] = existing_warnings
 
-    insights = generate_insights(memory)
-    insights = _sort_insights(insights)
-
-    if not insights and not normalised_orders:
-        insights = [
-            {
-                "type": "empty_dataset",
-                "priority": "low",
-                "title": "No order history analysed yet",
-                "summary": "No valid order history has been analysed yet.",
-                "action": "Upload past orders to unlock menu and sales insights.",
-                "evidence": {"confidence": 1.0},
-            }
-        ]
-
+    insights = _sort_insights(generate_insights(memory))
     recommendations = generate_recommendations(insights, limit=3)
-
-    formatted = format_insights(insights)
-    formatted_recommendations = format_recommendations(recommendations)
 
     return {
         "ok": True,
@@ -116,9 +130,9 @@ def run_pipeline(menu_data: dict, orders: list[dict]) -> dict:
             "time_patterns": time_patterns,
         },
         "insights": insights,
-        "formatted_insights": formatted,
+        "formatted_insights": format_insights(insights),
         "recommendations": recommendations,
-        "formatted_recommendations": formatted_recommendations,
+        "formatted_recommendations": format_recommendations(recommendations),
         "unmatched_items": unmatched_items,
         "order_count": len(normalised_orders),
     }

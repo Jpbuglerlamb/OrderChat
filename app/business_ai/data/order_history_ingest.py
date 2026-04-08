@@ -4,9 +4,13 @@ from __future__ import annotations
 import csv
 import io
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Any
+
+from app.business_ai.utils.item_ids import slugify_text
+from app.business_ai.utils.parsing import clean_text, normalise_created_at, parse_float, parse_int
 
 try:
     from pypdf import PdfReader
@@ -14,57 +18,14 @@ except Exception:
     PdfReader = None
 
 try:
-    from app.business_ai.services.order_history_vision import extract_order_history_from_image_with_ai
+    from app.business_ai.services.order_history_vision import (
+        extract_order_history_from_image_with_ai,
+    )
 except Exception:
     extract_order_history_from_image_with_ai = None
 
 
-# --------------------------------------------------
-# BASIC HELPERS
-# --------------------------------------------------
-
-def clean_text(value: Any) -> str:
-    return str(value or "").strip()
-
-
-def parse_float(value: Any, default: float = 0.0) -> float:
-    if isinstance(value, (int, float)):
-        return float(value)
-
-    text = clean_text(value).replace("£", "").replace(",", "")
-    if not text:
-        return default
-
-    match = re.search(r"-?\d+(?:\.\d+)?", text)
-    if not match:
-        return default
-
-    return float(match.group(0))
-
-
-def parse_int(value: Any, default: int = 0) -> int:
-    if isinstance(value, int):
-        return value
-
-    if isinstance(value, float):
-        return int(value)
-
-    text = clean_text(value)
-    if not text:
-        return default
-
-    match = re.search(r"-?\d+", text)
-    if not match:
-        return default
-
-    return int(match.group(0))
-
-
-def normalise_created_at(value: str) -> str:
-    value = clean_text(value)
-    if " " in value and "T" not in value:
-        return value.replace(" ", "T", 1)
-    return value
+logger = logging.getLogger(__name__)
 
 
 def looks_like_order_id(value: str) -> bool:
@@ -76,26 +37,11 @@ def looks_like_datetime_line(value: str) -> bool:
 
 
 def looks_like_total_line(value: str) -> bool:
-    value = clean_text(value)
-    return bool(
-        re.match(r"^(?:(?:GBP|£)\s*)?[0-9]+(?:\.[0-9]+)?$", value, flags=re.I)
-    )
-
-
-def slugify_item_name(value: str) -> str:
-    value = clean_text(value).lower()
-    value = value.replace("&", "and")
-    value = re.sub(r"[^a-z0-9]+", "_", value)
-    value = re.sub(r"_+", "_", value).strip("_")
-    return value
+    text = clean_text(value)
+    return bool(re.match(r"^(?:(?:GBP|£)\s*)?[0-9]+(?:\.[0-9]+)?$", text, flags=re.I))
 
 
 def parse_items_blob(items_blob: str) -> list[dict[str, Any]]:
-    """
-    Parses strings like:
-    'beef_black_bean x1'
-    'sweet_sour_chicken x1, prawn_crackers x1, beef_black_bean x2'
-    """
     items: list[dict[str, Any]] = []
 
     blob = clean_text(items_blob).replace("\n", " ")
@@ -108,7 +54,7 @@ def parse_items_blob(items_blob: str) -> list[dict[str, Any]]:
         if not match:
             continue
 
-        item_id = slugify_item_name(match.group(1))
+        item_id = slugify_text(match.group(1))
         quantity = parse_int(match.group(2), default=1)
 
         items.append(
@@ -121,10 +67,6 @@ def parse_items_blob(items_blob: str) -> list[dict[str, Any]]:
 
     return items
 
-
-# --------------------------------------------------
-# JSON
-# --------------------------------------------------
 
 def parse_json_orders(file_bytes: bytes) -> list[dict[str, Any]]:
     raw = json.loads(file_bytes.decode("utf-8", errors="ignore"))
@@ -139,10 +81,6 @@ def parse_json_orders(file_bytes: bytes) -> list[dict[str, Any]]:
         "Uploaded JSON must be a list of orders or an object like {'orders': [...]}."
     )
 
-
-# --------------------------------------------------
-# CSV
-# --------------------------------------------------
 
 def extract_rows_from_csv(file_bytes: bytes) -> list[dict[str, str]]:
     text = file_bytes.decode("utf-8", errors="ignore")
@@ -180,7 +118,7 @@ def parse_csv_orders(file_bytes: bytes) -> list[dict[str, Any]]:
 
         orders_by_id[order_id]["items"].append(
             {
-                "id": slugify_item_name(item_id),
+                "id": slugify_text(item_id),
                 "quantity": parse_int(quantity, default=1),
                 "price": parse_float(price, default=0.0),
             }
@@ -196,10 +134,6 @@ def parse_csv_orders(file_bytes: bytes) -> list[dict[str, Any]]:
 
     return list(orders_by_id.values())
 
-
-# --------------------------------------------------
-# PDF
-# --------------------------------------------------
 
 def extract_text_from_pdf(file_bytes: bytes) -> str:
     if PdfReader is None:
@@ -219,22 +153,11 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
 
 
 def parse_pdf_export_rows(text: str) -> list[dict[str, Any]]:
-    """
-    Handles block-style PDF exports like:
-
-    order_55
-    2026-01-11 12:45:00
-    chicken_chow_mein x1, coke_can x2, sweet_sour_chicken x1,
-    beef_black_bean x1
-    GBP 23.80
-    """
     lines = [clean_text(line) for line in text.splitlines() if clean_text(line)]
-
 
     cleaned_lines: list[str] = []
     for line in lines:
         lowered = line.lower()
-
         if lowered.startswith("page "):
             continue
         if lowered in {"order id", "created at", "items", "total"}:
@@ -247,7 +170,6 @@ def parse_pdf_export_rows(text: str) -> list[dict[str, Any]]:
             continue
         if lowered.startswith("supported companion file:"):
             continue
-
         cleaned_lines.append(line)
 
     orders: list[dict[str, Any]] = []
@@ -291,17 +213,18 @@ def parse_pdf_export_rows(text: str) -> list[dict[str, Any]]:
             i += 1
 
         items_blob = " ".join(item_lines).strip()
-        items_blob = re.sub(r"\s+", " ", items_blob)
-        items_blob = items_blob.rstrip(",")
-
+        items_blob = re.sub(r"\s+", " ", items_blob).rstrip(",")
         items = parse_items_blob(items_blob)
-        print("ORDER BLOCK:", {
-            "id": order_id,
-            "created_at": created_at,
-            "items_blob": items_blob,
-            "items": items,
-            "total": total,
-        }, flush=True)
+
+        logger.debug(
+            "Parsed PDF order block",
+            extra={
+                "order_id": order_id,
+                "created_at": created_at,
+                "items_count": len(items),
+                "total": total,
+            },
+        )
 
         if items:
             orders.append(
@@ -314,6 +237,7 @@ def parse_pdf_export_rows(text: str) -> list[dict[str, Any]]:
             )
 
     return orders
+
 
 def looks_like_csv_order_headers(text: str) -> bool:
     first_lines = [clean_text(line).lower() for line in text.splitlines()[:5] if clean_text(line)]
@@ -332,41 +256,33 @@ def looks_like_csv_order_headers(text: str) -> bool:
 
     return any(signal in joined for signal in csv_signals) and "," in joined
 
+
 def parse_pdf_orders(file_bytes: bytes) -> list[dict[str, Any]]:
     text = extract_text_from_pdf(file_bytes)
+    logger.debug("PDF text extracted successfully")
 
-    print("----- PDF TEXT START -----", flush=True)
-    print(text[:5000], flush=True)
-    print("----- PDF TEXT END -----", flush=True)
-
-    # 1) Try JSON-looking PDF
     try:
         raw = json.loads(text)
         if isinstance(raw, dict) and isinstance(raw.get("orders"), list):
-            print("PDF PARSER MODE: JSON object", flush=True)
+            logger.debug("PDF parser mode: JSON object")
             return raw["orders"]
         if isinstance(raw, list):
-            print("PDF PARSER MODE: JSON list", flush=True)
+            logger.debug("PDF parser mode: JSON list")
             return raw
     except Exception:
         pass
 
-    # 2) Try CSV-looking PDF only if it really looks like CSV
     if looks_like_csv_order_headers(text):
         try:
             csv_orders = parse_csv_orders(text.encode("utf-8"))
-            print("PDF PARSER MODE: CSV-like", flush=True)
-            print("PARSED CSV ORDERS COUNT:", len(csv_orders), flush=True)
+            logger.debug("PDF parser mode: CSV-like")
             if csv_orders:
                 return csv_orders
-        except Exception as e:
-            print("CSV-LIKE PDF PARSE FAILED:", repr(e), flush=True)
+        except Exception:
+            logger.exception("CSV-like PDF parse failed")
 
-    # 3) Try block-style export rows
     export_orders = parse_pdf_export_rows(text)
-    print("PDF PARSER MODE: EXPORT BLOCKS", flush=True)
-    print("PARSED EXPORT ORDERS COUNT:", len(export_orders), flush=True)
-    print("PARSED EXPORT ORDERS SAMPLE:", export_orders[:3], flush=True)
+    logger.debug("PDF parser mode: export blocks")
 
     if export_orders:
         return export_orders
@@ -376,10 +292,6 @@ def parse_pdf_orders(file_bytes: bytes) -> list[dict[str, Any]]:
         "Please use JSON or CSV for now, or export a cleaner PDF."
     )
 
-
-# --------------------------------------------------
-# IMAGE
-# --------------------------------------------------
 
 def parse_image_orders(file_bytes: bytes, filename: str) -> list[dict[str, Any]]:
     if extract_order_history_from_image_with_ai is None:
@@ -400,10 +312,6 @@ def parse_image_orders(file_bytes: bytes, filename: str) -> list[dict[str, Any]]
 
     raise ValueError("Image extractor did not return a valid order-history structure.")
 
-
-# --------------------------------------------------
-# MAIN ENTRYPOINT
-# --------------------------------------------------
 
 def ingest_order_history_file_to_dataset(
     *,
@@ -433,10 +341,6 @@ def ingest_order_history_file_to_dataset(
         "warnings": [],
     }
 
-
-# --------------------------------------------------
-# BACKWARD-COMPAT WRAPPER
-# --------------------------------------------------
 
 def import_orders_from_json_file(path: str):
     with open(path, "rb") as f:
