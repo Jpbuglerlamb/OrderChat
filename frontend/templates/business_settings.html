@@ -2,12 +2,12 @@
 
 {% block content %}
 <section class="hero narrow">
-  <div class="card" style="text-align:left;">
+  <div class="card settings-card">
 
-    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:22px;">
+    <div class="settings-header">
       <div>
         <h1 style="margin-bottom:8px;">Business Settings</h1>
-        <p class="subtitle" style="margin:0;">
+        <p class="subtitle settings-subtitle">
           Manage your restaurant details and QR access.
         </p>
       </div>
@@ -19,45 +19,81 @@
     </div>
 
     {% if success %}
-      <div class="success-card-meta" style="margin-bottom:18px;">
+      <div class="success-card-meta settings-success">
         {{ success }}
       </div>
     {% endif %}
 
-    <form method="post" action="/business/settings" class="manual-form">
-      <label for="business_name">Restaurant name</label>
-      <input
-        id="business_name"
-        name="business_name"
-        type="text"
-        value="{{ restaurant.name }}"
-        required
-      >
+    <form method="post" action="/business/settings" class="manual-form settings-form">
 
-      <label for="phone">Phone</label>
-      <input
-        id="phone"
-        name="phone"
-        type="text"
-        value="{{ restaurant.phone or '' }}"
-      >
+      <div class="settings-field">
+        <label for="business_name">Restaurant name</label>
+        <div class="settings-input-wrap">
+          <span class="settings-icon">🏪</span>
+          <input
+            class="settings-input"
+            id="business_name"
+            name="business_name"
+            type="text"
+            value="{{ restaurant.name }}"
+            placeholder="Enter your restaurant name"
+            autocomplete="organization"
+            required
+          >
+        </div>
+      </div>
 
-      <label for="address">Address</label>
-      <input
-        id="address"
-        name="address"
-        type="text"
-        value="{{ restaurant.address or '' }}"
-        required
-      >
+      <div class="settings-field">
+        <label for="phone">Phone</label>
+        <div class="settings-input-wrap">
+          <span class="settings-icon">📞</span>
+          <input
+            class="settings-input"
+            id="phone"
+            name="phone"
+            type="tel"
+            inputmode="tel"
+            value="{{ restaurant.phone or '' }}"
+            placeholder="Add a contact number"
+            autocomplete="tel"
+          >
+        </div>
+      </div>
 
-      <label for="opening_hours">Opening hours</label>
-      <textarea
-        id="opening_hours"
-        name="opening_hours"
-        rows="4"
-        required
-      >{{ restaurant.opening_hours or '' }}</textarea>
+      <div class="settings-field">
+        <label for="address">Address</label>
+        <div class="settings-input-wrap">
+          <span class="settings-icon">📍</span>
+          <input
+            class="settings-input"
+            id="address"
+            name="address"
+            type="text"
+            value="{{ restaurant.address or '' }}"
+            placeholder="Enter your business address"
+            autocomplete="street-address"
+            required
+          >
+        </div>
+      </div>
+
+      <div class="settings-field">
+        <label for="opening_hours">Opening hours</label>
+        <div class="settings-textarea-wrap">
+          <span class="settings-icon">🕒</span>
+          <textarea
+            class="settings-textarea"
+            id="opening_hours"
+            name="opening_hours"
+            rows="4"
+            placeholder="Example: Mon-Fri: 09:00-22:00&#10;Sat-Sun: 10:00-23:00"
+            required
+          >{{ restaurant.opening_hours or '' }}</textarea>
+        </div>
+        <p class="settings-help">
+          These hours help customers know when your restaurant is open for orders.
+        </p>
+      </div>
 
       <div class="button-row" style="margin-top:20px;">
         <button type="submit" class="btn btn-primary">Save Changes</button>
@@ -65,7 +101,7 @@
       </div>
     </form>
 
-    <div style="margin-top:36px; padding-top:24px; border-top:1px solid rgba(255,255,255,0.12);">
+    <div class="settings-divider">
       <h2 style="margin-bottom:12px;">Restaurant QR Code</h2>
 
       <p class="muted" style="margin-bottom:16px;">
@@ -73,20 +109,12 @@
       </p>
 
       {% if qr_download_url %}
-        <div style="display:flex; flex-direction:column; align-items:flex-start; gap:16px;">
-          <div style="
-            background:white;
-            padding:14px;
-            border-radius:18px;
-            box-shadow:0 8px 24px rgba(0,0,0,0.15);
-            display:inline-flex;
-            justify-content:center;
-            align-items:center;
-          ">
+        <div class="qr-panel">
+          <div class="qr-card">
             <img
               src="{{ qr_download_url }}"
               alt="Restaurant QR code"
-              style="width:180px; height:180px; object-fit:contain; display:block;"
+              class="qr-image"
             >
           </div>
 
